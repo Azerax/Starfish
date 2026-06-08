@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+*.log
+sbom.json
+.DS_Store
+# build / probe artifacts (not source)
+*.tgz
+.probe
+*.probe

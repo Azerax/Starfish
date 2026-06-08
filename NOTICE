@@ -1,0 +1,19 @@
+Project Starfish
+================
+
+This product is licensed under the MIT License (see LICENSE).
+
+Upstream attribution
+--------------------
+Project Starfish salvages select non-security-critical components, under the
+"strangler" build strategy, from the upstream project "munder-difflin"
+(https://github.com/chaitanyagiri/munder-difflin), which is distributed under
+the MIT License. The upstream MIT copyright and permission notice are retained
+for those salvaged components. Every salvaged file and its origin are recorded
+in docs/SALVAGE_LEDGER.md.
+
+NOTE: The upstream project bundles pixel-art assets under a NON-COMMERCIAL
+license (LimeZu FREE VERSION). Those assets are NOT used by Project Starfish.
+All Project Starfish art is original (see docs/ART_PROVENANCE_LEDGER.md). A CI
+scan (scripts/ip-denylist-scan.mjs) guards the shippable source against
+third-party IP tokens.

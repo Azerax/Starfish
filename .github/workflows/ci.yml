@@ -1,0 +1,28 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (type layer)
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test
+      - name: Conformance suite (Phase 1+)
+        run: npm run test:conformance
+      - name: Determinism suite (Phase 2+)
+        run: npm run test:determinism
+      - name: Dependency-direction lint
+        run: npm run lint:deps
+      - name: IP denylist scan (compliance)
+        run: npm run scan:ip
+      - name: SBOM + license check (compliance)
+        run: npm run sbom
