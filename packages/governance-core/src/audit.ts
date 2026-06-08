@@ -1,6 +1,6 @@
 // Append-only, hash-chained audit log (R&C S-12; framework §4 "no silent execution").
 import { appendFileSync, readFileSync, existsSync, openSync, fsyncSync, closeSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sha256 } from './hash';
 import type { AuditDomain, AuditEvent, RiskTier } from './types';
 
 type NewEvent = {
@@ -25,7 +25,7 @@ export class AuditLog {
   /** Append an event. Throws on write failure so callers can fail closed. */
   append(e: NewEvent): AuditEvent {
     const base = { ts: new Date().toISOString(), seq: this.seq, prevHash: this.prevHash, ...e };
-    const hash = createHash('sha256').update(this.prevHash + JSON.stringify(base)).digest('hex');
+    const hash = sha256(this.prevHash + JSON.stringify(base));
     const ev = { ...base, hash } as AuditEvent;
     const fd = openSync(this.path, 'a');
     try { appendFileSync(fd, JSON.stringify(ev) + '\n'); fsyncSync(fd); } finally { closeSync(fd); }
@@ -42,7 +42,7 @@ export class AuditLog {
       const ev = JSON.parse(ln) as AuditEvent;
       const { hash, ...rest } = ev;
       if (ev.prevHash !== prev) return false;
-      const expect = createHash('sha256').update(prev + JSON.stringify(rest)).digest('hex');
+      const expect = sha256(prev + JSON.stringify(rest));
       if (expect !== hash) return false;
       prev = hash;
     }

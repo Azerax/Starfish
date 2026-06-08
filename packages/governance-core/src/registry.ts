@@ -1,6 +1,6 @@
 // File-based registry with single-source-of-truth cache (R&C S-13/T-13).
 import { readFileSync, existsSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sha256 } from './hash';
 import { GovernanceError } from './types';
 
 export class Registry<T> {
@@ -16,13 +16,13 @@ export class Registry<T> {
     try { arr = JSON.parse(raw); } catch { throw new GovernanceError(`registry corrupt: ${this.file}`); }
     if (!Array.isArray(arr)) throw new GovernanceError(`registry not an array: ${this.file}`);
     this.cache = new Map((arr as T[]).map((t) => [this.keyOf(t), t]));
-    this.hash = createHash('sha256').update(raw).digest('hex');
+    this.hash = sha256(raw);
   }
 
   /** Fail-closed integrity check: file must match the cached hash (catches out-of-band edits). */
   verifyIntegrity(): void {
     const raw = readFileSync(this.file, 'utf8');
-    if (createHash('sha256').update(raw).digest('hex') !== this.hash) {
+    if (sha256(raw) !== this.hash) {
       throw new GovernanceError(`registry hash mismatch (out-of-band edit) — fail closed: ${this.file}`);
     }
   }

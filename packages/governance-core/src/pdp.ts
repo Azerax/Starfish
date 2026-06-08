@@ -7,20 +7,21 @@ import type { AuditLog } from './audit';
 import { containCheck } from './boundary';
 import { RiskEngine } from './risk';
 import { PolicyEngine, type Effect } from './policy';
+import { scanEgress } from './containment';
 
-const SECRET = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+export interface TaskBinding { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean }; }
 
 export class PDP {
   private risk: RiskEngine;
   private policy: PolicyEngine;
-  private taskBinding?: { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean } };
+  private taskBinding?: TaskBinding;
   constructor(
     private tools: Registry<ToolDef>,
     private agents: Registry<AgentDef>,
     private audit: AuditLog,
     risk?: RiskEngine,
     policy?: PolicyEngine,
-    taskBinding?: { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean } },
+    taskBinding?: TaskBinding,
   ) {
     this.risk = risk ?? new RiskEngine();
     this.policy = policy ?? new PolicyEngine();
@@ -85,8 +86,8 @@ export class PDP {
 
   private egress(call: ToolCall): Decision {
     const result = typeof call.input.result === 'string' ? call.input.result : '';
-    if (SECRET.test(result)) return { allow: false, reason: 'egress-blocked: secret material in output' };
-    return { allow: true, reason: 'egress-clear' };
+    const scan = scanEgress(result);
+    return scan.clean ? { allow: true, reason: 'egress-clear' } : { allow: false, reason: scan.reason! };
   }
 
   private firstPath(call: ToolCall): string | undefined {

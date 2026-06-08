@@ -10,13 +10,13 @@ const sid = (p: string) => `${p}_${randomUUID().slice(0, 8)}`;
 export interface Evidence { id: string; source: string; author: string; statement: string; confidence: number; at: string; }
 export interface Claim { id: string; statement: string; confidence: number; supportedBy: string[]; status: 'candidate' | 'approved' | 'rejected'; }
 export interface Entity { id: string; type: string; name: string; properties: Record<string, unknown>; provenance: { claimId: string; evidence: string[] }; }
-export interface Decision { id: string; decision: string; reason: string; alternatives: string[]; status: 'accepted' | 'rejected' | 'superseded'; provenance: { evidence: string[] }; }
+export interface DecisionRecord { id: string; decision: string; reason: string; alternatives: string[]; status: 'accepted' | 'rejected' | 'superseded'; provenance: { evidence: string[] }; }
 
 export class GovernedMemory {
   private evidence = new Map<string, Evidence>();
   private claims = new Map<string, Claim>();
   private knowledge = new Map<string, Entity>();
-  private decisions = new Map<string, Decision>();
+  private decisions = new Map<string, DecisionRecord>();
   constructor(private audit: AuditLog, private policy: PolicyEngine, private autoApproveConfidence = 0.9) {}
 
   /** Layer 1 — evidence: immutable, append-only, provenance-stamped. */
@@ -77,8 +77,8 @@ export class GovernedMemory {
   }
 
   /** Layer 7 — Decision Registry: governed decisions with rationale + provenance ("why X?"). */
-  recordDecision(d: Omit<Decision, 'id'>): Decision {
-    const dec: Decision = { ...d, id: sid('dec') };
+  recordDecision(d: Omit<DecisionRecord, 'id'>): DecisionRecord {
+    const dec: DecisionRecord = { ...d, id: sid('dec') };
     this.decisions.set(dec.id, dec);
     this.audit.append({ actor: 'governance', domain: 'memory', action: 'decision:record', target: dec.id, reason: d.decision });
     return dec;
@@ -87,7 +87,7 @@ export class GovernedMemory {
   getEvidence(id: string): Evidence | undefined { return this.evidence.get(id); }
   getClaim(id: string): Claim | undefined { return this.claims.get(id); }
   getEntity(id: string): Entity | undefined { return this.knowledge.get(id); }
-  getDecision(id: string): Decision | undefined { return this.decisions.get(id); }
+  getDecision(id: string): DecisionRecord | undefined { return this.decisions.get(id); }
   /** Embeddings (deferred) must be built from approved knowledge ONLY — never raw evidence/chat. */
   approvedKnowledge(): Entity[] { return [...this.knowledge.values()]; }
 }

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { AuditLog } from './audit';
 import type { PolicyEngine } from './policy';
 import type { TaskLedger } from './tasks';
+import { scanEgress } from './containment';
 
 export type MessageAct = 'request' | 'inform' | 'propose' | 'query' | 'agree' | 'refuse' | 'done';
 export interface OutgoingMessage { to: string; act: MessageAct; subject: string; body: string; task?: string; conversation?: string; inReplyTo?: string; }
@@ -15,7 +16,6 @@ export type RouteResult =
   | { status: 'denied'; reason: string };
 
 const HOP_CAP = 12;
-const SECRET = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
 
 export class MessageRouter {
   private inboxes = new Map<string, DeliveredMessage[]>();
@@ -39,9 +39,10 @@ export class MessageRouter {
     // identity stamped by the router, not the caller's claim
     const delivered: DeliveredMessage = { ...msg, id: randomUUID(), from: senderId, hops: hops + 1, createdAt: new Date().toISOString() };
     // ---- EGRESS ----
-    if (SECRET.test(delivered.body)) {
-      this.audit.append({ actor: senderId, domain: 'message', action: 'egress', target: msg.to, decision: 'deny', reason: 'egress-blocked: secret material' });
-      return { status: 'denied', reason: 'egress-blocked: secret material in message body' };
+    const scan = scanEgress(delivered.body);
+    if (!scan.clean) {
+      this.audit.append({ actor: senderId, domain: 'message', action: 'egress', target: msg.to, decision: 'deny', reason: scan.reason });
+      return { status: 'denied', reason: scan.reason! };
     }
     const box = this.inboxes.get(msg.to) ?? [];
     box.push(delivered); this.inboxes.set(msg.to, box);
