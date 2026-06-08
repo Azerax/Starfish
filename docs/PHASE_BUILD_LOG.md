@@ -82,3 +82,18 @@ keep OneDrive for the planning docs. Not blocking — the in-place sync works.
 
 ### Note — session/VM reset mid-phase
 The build sandbox reset during a desktop-app restart (git MCP setup), discarding the in-progress Phase 3 scratch. Rebuilt cleanly from the committed Phase 0-2 baseline; no loss. Phases 0-2 committed to the repo (`a4c81fa`) before the rebuild.
+
+---
+
+## Phase 4 — Messaging (Option B) + governed memory ✅
+**Delivered (governance-core):**
+- `MessageRouter` — the message router as a bracketed transport PEP (framework §7 resolution). Ingress: message must be linked to an active assigned task (else held), hop cap, policy check; identity (`from`) stamped by the router, never trusted from the caller (T-08). Egress: secret-material containment. Every outcome audited.
+- `GovernedMemory` — evidence→claims→governance→canonical-knowledge pipeline (Scott's model; supersedes wiki/memory.md). Evidence immutable+provenance; claims proposed FROM evidence with confidence; conflicting evidence weakens; deterministic governance gate (low-stakes+high-confidence auto-approves, else queued for an approver; policy can deny); only approved claims promote to entities carrying provenance; Decision Registry. Relationship graph + vector recall DEFERRED; embeddings (later) build from approved knowledge only.
+**Tests (11 new, 67 total):**
+- TC-4.1 message held without an active task; delivered when task-linked ✅
+- TC-4.2 `from` stamped by router (impersonation blocked) ✅
+- TC-4.3 ingress policy-deny; egress secret containment ✅
+- TC-4.4 memory: high-conf low-stakes auto-approves+promotes w/ provenance; low-conf queued; high-stakes needs approver; conflicting evidence weakens; policy denies; Decision Registry records rationale ✅
+**Gates:** S-15 (confused-deputy via router — identity stamped) ✅, S-16 (memory poisoning — nothing becomes knowledge without evidence+governance) ✅, G-7 (messaging conformance to §7) ✅.
+**Gating issues:** none — clean build.
+**Note:** canonical memory model adopted (evidence→knowledge); wiki is now just a future human-readable view. Graph + vector layers deferred to a later phase; the file-based vs SQLite decision will be revisited there.
