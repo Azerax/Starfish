@@ -15,7 +15,7 @@ export interface ToolDef {
 export interface AgentDef { id: string; domain?: string; allowedTools?: string[]; }
 
 export interface BoundarySet { visibility: string[]; write: string[]; }
-export interface ToolCall { agentId: string; tool: string; input: Record<string, unknown>; }
+export interface ToolCall { agentId: string; tool: string; input: Record<string, unknown>; taskId?: string; }
 
 export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure'] as const;
 export type AuditDomain = typeof AUDIT_DOMAINS[number];

@@ -63,3 +63,22 @@ workspace therefore uses in-place redirect-overwrite. A full source tarball
 **Recommendation (Scott's call):** move the working repo outside OneDrive (e.g.
 `C:\Users\swhol\Projects\starfish`) so standard git/npm/file operations work without friction;
 keep OneDrive for the planning docs. Not blocking — the in-place sync works.
+
+---
+
+## Phase 3 — Task lifecycle + Token Governor ✅
+**Delivered (governance-core):** `TaskLedger` (10-state machine: backlog→analysis→planning→decomposition→execution→validation→completed; failure rework→retry→failed; completed reachable only via validation), proposer≠approver gate, `TokenGovernor` (soft+escalate, USD+token budgets, pause/resume), intake routing `intakeRoute` (PADD skill / COMMS reasoning / new-capability→Toby) + `ingestExternal` (all external input → backlog task tagged external/untrusted), PDP task-bound enforcement ("no task, no tool", opt-in via loadGovernor `enforceTaskBinding`). `docs/PROTOCOL.md` reasoning standard.
+**Tests (16 new, all green; 56 total):**
+- TC-3.1 illegal lifecycle transition rejected ✅
+- TC-3.2 no task, no tool — denied without an active assigned task ✅
+- TC-3.3 proposer≠approver — self-authorization blocked; non-approver blocked; approver≠proposer allowed ✅
+- TC-3.4 completed reachable only via validation ✅
+- TC-3.5 Token Governor soft→warn, hard→pause+escalate, resume (USD & tokens) ✅
+- TC-3.6 external input → backlog task, origin external/untrusted ✅
+- TC-3.7 intake routing skill/reasoning/new-capability ✅
+- TC-3.8 PADD still gated — valid task required AND gate still runs (unauthorized agent still denied) ✅
+**Gates:** S-5 (self-authorization) ✅, G-2 (all work is a task) ✅, G-6 (interruptible: pause/resume) ✅.
+**Gating issues:** none — clean build. (Note: task-binding enforcement is opt-in via `loadGovernor(...,{enforceTaskBinding:true})` so the simulated Phase 1/2 harness — which doesn't model tasks — stays green; it flips on globally once all dispatch paths create tasks.)
+
+### Note — session/VM reset mid-phase
+The build sandbox reset during a desktop-app restart (git MCP setup), discarding the in-progress Phase 3 scratch. Rebuilt cleanly from the committed Phase 0-2 baseline; no loss. Phases 0-2 committed to the repo (`a4c81fa`) before the rebuild.

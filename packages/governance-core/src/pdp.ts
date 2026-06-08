@@ -13,15 +13,18 @@ const SECRET = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
 export class PDP {
   private risk: RiskEngine;
   private policy: PolicyEngine;
+  private taskBinding?: { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean } };
   constructor(
     private tools: Registry<ToolDef>,
     private agents: Registry<AgentDef>,
     private audit: AuditLog,
     risk?: RiskEngine,
     policy?: PolicyEngine,
+    taskBinding?: { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean } },
   ) {
     this.risk = risk ?? new RiskEngine();
     this.policy = policy ?? new PolicyEngine();
+    this.taskBinding = taskBinding;
   }
 
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
@@ -43,6 +46,10 @@ export class PDP {
   }
 
   private ingress(call: ToolCall, bs: BoundarySet): Decision {
+    // task-bound purpose ("no task, no tool") — enforced when enabled (T-07 / framework §3.2)
+    if (this.taskBinding?.enforce && !this.taskBinding.provider.hasActiveTask(call.agentId, call.taskId)) {
+      return { allow: false, reason: 'no active task (no task, no tool)' };
+    }
     let tool: ToolDef | undefined;
     try {
       tool = this.tools.get(call.tool);
