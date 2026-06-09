@@ -136,3 +136,11 @@ The build sandbox reset during a desktop-app restart (git MCP setup), discarding
 **Gates:** L-6 (overlay processes third-party builds — local-only, consent-gated) ✅, P-1 (no egress of pack contents — local file reads only) ✅.
 **Gating issue & resolution:** inventory's `kind` union ('skill'|'tool'|'mcp'|'hook') was wider than vet's input kind ('skill'|'tool'|'agent') — TS2322. Mapped non-skill kinds → 'tool' at the vet() call. Green.
 **Note:** the CLI + plugin manifest are the packaging wrapper; the end-to-end govern/inventory/vetting logic is what's unit-tested. A live plugin install on a clean machine is integration-verified.
+
+---
+
+## Verification pass (post-Phase 7)
+Examined all implemented code; fresh full run = 86 tests green; tests confirmed substantive (real escape attempts, real git/npm hook-bypass, real reconciliation). Two corrections made:
+1. **Composition fix:** `loadGovernor` was stale — it only wired pdp/tools/agents/audit/tasks/tokens. The memory, message router, capability ledger, and monitor existed and were unit-tested but were never assembled into the `Governor`. Now wired; added a composition test asserting all subsystems are present.
+2. **Risk false-positive fix:** the vetting credential signal matched bare substrings (`SECRET`, `TOKEN`) — flagging innocuous words like "tokenizer". Tightened to word-boundaried patterns. Safe (fail-direction was over-quarantine); reduces noise.
+Gaps identified for the next stages are tracked in the handoff/plan (live PDP daemon, persistence of runtime stores, Service registry + capabilities.json, per-agent boundary derivation, default-on task-binding, and the desktop ring-3 shell that Phases 8-9 require).

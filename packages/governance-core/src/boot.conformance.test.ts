@@ -8,10 +8,7 @@ import { GovernanceError, type ToolDef } from './types';
 
 function gdir(withFiles = true): string {
   const d = mkdtempSync(join(tmpdir(), 'sf-gov-'));
-  if (withFiles) {
-    writeFileSync(join(d, 'tools.json'), JSON.stringify([]));
-    writeFileSync(join(d, 'agents.json'), JSON.stringify([]));
-  }
+  if (withFiles) { writeFileSync(join(d, 'tools.json'), '[]'); writeFileSync(join(d, 'agents.json'), '[]'); }
   return d;
 }
 
@@ -23,6 +20,16 @@ describe('TC-1.6 — fail-closed boot', () => {
   it('throws on a corrupt registry', () => {
     const d = gdir(true); writeFileSync(join(d, 'tools.json'), '{ not json');
     expect(() => loadGovernor(d, join(d, 'audit.jsonl'))).toThrow(GovernanceError);
+  });
+});
+
+describe('composition — loadGovernor assembles the FULL governed system', () => {
+  it('wires pdp, tasks, tokens, memory, router, capabilities, and monitor', () => {
+    const d = gdir(true);
+    const g = loadGovernor(d, join(d, 'audit.jsonl'));
+    for (const k of ['pdp', 'tasks', 'tokens', 'memory', 'router', 'capabilities', 'monitor', 'audit'] as const) {
+      expect(g[k]).toBeDefined();
+    }
   });
 });
 

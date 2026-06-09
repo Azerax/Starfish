@@ -30,7 +30,7 @@ const SIGNALS: { re: RegExp; tier: RiskTier; finding: string; forceHuman?: boole
   { re: /child_process|\bexecSync?\b|\bspawn\b|\beval\s*\(|new\s+Function\s*\(/, tier: 'high', finding: 'arbitrary code execution' },
   { re: /\bfetch\s*\(|https?:\/\/|require\(['"]https?['"]\)|axios|\bcurl\b|\bwget\b/i, tier: 'high', finding: 'outbound network', forceHuman: true },
   { re: /atob\s*\(|Buffer\.from\([^)]*,\s*['"]base64['"]\)|(\\x[0-9a-f]{2}){6,}/i, tier: 'high', finding: 'obfuscation / encoded payload', forceHuman: true },
-  { re: /process\.env|AWS_|API_KEY|SECRET|TOKEN|credentials/i, tier: 'medium', finding: 'reads env / credential material' },
+  { re: /\bprocess\.env\b|\bAWS_[A-Z]|\bAPI_KEY\b|\bSECRET_|\bACCESS_TOKEN\b|\bcredentials\b/i, tier: 'medium', finding: 'reads env / credential material' },
   { re: /writeFile|unlink|rmdir|appendFile/i, tier: 'medium', finding: 'filesystem writes' },
 ];
 
