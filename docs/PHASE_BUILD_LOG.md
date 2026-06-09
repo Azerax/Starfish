@@ -110,3 +110,16 @@ The build sandbox reset during a desktop-app restart (git MCP setup), discarding
 **Gates:** S-4 (vet-once-mutate-later) ✅.
 **Gating issue & resolution:**
 - A one-liner Python edit `open(p,'w').write(open(p).read()...)` truncated `index.test.ts` before reading it (write-open clears the file first), emptying it → "No test suite found". Recreated the file with correct content; 74/74 green. (Lesson: read-into-var THEN write, never read inside a write-open.)
+
+---
+
+## Phase 6 — Hank: runtime security monitor ✅
+**Delivered (governance-core):** `monitor.ts` — `SecurityMonitor`, READ-ONLY. Cursor-based audit sweep → deterministic counters (denials, boundary escapes, hash mismatches, budget-hard, orphan posts, casualties) → rule-based findings (capability-tampering, boundary-escape, possible-silent-execution, budget-breach, repeated-denials/probing) filed to the audit; High/Critical flagged for escalation. `reconcile()` compares a (possibly compromised) semantic "all clear" report against the deterministic counters and raises a Critical `watcher-discrepancy` alarm if they disagree — so an injected watcher fails safe. Casualty counter feeds the redshirt visual.
+**Tests (6 new, 80 total):**
+- TC-6.1 sweep surfaces hash-mismatch / boundary-escape / orphan-post as findings; repeated denials → probing ✅
+- TC-6.2 watcher is report-only — exposes no pause/kill/block/act/terminate/revoke ✅
+- TC-6.3 reconciliation — injected all-clear with denials present → Critical discrepancy alarm; truthful all-clear on a clean audit → ok ✅
+- TC-6.4 casualties — terminal-failure events counted ✅
+**Gates:** S-11 (watcher/planner injection — report-only + reconciled vs deterministic counters) ✅.
+**Gating issues:** none.
+**Note:** the periodic-sweep cadence (a scheduled mission calling `sweep()` every N min) and the LLM semantic layer are the integration on top; the deterministic scaffolding + the fail-safe reconciliation are what's tested here.
