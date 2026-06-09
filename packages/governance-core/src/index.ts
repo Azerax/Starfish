@@ -1,5 +1,5 @@
 // @starfish/governance-core — Ring 1 (Trusted Computing Base).
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 export const RING = 1 as const;
 
 export * from './types';
@@ -15,6 +15,7 @@ export { intakeRoute, ingestExternal, type IntakeRoute } from './intake';
 export { PDP } from './pdp';
 export { MessageRouter, type OutgoingMessage, type DeliveredMessage, type RouteResult, type MessageAct } from './messaging';
 export { GovernedMemory, type Evidence, type Claim, type Entity, type DecisionRecord } from './memory';
+export { vet, renderReport, hashFiles, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';
 export { scanEgress } from './containment';
 export { sha256 } from './hash';
 export { loadGovernor } from './boot';

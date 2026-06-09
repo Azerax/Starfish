@@ -97,3 +97,16 @@ The build sandbox reset during a desktop-app restart (git MCP setup), discarding
 **Gates:** S-15 (confused-deputy via router — identity stamped) ✅, S-16 (memory poisoning — nothing becomes knowledge without evidence+governance) ✅, G-7 (messaging conformance to §7) ✅.
 **Gating issues:** none — clean build.
 **Note:** canonical memory model adopted (evidence→knowledge); wiki is now just a future human-readable view. Graph + vector layers deferred to a later phase; the file-based vs SQLite decision will be revisited there.
+
+---
+
+## Phase 5 — Toby: capability intake & vetting ✅
+**Delivered (governance-core):** `vetting.ts` — `vet()` (deterministic static review over capability source: destructive / code-exec / network / obfuscation / env-credential / fs-write signals; provenance + license + dependency checks), `hashFiles()` (hash-on-vet), `renderReport()` (markdown artifact), and `CapabilityLedger` — the ONLY registration path (Toby recommends via a report; the core registers). Low → auto-enable; Medium+ → quarantine (registered-but-disabled); human `approve()` promotes; `verify()` enforces hash-on-vet (post-vet drift → deny + re-vet).
+**Tests (5 new, 74 total):**
+- TC-5.1 a capability enters only via the pipeline; quarantined until human approval ✅
+- TC-5.2 hash-on-vet — post-vet mutation caught (hash mismatch → re-vet) ✅
+- TC-5.3 disposition by score — benign Low auto-registers; workspace-writer Medium quarantined ✅
+- TC-5.4 fetch-and-execute / obfuscation forced to human (auto-not-Low); fetch+exec = Critical ✅
+**Gates:** S-4 (vet-once-mutate-later) ✅.
+**Gating issue & resolution:**
+- A one-liner Python edit `open(p,'w').write(open(p).read()...)` truncated `index.test.ts` before reading it (write-open clears the file first), emptying it → "No test suite found". Recreated the file with correct content; 74/74 green. (Lesson: read-into-var THEN write, never read inside a write-open.)
