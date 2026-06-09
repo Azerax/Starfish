@@ -1,0 +1,13 @@
+{
+  "name": "starfish-governance",
+  "version": "0.7.0",
+  "description": "Drop governance onto any Claude build: default-deny, vetted capabilities, audit, bounded autonomy.",
+  "license": "MIT",
+  "skills": ["./skills/starfish-govern"],
+  "hooks": {
+    "PreToolUse": "@starfish/governance-hooks",
+    "PostToolUse": "@starfish/governance-hooks",
+    "Stop": "@starfish/governance-hooks"
+  },
+  "installs": ["governance gate", "capability/policy/audit registries", "local PDP daemon"]
+}

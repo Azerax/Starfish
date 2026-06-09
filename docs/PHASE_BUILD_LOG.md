@@ -123,3 +123,16 @@ The build sandbox reset during a desktop-app restart (git MCP setup), discarding
 **Gates:** S-11 (watcher/planner injection — report-only + reconciled vs deterministic counters) ✅.
 **Gating issues:** none.
 **Note:** the periodic-sweep cadence (a scheduled mission calling `sweep()` every N min) and the LLM semantic layer are the integration on top; the deterministic scaffolding + the fail-safe reconciliation are what's tested here.
+
+---
+
+## Phase 7 — `starfish govern` overlay (the product) ✅
+**Delivered (governance-overlay):** `inventory()` (scan a build; each subfolder = a capability; reads optional manifest.json provenance; local-only file reads), `govern()` (the product flow: inventory → vet each via Toby → score → register Low / quarantine Medium+ → optional human approve → boundary auto-scoped to the pack → inject Starfish agents; idempotent: unchanged+hash-matching capabilities skipped, drift forces re-vet), a `starfish govern <pack>` CLI (`bin/starfish.mjs`), and a Claude Code **plugin manifest** + `starfish-govern` setup skill.
+**Tests (5 new, 85 total):**
+- TC-7.1 inventory finds every capability ✅
+- TC-7.2 Low auto-registers; Medium+ quarantined and disabled; explicit consent enables; agents injected ✅
+- TC-7.3 boundary auto-scoped to the pack (outside path denied) ✅
+- TC-7.4 idempotent hash-checked re-run; drift forces re-vet ✅
+**Gates:** L-6 (overlay processes third-party builds — local-only, consent-gated) ✅, P-1 (no egress of pack contents — local file reads only) ✅.
+**Gating issue & resolution:** inventory's `kind` union ('skill'|'tool'|'mcp'|'hook') was wider than vet's input kind ('skill'|'tool'|'agent') — TS2322. Mapped non-skill kinds → 'tool' at the vet() call. Green.
+**Note:** the CLI + plugin manifest are the packaging wrapper; the end-to-end govern/inventory/vetting logic is what's unit-tested. A live plugin install on a clean machine is integration-verified.
