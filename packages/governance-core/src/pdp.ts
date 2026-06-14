@@ -1,5 +1,5 @@
 // The Policy Decision Point (PDP) — single choke point, bracketing transports on both faces.
-// ingress = authorization (gate basics → risk → policy → combine); egress = result containment.
+// ingress = authorization (integrity → gate basics → risk → policy → combine); egress = containment.
 // Audit-before-act on every decision. Deterministic: pure function of (input, policy, context).
 import type { Decision, Face, ToolCall, BoundarySet, ToolDef, AgentDef, RiskTier } from './types';
 import type { Registry } from './registry';
@@ -10,11 +10,14 @@ import { PolicyEngine, type Effect } from './policy';
 import { scanEgress } from './containment';
 
 export interface TaskBinding { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean }; }
+// verify-before-invoke: re-checks a skill's integrity at call time (tamper → not ok).
+export interface IntegrityGate { verify(capabilityId: string): { ok: boolean; changed?: string[]; reason?: string }; }
 
 export class PDP {
   private risk: RiskEngine;
   private policy: PolicyEngine;
   private taskBinding?: TaskBinding;
+  private integrity?: IntegrityGate;
   constructor(
     private tools: Registry<ToolDef>,
     private agents: Registry<AgentDef>,
@@ -22,10 +25,12 @@ export class PDP {
     risk?: RiskEngine,
     policy?: PolicyEngine,
     taskBinding?: TaskBinding,
+    integrity?: IntegrityGate,
   ) {
     this.risk = risk ?? new RiskEngine();
     this.policy = policy ?? new PolicyEngine();
     this.taskBinding = taskBinding;
+    this.integrity = integrity;
   }
 
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
@@ -47,7 +52,15 @@ export class PDP {
   }
 
   private ingress(call: ToolCall, bs: BoundarySet): Decision {
-    // task-bound purpose ("no task, no tool") — enforced when enabled (T-07 / framework §3.2)
+    // verify-before-invoke: a tampered skill is denied + auto-quarantined (integrity gate audits Critical)
+    if (this.integrity && call.capabilityId) {
+      const iv = this.integrity.verify(call.capabilityId);
+      if (!iv.ok) {
+        const which = iv.changed && iv.changed.length ? ` (${iv.changed.join(', ')})` : '';
+        return { allow: false, reason: `integrity: ${call.capabilityId} tampered${which} — quarantined`, riskTier: 'critical' };
+      }
+    }
+    // task-bound purpose ("no task, no tool")
     if (this.taskBinding?.enforce && !this.taskBinding.provider.hasActiveTask(call.agentId, call.taskId)) {
       return { allow: false, reason: 'no active task (no task, no tool)' };
     }
@@ -77,6 +90,7 @@ export class PDP {
   }
 
   private combine(tier: RiskTier, pol: Effect | 'nomatch'): Decision {
+    if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier };
     if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier };
     if (tier === 'critical') return { allow: false, ask: true, reason: 'critical — human approval required (no auto-allow)', riskTier: tier };
     if (tier === 'low') return { allow: true, reason: 'low-risk auto-allow', riskTier: tier };

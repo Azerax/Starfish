@@ -7,8 +7,9 @@
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 function key() {
   if (process.env.ATLASCLOUD_API_KEY) return process.env.ATLASCLOUD_API_KEY;
   const env = join(ROOT, '.env');

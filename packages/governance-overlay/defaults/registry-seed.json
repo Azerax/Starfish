@@ -1,0 +1,19 @@
+[
+  { "id": "frontend-design",      "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "canvas-design",        "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "brand-guidelines",     "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "internal-comms",       "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "doc-coauthoring",      "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "theme-factory",        "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "slack-gif-creator",    "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "docx",                 "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "pdf",                  "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "pptx",                 "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "xlsx",                 "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "algorithmic-art",      "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "skill-creator",        "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "mcp-builder",          "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "web-artifacts-builder","kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "webapp-testing",       "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" },
+  { "id": "claude-api",           "kind": "skill", "riskTier": "low", "status": "enabled", "contentHash": "" }
+]

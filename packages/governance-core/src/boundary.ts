@@ -59,3 +59,21 @@ export function boundaryForAgent(spec: AgentBoundarySpec): BoundarySet {
   if (write.length === 0) throw new GovernanceError('boundaryForAgent: no writable root after applying forbid list');
   return { visibility, write };
 }
+
+// ---- Per-skill confinement (each skill gets a UNIQUE workspace) ----
+// Layout per skill: <skillsRoot>/<id>/source (vetted, READ-ONLY) and <skillsRoot>/<id>/workspace
+// (writable scratch). visibility = [source, workspace]; write = [workspace] only. Every other
+// skill's dir, the governance dir, audit, and state are absent from the set, so they are invisible.
+export function skillWorkspaceLayout(skillsRoot: string, skillId: string): { source: string; workspace: string } {
+  return { source: join(skillsRoot, skillId, 'source'), workspace: join(skillsRoot, skillId, 'workspace') };
+}
+export interface SkillBoundarySpec { skillsRoot: string; skillId: string; sharedReads?: string[]; forbid?: string[]; }
+export function boundaryForSkill(spec: SkillBoundarySpec): BoundarySet {
+  const { source, workspace } = skillWorkspaceLayout(spec.skillsRoot, spec.skillId);
+  const forbid = (spec.forbid ?? []).map((f) => resolve(f));
+  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => pp === f || pp.startsWith(f + sep)); };
+  const visibility = [source, workspace, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
+  const write = [workspace].filter((r) => !inForbid(r));     // source stays read-only; can't self-modify
+  if (write.length === 0) throw new GovernanceError('boundaryForSkill: workspace is forbidden — cannot derive a writable root');
+  return { visibility, write };
+}

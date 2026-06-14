@@ -1,0 +1,42 @@
+{
+  "source": "https://github.com/anthropics/skills",
+  "fetched": "2026-06-14",
+  "note": "Default starter catalog for `starfish govern`. These are NOT trusted by default: Toby re-vets every entry on intake (static review + provenance + hash-on-vet) and the listed `expectedRisk` is only a hint, not the verdict. Low auto-enables; Medium+ is quarantined pending the operator's consent. document-skills are source-available (not OSS); example/claude-api skills are Apache-2.0 — confirm license terms before commercial redistribution.",
+  "sets": [
+    {
+      "plugin": "document-skills",
+      "license": "source-available",
+      "skills": [
+        { "id": "docx", "kind": "skill", "category": "document", "summary": "Create, read, and edit Word (.docx) documents.", "expectedRisk": "medium", "recommended": true },
+        { "id": "pdf",  "kind": "skill", "category": "document", "summary": "Extract, fill, merge, split, and create PDFs.",        "expectedRisk": "medium", "recommended": true },
+        { "id": "pptx", "kind": "skill", "category": "document", "summary": "Create and edit PowerPoint presentations.",            "expectedRisk": "medium", "recommended": true },
+        { "id": "xlsx", "kind": "skill", "category": "document", "summary": "Create and edit Excel spreadsheets, formulas, charts.", "expectedRisk": "medium", "recommended": true }
+      ]
+    },
+    {
+      "plugin": "example-skills",
+      "license": "Apache-2.0",
+      "skills": [
+        { "id": "skill-creator",        "kind": "skill", "category": "development", "summary": "Create, edit, and evaluate new skills.",                 "expectedRisk": "medium", "recommended": true },
+        { "id": "mcp-builder",          "kind": "skill", "category": "development", "summary": "Scaffold and build MCP servers.",                         "expectedRisk": "high" },
+        { "id": "web-artifacts-builder","kind": "skill", "category": "development", "summary": "Build self-contained web artifacts.",                     "expectedRisk": "medium" },
+        { "id": "webapp-testing",       "kind": "skill", "category": "development", "summary": "Drive and test web apps (browser automation).",           "expectedRisk": "high" },
+        { "id": "frontend-design",      "kind": "skill", "category": "design",      "summary": "Front-end UI design guidance and scaffolds.",             "expectedRisk": "low" },
+        { "id": "canvas-design",        "kind": "skill", "category": "design",      "summary": "Visual/canvas design compositions.",                      "expectedRisk": "low" },
+        { "id": "algorithmic-art",      "kind": "skill", "category": "design",      "summary": "Generative / algorithmic art.",                           "expectedRisk": "low" },
+        { "id": "theme-factory",        "kind": "skill", "category": "design",      "summary": "Generate UI theme palettes/styles.",                      "expectedRisk": "low" },
+        { "id": "brand-guidelines",     "kind": "skill", "category": "enterprise",  "summary": "Apply brand guidelines to outputs.",                      "expectedRisk": "low", "recommended": true },
+        { "id": "internal-comms",       "kind": "skill", "category": "enterprise",  "summary": "Draft internal communications.",                          "expectedRisk": "low" },
+        { "id": "doc-coauthoring",      "kind": "skill", "category": "enterprise",  "summary": "Collaborative document co-authoring.",                    "expectedRisk": "medium" },
+        { "id": "slack-gif-creator",    "kind": "skill", "category": "enterprise",  "summary": "Create GIFs for Slack (network).",                        "expectedRisk": "medium" }
+      ]
+    },
+    {
+      "plugin": "claude-api",
+      "license": "Apache-2.0",
+      "skills": [
+        { "id": "claude-api", "kind": "skill", "category": "reference", "summary": "Claude API & SDK documentation reference.", "expectedRisk": "low", "recommended": true }
+      ]
+    }
+  ]
+}

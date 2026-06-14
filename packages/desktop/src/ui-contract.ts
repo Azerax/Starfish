@@ -7,49 +7,25 @@ import type {
   ServiceInfo, BudgetStatus, Finding, VettingReport,
 } from '@starfish/governance-core';
 
-// ---- Read views (DTOs the renderer renders) ----
 export interface CrewMemberView {
-  id: string;                 // internal agent id (themed via Theme.agents)
-  role: string;
+  id: string; role: string;
   status: 'active' | 'idle' | 'paused' | 'sweeping';
-  currentTaskId?: string;
-  riskTier?: RiskTier;
+  currentTaskId?: string; riskTier?: RiskTier;
 }
-
 export type Verdict = 'allow' | 'deny' | 'ask';
 export interface DecisionLogEntry {
   id: string; ts: string; actor: string; tool: string;
   target?: string; verdict: Verdict; reason: string; riskTier?: RiskTier;
 }
-
-export interface BudgetView {
-  scope: string;              // 'global' | agentId
-  status: BudgetStatus;
-  usdUsed: number; usdLimit: number;
-  tokensUsed: number; tokensLimit: number;
-}
-
+export interface BudgetView { scope: string; status: BudgetStatus; usdUsed: number; usdLimit: number; tokensUsed: number; tokensLimit: number; }
 export interface MonitorView {
   lastSweepTs: string;
-  counters: { denials: number; boundaryEscapes: number; hashMismatches: number; budgetHard: number; orphanPosts: number; casualties: number; };
-  findings: Finding[];
-  reconciled: boolean;        // watcher report agrees with deterministic counters
+  counters: { denials: number; boundaryEscapes: number; hashMismatches: number; budgetHard: number; orphanPosts: number; casualties: number };
+  findings: Finding[]; reconciled: boolean;
 }
+export interface CapabilityView { id: string; kind: 'skill' | 'tool' | 'mcp' | 'hook'; state: 'requested' | 'vetting' | 'quarantined' | 'registered' | 'rejected'; report?: VettingReport; }
+export interface TaskView { task: Task; needsApproval: boolean; proposer?: string; }
 
-export interface CapabilityView {
-  id: string;
-  kind: 'skill' | 'tool' | 'mcp' | 'hook';
-  state: 'requested' | 'vetting' | 'quarantined' | 'registered' | 'rejected';
-  report?: VettingReport;
-}
-
-export interface TaskView {
-  task: Task;
-  needsApproval: boolean;     // gate: risk high+ / proposer != approver
-  proposer?: string;
-}
-
-// ---- Read surface (all read-only; subscribe for push updates) ----
 export type Channel = 'decisions' | 'audit' | 'tasks' | 'services' | 'budgets' | 'monitor' | 'buffer';
 export type Unsubscribe = () => void;
 
@@ -65,7 +41,6 @@ export interface GovernanceReadApi {
   subscribe(channel: Channel, cb: (payload: unknown) => void): Unsubscribe;
 }
 
-// ---- Action path: the renderer REQUESTS; the PDP decides. ----
 export type UiIntent =
   | { kind: 'task.approve'; taskId: string }
   | { kind: 'task.reject'; taskId: string; reason?: string }
@@ -75,17 +50,23 @@ export type UiIntent =
   | { kind: 'capability.quarantine'; capabilityId: string }
   | { kind: 'capability.reject'; capabilityId: string; reason?: string }
   | { kind: 'idea.promote'; nodeIds: string[] };
-
-export interface ActionRequest { actor: string; intent: UiIntent; }   // actor = the human operator id
+export interface ActionRequest { actor: string; intent: UiIntent; }
 export interface ActionResult { decision: Decision; applied: boolean; }
+export interface GovernanceActionApi { requestAction(req: ActionRequest): Promise<ActionResult>; }
 
-export interface GovernanceActionApi {
-  // Adjudicated by the PDP server-side. UI reflects decision.allow / ask / deny; nothing is
-  // applied unless decision.allow is true (applied === true).
-  requestAction(req: ActionRequest): Promise<ActionResult>;
+// ---- Onboarding (first-run). The intake step routes through the governed default-skills flow. ----
+export interface OnboardingState { done: boolean; operator?: string; theme?: string; }
+export interface DefaultSkillView { id: string; kind: string; category: string; summary: string; expectedRisk: RiskTier | string; plugin: string; recommended?: boolean; }
+export interface CompleteOnboardingInput { operator: string; theme: string; enabledIds: string[]; }
+export interface OnboardingResult { registered: string[]; quarantined: string[]; approved: string[]; missing: string[] }
+export interface OnboardingApi {
+  getOnboarding(): Promise<OnboardingState>;
+  getDefaultSkills(): Promise<DefaultSkillView[]>;
+  // Persists operator/theme, marks onboarded, and runs governDefaults (vet -> CapabilityLedger,
+  // consenting to enabledIds). Nothing is registered except via that governed path.
+  completeOnboarding(input: CompleteOnboardingInput): Promise<OnboardingResult>;
 }
 
-// The full IPC bridge the Electron preload exposes to the renderer.
-export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi {
-  readonly governed: true;   // marker: a renderer holding this bridge is always governed
+export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi, OnboardingApi {
+  readonly governed: true;
 }

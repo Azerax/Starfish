@@ -1,7 +1,7 @@
 // Risk Engine — deterministic 4-tier classification (R&C Risk Registry; framework §5).
 import type { RiskTier, ToolCall, ToolDef } from './types';
 
-const RANK: Record<RiskTier, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+const RANK: Record<RiskTier, number> = { low: 0, medium: 1, high: 2, critical: 3, injection: 4 };
 const max = (a: RiskTier, b: RiskTier): RiskTier => (RANK[a] >= RANK[b] ? a : b);
 
 const CRITICAL = /(rm\s+-rf|mkfs|dd\s+if=|:\(\)\s*\{|chmod\s+777|sudo\s|\bpolicies\.json\b|\btools\.json\b|hive\/governance)/i;

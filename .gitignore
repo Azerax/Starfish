@@ -8,3 +8,10 @@ sbom.json
 *.tgz
 .probe
 *.probe
+
+# secrets — never commit
+.env
+.env.*
+
+# generated art intermediates (keep the optimized .webp)
+art/fleet/_raw/

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Starfish — Onboarding</title>
+<style>
+  :root[data-theme="fleet"]{ --bg:#070b16; --panel:#0d1426; --panel2:#111b33; --line:#1e2c4a;
+    --ink:#e8eefc; --muted:#8aa0c8; --accent:#37d6ff; --accent2:#ffce5c; --ok:#39d98a;
+    --warn:#ffce5c; --deny:#ff5c7a; --ask:#b48cff; --chip:#13203c; --command:#F2A23C; }
+  :root[data-theme="ops"]{ --bg:#0f1115; --panel:#171a21; --panel2:#1c212b; --line:#2a313d;
+    --ink:#eef1f5; --muted:#9aa6b6; --accent:#5db0ff; --accent2:#7bd88f; --ok:#7bd88f;
+    --warn:#f0c24b; --deny:#ff6b6b; --ask:#b98bff; --chip:#222834; --command:#5db0ff; }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:
+    radial-gradient(1200px 700px at 50% -10%, color-mix(in srgb,var(--accent) 12%,transparent), transparent 60%), var(--bg);
+    color:var(--ink)}
+  .wiz{width:min(680px,96vw);background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.5);overflow:hidden}
+  .head{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line)}
+  .badge{width:30px;height:30px;flex:0 0 auto}
+  .head .ti{font-weight:800;letter-spacing:.02em}
+  .head .ti small{color:var(--muted);font-weight:500;margin-left:8px}
+  .head .gov{margin-left:auto;font-size:11px;color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 35%,var(--line));
+    padding:4px 10px;border-radius:999px}
+  /* stepper */
+  .steps{display:flex;gap:6px;padding:14px 22px 0}
+  .steps .d{flex:1;height:4px;border-radius:3px;background:var(--chip);overflow:hidden}
+  .steps .d.on{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .steplabel{padding:8px 22px 0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  /* body */
+  .body{padding:18px 22px;min-height:330px}
+  .pane{display:none;animation:fade .4s ease}
+  .pane.show{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h2{margin:.2em 0 .3em;font-size:22px}
+  p.sub{color:var(--muted);margin:0 0 16px;font-size:13px;line-height:1.5}
+  .field{margin:14px 0}
+  label.lbl{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
+  input[type=text]{width:100%;background:var(--chip);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);padding:11px 13px;font-size:14px}
+  .note{font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--ask) 8%,transparent);
+    border:1px solid color-mix(in srgb,var(--ask) 35%,var(--line));border-radius:10px;padding:10px 12px;margin-top:10px}
+  .note b{color:var(--ask)}
+  .themes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .theme{border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:var(--panel2);position:relative}
+  .theme.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+  .theme .nm{font-weight:700}.theme .sw{display:flex;gap:5px;margin-top:8px}
+  .theme .sw i{width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.12)}
+  /* intake */
+  .cap{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:var(--panel2);
+    border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:9px}
+  .cap .nm{font-weight:600}.cap .meta{font-size:11px;color:var(--muted)}
+  .risk{font-size:10px;padding:3px 8px;border-radius:999px;border:1px solid var(--line)}
+  .risk.low{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+  .risk.medium{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+  .risk.critical{color:#fff;background:var(--deny);border-color:var(--deny)}
+  .disp{font-size:11px;min-width:120px;text-align:right}
+  .disp .auto{color:var(--ok)} .disp .q{color:var(--ask)}
+  .consent{display:inline-flex;gap:6px}
+  .mini{font-size:11px;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:8px;padding:5px 9px;cursor:pointer}
+  .mini.on{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  .mini.off{border-color:var(--ask);color:var(--ask)}
+  .intakehint{font-size:11px;color:var(--muted);margin-top:6px}
+  /* finish */
+  .finish{text-align:center;padding:18px 0}
+  .seal{width:84px;height:84px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:2px solid var(--ok);color:var(--ok);font-size:34px;box-shadow:0 0 30px color-mix(in srgb,var(--ok) 40%,transparent)}
+  .summary{display:inline-block;text-align:left;margin-top:6px;font-size:13px;color:var(--muted)}
+  .summary b{color:var(--ink)}
+  /* footer */
+  .foot{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-top:1px solid var(--line)}
+  .btn{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:10px 18px;font-size:13px;cursor:pointer}
+  .btn.primary{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,var(--panel2));font-weight:700}
+  .btn:disabled{opacity:.4;cursor:default}
+  .theme-toggle{font-size:11px;color:var(--muted)}
+  select{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wiz">
+  <div class="head">
+    <svg class="badge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="var(--accent)" stroke-width="1.2" opacity=".6"/><path d="M12 4l2.4 5 5.1.7-3.8 3.6.95 5.2L12 16.4 7.35 18.5l.95-5.2L4.5 9.7l5.1-.7z" fill="var(--accent)"/></svg>
+    <div class="ti">Project Starfish<small>First-run setup</small></div>
+    <span class="gov">● GOVERNED · fail-closed</span>
+  </div>
+
+  <div class="steps">
+    <div class="d on"></div><div class="d"></div><div class="d"></div><div class="d"></div>
+  </div>
+  <div class="steplabel" id="steplabel">Step 1 of 4 · Welcome</div>
+
+  <div class="body">
+    <!-- 0 welcome -->
+    <div class="pane show" data-step="0">
+      <h2>Report for duty</h2>
+      <p class="sub">Project Starfish is a <b>governance-first</b> AI ecosystem. Before any agent can act, governance loads and defaults to <b>deny</b>. You — the operator — remain the final authority on everything that matters. This short setup makes you the approver and brings your capabilities under governance.</p>
+      <div class="note">Nothing executes during setup. Governance is already up (fail-closed); you're just taking command.</div>
+    </div>
+
+    <!-- 1 operator + theme -->
+    <div class="pane" data-step="1">
+      <h2>Who's in command?</h2>
+      <p class="sub">Your name is stamped on every approval. By <b>proposer ≠ approver</b>, agents can never self-authorize — a human (you) must approve elevated actions.</p>
+      <div class="field">
+        <label class="lbl">Operator name</label>
+        <input id="opname" type="text" value="Grand Admiral Scotticus" />
+      </div>
+      <div class="field">
+        <label class="lbl">Theme</label>
+        <div class="themes">
+          <div class="theme sel" data-theme-id="fleet" onclick="pickTheme('fleet')">
+            <div class="nm">Fleet</div><div class="meta" style="font-size:11px;color:var(--muted)">Captain Mykel · Oh Brian · D8A</div>
+            <div class="sw"><i style="background:#F2A23C"></i><i style="background:#8699FF"></i><i style="background:#D24C4C"></i><i style="background:#5FC98A"></i></div>
+          </div>
+          <div class="theme" data-theme-id="ops" onclick="pickTheme('ops')">
+            <div class="nm">Ops (neutral)</div><div class="meta" style="font-size:11px;color:var(--muted)">Orchestrator · Intake · Memory</div>
+            <div class="sw"><i style="background:#5db0ff"></i><i style="background:#8699FF"></i><i style="background:#ff6b6b"></i><i style="background:#7bd88f"></i></div>
+          </div>
+        </div>
+        <div class="intakehint">You can add your own themes later — the UI fully re-skins.</div>
+      </div>
+    </div>
+
+    <!-- 2 governed intake -->
+    <div class="pane" data-step="2">
+      <h2>Governed intake</h2>
+      <p class="sub">Toby vetted the default skill catalog (from <b>anthropics/skills</b>) — static review + provenance + hash-on-vet. <b>Low risk auto-enables; anything Medium or higher is quarantined until you consent.</b> This is the only door into the registry.</p>
+      <div id="caps"></div>
+      <div class="intakehint" id="intakecount"></div>
+    </div>
+
+    <!-- 3 finish -->
+    <div class="pane" data-step="3">
+      <div class="finish">
+        <div class="seal">✓</div>
+        <h2>You have the conn</h2>
+        <div class="summary" id="summary"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <button class="btn" id="back" onclick="go(-1)">Back</button>
+    <span class="theme-toggle">Preview theme:
+      <select onchange="pickTheme(this.value)" id="themesel"><option value="fleet">Fleet</option><option value="ops">Ops</option></select>
+    </span>
+    <button class="btn primary" id="next" onclick="go(1)">Begin</button>
+  </div>
+</div>
+
+<script>
+  document.documentElement.setAttribute('data-theme','fleet');
+  const LABELS = ['Welcome','Operator & theme','Governed intake','Ready'];
+  const CAPS = [
+    { id:'claude-api',        kind:'skill', risk:'low',      why:'API docs reference; read-only' },
+    { id:'brand-guidelines',  kind:'skill', risk:'low',      why:'applies brand rules; read-only' },
+    { id:'xlsx',              kind:'skill', risk:'medium',   why:'creates/edits files in workspace' },
+    { id:'skill-creator',     kind:'skill', risk:'medium',   why:'authors new skill files' },
+    { id:'slack-gif-creator', kind:'skill', risk:'medium',   why:'network egress (Slack)' },
+    { id:'webapp-testing',    kind:'skill', risk:'high',     why:'browser automation + code execution' },
+  ];
+  const consent = {}; // id -> enabled (for medium+)
+  let step = 0, theme = 'fleet';
+
+  function pickTheme(t){
+    theme = t; document.documentElement.setAttribute('data-theme',t);
+    document.querySelectorAll('.theme').forEach(e=>e.classList.toggle('sel', e.dataset.themeId===t));
+    const sel=document.getElementById('themesel'); if(sel) sel.value=t;
+  }
+
+  function renderCaps(){
+    const box = document.getElementById('caps'); box.innerHTML='';
+    for(const c of CAPS){
+      const auto = c.risk==='low';
+      if(auto) consent[c.id]=true;
+      const row = document.createElement('div'); row.className='cap';
+      const enabled = consent[c.id] ?? false;
+      row.innerHTML = `
+        <div><div class="nm">${c.id}</div><div class="meta">${c.kind} · ${c.why}</div></div>
+        <span class="risk ${c.risk}">${c.risk}</span>
+        <div class="disp">${auto
+          ? '<span class="auto">auto-enabled ✓</span>'
+          : `<span class="consent">
+               <button class="mini ${enabled?'on':''}" onclick="setConsent('${c.id}',true)">Enable</button>
+               <button class="mini ${!enabled?'off':''}" onclick="setConsent('${c.id}',false)">Quarantine</button>
+             </span>`}</div>`;
+      box.appendChild(row);
+    }
+    updateCount();
+  }
+  function setConsent(id,v){ consent[id]=v; renderCaps(); }
+  function updateCount(){
+    const en = Object.values(consent).filter(Boolean).length;
+    const q = CAPS.length - en;
+    document.getElementById('intakecount').textContent = `${en} enabled · ${q} held in quarantine — you can change these anytime on the Transporter screen.`;
+  }
+
+  function renderSummary(){
+    const en = Object.values(consent).filter(Boolean).length;
+    const q = CAPS.length - en;
+    const name = document.getElementById('opname').value || 'Operator';
+    document.getElementById('summary').innerHTML =
+      `Operator: <b>${name}</b><br>Theme: <b>${theme==='fleet'?'Fleet':'Ops (neutral)'}</b><br>`+
+      `Capabilities: <b>${en} enabled</b>, <b>${q} quarantined</b><br>`+
+      `Governance: <b style="color:var(--ok)">active · fail-closed ✓</b>`;
+  }
+
+  function render(){
+    document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('show', +p.dataset.step===step));
+    document.querySelectorAll('.steps .d').forEach((d,i)=>d.classList.toggle('on', i<=step));
+    document.getElementById('steplabel').textContent = `Step ${step+1} of 4 · ${LABELS[step]}`;
+    document.getElementById('back').disabled = step===0;
+    const next = document.getElementById('next');
+    next.textContent = step===0 ? 'Begin' : step===3 ? 'Enter the Bridge' : 'Next';
+    if(step===2) renderCaps();
+    if(step===3) renderSummary();
+  }
+  function go(d){
+    if(step===3 && d>0){ alert('→ Entering the Bridge (in the app this hands off to the main window).'); return; }
+    step = Math.max(0, Math.min(3, step+d)); render();
+  }
+  render();
+</script>
+</body>
+</html>

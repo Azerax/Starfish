@@ -55,6 +55,13 @@ export class SecurityMonitor {
     const byActor = new Map<string, number>();
     for (const e of events) if (e.decision === 'deny') byActor.set(e.actor, (byActor.get(e.actor) ?? 0) + 1);
     for (const [actor, n] of byActor) if (n >= 3) f.push(mk('medium', 'repeated-denials', `${actor}: ${n} denials (possible probing)`));
+    // directory-listing probing/enumeration (fs.list): denied lists => boundary probing; many lists => enumeration
+    const listByActor = new Map<string, { total: number; denied: number }>();
+    for (const e of events) if ((e.action ?? '').includes('fs.list')) { const a = listByActor.get(e.actor) ?? { total: 0, denied: 0 }; a.total++; if (e.decision === 'deny') a.denied++; listByActor.set(e.actor, a); }
+    for (const [actor, st] of listByActor) {
+      if (st.denied >= 2) f.push(mk('high', 'listing-probing', `${actor}: ${st.denied} denied directory listing(s) — boundary probing`));
+      else if (st.total >= 8) f.push(mk('medium', 'listing-enumeration', `${actor}: ${st.total} directory listings in window — possible enumeration`));
+    }
     for (const finding of f) this.file(finding);
     return { counters: c, findings: f };
   }

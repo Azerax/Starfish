@@ -15,12 +15,13 @@ const bridge: GovernanceBridge = {
   getBuffer: async () => [],
   subscribe: () => () => {},
   requestAction: async (): Promise<ActionResult> => ({ decision: { allow: false, ask: true, reason: 'human approval required (proposer != approver)' }, applied: false }),
+  getOnboarding: async () => ({ done: false, operator: 'op', theme: 'fleet' }),
+  getDefaultSkills: async () => [{ id: 'xlsx', kind: 'skill', category: 'document', summary: 's', expectedRisk: 'medium', plugin: 'document-skills' }],
+  completeOnboarding: async () => ({ registered: [], quarantined: ['xlsx'], approved: [], missing: [] }),
 };
 
 describe('UI <-> governance contract (ring 3)', () => {
-  it('the renderer bridge is always governed', () => {
-    expect(bridge.governed).toBe(true);
-  });
+  it('the renderer bridge is always governed', () => { expect(bridge.governed).toBe(true); });
   it('actions are requests adjudicated by the PDP; nothing applies without allow', async () => {
     const res = await bridge.requestAction({ actor: 'operator', intent: { kind: 'task.approve', taskId: '#412' } });
     expect(res.decision.ask).toBe(true);
@@ -29,5 +30,11 @@ describe('UI <-> governance contract (ring 3)', () => {
   it('exposes read-only crew view themed by internal id', async () => {
     const crew = await bridge.getCrew();
     expect(crew[0].id).toBe('michael');
+  });
+  it('onboarding routes through the governed default-skills flow', async () => {
+    const cat = await bridge.getDefaultSkills();
+    expect(cat[0].id).toBe('xlsx');
+    const r = await bridge.completeOnboarding({ operator: 'op', theme: 'fleet', enabledIds: [] });
+    expect(r.quarantined).toContain('xlsx');   // Medium+ not auto-trusted
   });
 });

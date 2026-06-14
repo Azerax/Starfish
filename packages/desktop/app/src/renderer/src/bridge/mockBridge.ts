@@ -1,0 +1,54 @@
+import type { GovernanceBridge, DecisionLogEntry, DefaultSkillView } from './types';
+
+const POOL: Omit<DecisionLogEntry, 'id' | 'ts'>[] = [
+  { actor: 'dwight', tool: 'fs.read', target: '/proj/src/app.ts', verdict: 'allow', reason: 'registered; in boundary; risk low', riskTier: 'low' },
+  { actor: 'worker', tool: 'git_commit', verdict: 'ask', reason: 'risk high -> human approval (proposer != approver)', riskTier: 'high' },
+  { actor: 'worker', tool: 'shell.raw', verdict: 'deny', reason: 'default-deny; raw shell unregistered', riskTier: 'critical' },
+  { actor: 'pam', tool: 'memory.promote', target: 'claim #88', verdict: 'allow', reason: 'high-confidence low-stakes auto-approved', riskTier: 'low' },
+  { actor: 'toby', tool: 'capability.vet', target: 'web-search-mcp', verdict: 'ask', reason: 'medium risk -> quarantine pending human', riskTier: 'medium' },
+  { actor: 'hank', tool: 'audit.sweep', verdict: 'allow', reason: 'read-only monitor sweep', riskTier: 'low' },
+];
+let seq = 100;
+function clock(o = 0): string { return new Date(Date.now() + o * 1000).toTimeString().slice(0, 8); }
+const feed: DecisionLogEntry[] = POOL.slice(0, 4).map((d, i) => ({ ...d, id: 'd' + (seq - i), ts: clock(-i * 6) }));
+
+const CATALOG: DefaultSkillView[] = [
+  { id: 'claude-api', kind: 'skill', category: 'reference', summary: 'Claude API & SDK docs', expectedRisk: 'low', plugin: 'claude-api' },
+  { id: 'brand-guidelines', kind: 'skill', category: 'enterprise', summary: 'Apply brand guidelines', expectedRisk: 'low', plugin: 'example-skills', recommended: true },
+  { id: 'xlsx', kind: 'skill', category: 'document', summary: 'Create/edit spreadsheets', expectedRisk: 'medium', plugin: 'document-skills', recommended: true },
+  { id: 'skill-creator', kind: 'skill', category: 'development', summary: 'Author new skills', expectedRisk: 'medium', plugin: 'example-skills', recommended: true },
+  { id: 'slack-gif-creator', kind: 'skill', category: 'enterprise', summary: 'Create Slack GIFs (network)', expectedRisk: 'medium', plugin: 'example-skills' },
+  { id: 'webapp-testing', kind: 'skill', category: 'development', summary: 'Browser automation + exec', expectedRisk: 'high', plugin: 'example-skills' },
+];
+
+export const mockBridge: GovernanceBridge = {
+  governed: true,
+  getCrew: async () => [
+    { id: 'michael', role: 'Orchestrator', status: 'active', currentTaskId: '#412', riskTier: 'medium' },
+    { id: 'dwight', role: 'Planner', status: 'active', currentTaskId: '#418', riskTier: 'low' },
+    { id: 'toby', role: 'Intake & vetting', status: 'idle', riskTier: 'medium' },
+    { id: 'hank', role: 'Security monitor', status: 'sweeping', riskTier: 'low' },
+    { id: 'pam', role: 'Memory', status: 'active', riskTier: 'low' },
+    { id: 'worker', role: 'Execution', status: 'paused', currentTaskId: '#412', riskTier: 'high' },
+  ],
+  getDecisions: async (limit = 8) => { seq += 1; feed.unshift({ ...POOL[seq % POOL.length], id: 'd' + seq, ts: clock() }); feed.length = Math.min(feed.length, 40); return feed.slice(0, limit); },
+  getAudit: async () => [],
+  getTasks: async () => [],
+  getServices: async () => [],
+  getBudgets: async () => [
+    { scope: 'global', status: 'ok', usdUsed: 6.4, usdLimit: 10, tokensUsed: 812000, tokensLimit: 1500000 },
+    { scope: 'worker', status: 'hard', usdUsed: 4.1, usdLimit: 4, tokensUsed: 410000, tokensLimit: 400000 },
+  ],
+  getMonitor: async () => ({ lastSweepTs: clock(-2), counters: { denials: 3, boundaryEscapes: 0, hashMismatches: 0, budgetHard: 1, orphanPosts: 0, casualties: 1 }, findings: [], reconciled: true }),
+  getBuffer: async () => [{ id: 'web-search-mcp', kind: 'mcp', state: 'quarantined' }],
+  subscribe: () => () => {},
+  requestAction: async () => ({ decision: { allow: false, ask: true, reason: 'human approval required (proposer != approver)' }, applied: false }),
+  getOnboarding: async () => ({ done: false, operator: 'Grand Admiral Scotticus', theme: 'fleet' }),
+  getDefaultSkills: async () => CATALOG,
+  completeOnboarding: async (i) => {
+    const low = CATALOG.filter((s) => s.expectedRisk === 'low').map((s) => s.id);
+    const medplus = CATALOG.filter((s) => s.expectedRisk !== 'low').map((s) => s.id);
+    const approved = i.enabledIds.filter((id) => medplus.includes(id));
+    return { registered: low, quarantined: medplus.filter((id) => !approved.includes(id)), approved, missing: [] };
+  },
+};
