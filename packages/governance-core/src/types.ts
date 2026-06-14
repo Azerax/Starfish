@@ -12,7 +12,7 @@ export interface ToolDef {
   allowedAgents: string[] | '*';
   riskTier?: RiskTier;
 }
-export interface AgentDef { id: string; domain?: string; allowedTools?: string[]; }
+export interface AgentDef { id: string; domain?: string; allowedTools?: string[]; riskTier?: RiskTier; }
 
 export interface BoundarySet { visibility: string[]; write: string[]; }
 export interface ToolCall { agentId: string; tool: string; input: Record<string, unknown>; taskId?: string; }

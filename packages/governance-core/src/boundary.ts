@@ -3,7 +3,7 @@
 // against a per-agent boundary set. Denial reasons never echo paths above the root (no leak).
 import { existsSync, realpathSync, lstatSync } from 'node:fs';
 import { resolve, dirname, basename, join, sep } from 'node:path';
-import type { BoundarySet } from './types';
+import { GovernanceError, type BoundarySet } from './types';
 
 /** Resolve to absolute, collapse '..', and realpath the existing prefix (follows symlinks),
  *  re-appending any not-yet-existing tail (so writes to new files are still checked). */
@@ -45,4 +45,17 @@ export function containCheck(path: string, mode: 'read' | 'write', bs: BoundaryS
   if (!root) return { allowed: false, reason: `outside ${mode} boundary` };       // no path leak
   if (symlinkBelowRoot(path, root)) return { allowed: false, reason: 'symlink-component-rejected' };
   return { allowed: true, reason: 'within boundary' };
+}
+
+/** Build a safe per-agent boundary set. Any root that falls inside a `forbid` path
+ *  (e.g. the governance dir or audit log) is dropped — governance state is never in an
+ *  agent's visibility/write set by construction. */
+export interface AgentBoundarySpec { projectRoot: string; workspace: string; agentDir: string; sharedReads?: string[]; forbid?: string[]; }
+export function boundaryForAgent(spec: AgentBoundarySpec): BoundarySet {
+  const forbid = (spec.forbid ?? []).map((f) => resolve(f));
+  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => pp === f || pp.startsWith(f + sep)); };
+  const visibility = [spec.projectRoot, spec.agentDir, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
+  const write = [spec.workspace, spec.agentDir].filter((r) => !inForbid(r));
+  if (write.length === 0) throw new GovernanceError('boundaryForAgent: no writable root after applying forbid list');
+  return { visibility, write };
 }

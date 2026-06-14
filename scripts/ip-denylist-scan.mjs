@@ -9,6 +9,7 @@ const TOKENS = ['LCARS', 'Starfleet', 'U.S.S.', 'NCC-', 'Vulcan', 'Spock', 'Spok
 const ROOTS = ['packages'];
 const SKIP = new Set(['node_modules', 'dist', 'out', '.git']);
 const BIN = /\.(png|jpe?g|gif|ico|icns|woff2?|ttf|webp|mp4|zip)$/i;
+const TEST = /\.(test|conformance\.test)\.[tj]sx?$/i;  // tests are not shipped — don't scan them
 
 function walk(dir) {
   let f = [];
@@ -26,7 +27,7 @@ for (const r of ROOTS) {
   let files = [];
   try { files = walk(r); } catch { continue; }
   for (const f of files) {
-    if (BIN.test(f)) continue;
+    if (BIN.test(f) || TEST.test(f)) continue;
     let src;
     try { src = readFileSync(f, 'utf8'); } catch { continue; }
     src.split('\n').forEach((ln, i) => {

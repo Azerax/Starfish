@@ -1,11 +1,11 @@
 // @starfish/governance-core — Ring 1 (Trusted Computing Base).
-export const VERSION = '0.6.0';
+export const VERSION = '0.9.0';
 export const RING = 1 as const;
 
 export * from './types';
 export { AuditLog } from './audit';
 export { Registry } from './registry';
-export { containCheck } from './boundary';
+export { containCheck, boundaryForAgent, type AgentBoundarySpec } from './boundary';
 export { RiskEngine } from './risk';
 export { PolicyEngine, loadPolicies, type Effect, type PolicyRule } from './policy';
 export { TEMPLATES, validateParams, runTemplate } from './templates';
@@ -19,5 +19,8 @@ export { vet, renderReport, hashFiles, CapabilityLedger, type VettingInput, type
 export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from './monitor';
 export { scanEgress } from './containment';
 export { sha256 } from './hash';
-export { loadGovernor } from './boot';
+export { ServiceRegistry, type ServiceInfo } from './services';
+export { saveJson, loadJson } from './persistence';
+export { classifyNode, promoteCluster, type CanvasNode, type NodeRoute, type PromoteResult } from './planner';
+export { loadGovernor, persistGovernor, restoreGovernor } from './boot';
 export type { Governor } from './boot';

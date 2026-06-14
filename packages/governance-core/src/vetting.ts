@@ -109,6 +109,8 @@ export class CapabilityLedger {
     this.audit.append({ actor: by, domain: 'governance', action: 'capability:approve', target: id, decision: 'allow', reason: 'human consent' });
   }
 
+  snapshot(): CapabilityEntry[] { return [...this.caps.values()]; }
+  restore(arr: CapabilityEntry[]): void { this.caps = new Map(arr.map((c) => [c.id, c])); }
   isEnabled(id: string): boolean { return this.caps.get(id)?.status === 'enabled'; }
   get(id: string): CapabilityEntry | undefined { return this.caps.get(id); }
 

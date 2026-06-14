@@ -1,0 +1,16 @@
+# Packaging config for the Project Starfish desktop host (ring 3). The GUI (Pixi bridge + React
+# command-console chrome) is built on top of the host runtime; code-signing + notarization require certs
+# (see docs/NEEDS_SCOTT_APPROVAL.md). Product name is IP-safe.
+appId: com.projectstarfish.app
+productName: Project Starfish
+directories:
+  output: dist
+files:
+  - "out/**"
+mac:
+  category: public.app-category.developer-tools
+  target: [dmg]
+win:
+  target: [nsis]
+linux:
+  target: [AppImage]

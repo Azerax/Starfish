@@ -1,0 +1,17 @@
+{
+  "model": "black-forest-labs/flux-2-pro/text-to-image",
+  "seed": 29,
+  "size": "1024*1024",
+  "style": "Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+  "assets": [
+    { "key": "captain-mykel",        "lead": "A composed starship captain in a fitted amber command tunic, calm and authoritative, head-and-shoulders portrait." },
+    { "key": "first-officer",        "lead": "A calm science officer in a deep-blue tunic, analytical and even-tempered, head-and-shoulders portrait." },
+    { "key": "oh-brian-intake",      "lead": "A practical operations chief in a teal tunic standing beside a softly glowing transporter pad, head-and-shoulders portrait." },
+    { "key": "constable-gooey",      "lead": "A watchful security constable in a deep-red tunic with a steady level gaze, head-and-shoulders portrait." },
+    { "key": "d8a-ops-android",      "lead": "A sleek pale operations android officer with faint circuitry under the skin and a neutral expression, head-and-shoulders portrait." },
+    { "key": "deck-crew",            "lead": "A generic deck-crew officer in a plain grey tunic, neutral expression, head-and-shoulders portrait." },
+    { "key": "bridge-keyart",        "lead": "An empty retro-futurist starship bridge interior with a central command chair and a large dark viewscreen, wide establishing shot." },
+    { "key": "transporter-room",     "lead": "A quiet retro-futurist transporter room with a circular pad and soft amber light, empty, wide shot." },
+    { "key": "redshirt-casualty",    "lead": "A single empty red officer tunic folded on a bare metal deck, somber and still, still-life." }
+  ]
+}

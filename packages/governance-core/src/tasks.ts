@@ -69,6 +69,8 @@ export class TaskLedger {
     return t;
   }
 
+  snapshot(): Task[] { return [...this.tasks.values()]; }
+  restore(arr: Task[]): void { this.tasks = new Map(arr.map((t) => [t.id, t])); }
   get(id: string): Task | undefined { return this.tasks.get(id); }
   all(): Task[] { return [...this.tasks.values()]; }
   hasActiveTask(agentId: string, taskId?: string): boolean {

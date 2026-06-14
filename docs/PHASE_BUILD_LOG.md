@@ -144,3 +144,50 @@ Examined all implemented code; fresh full run = 86 tests green; tests confirmed 
 1. **Composition fix:** `loadGovernor` was stale — it only wired pdp/tools/agents/audit/tasks/tokens. The memory, message router, capability ledger, and monitor existed and were unit-tested but were never assembled into the `Governor`. Now wired; added a composition test asserting all subsystems are present.
 2. **Risk false-positive fix:** the vetting credential signal matched bare substrings (`SECRET`, `TOKEN`) — flagging innocuous words like "tokenizer". Tightened to word-boundaried patterns. Safe (fail-direction was over-quarantine); reduces noise.
 Gaps identified for the next stages are tracked in the handoff/plan (live PDP daemon, persistence of runtime stores, Service registry + capabilities.json, per-agent boundary derivation, default-on task-binding, and the desktop ring-3 shell that Phases 8-9 require).
+
+---
+
+## Phase 7.5 — Integration (live runtime) ✅
+Turns the proven governance LOGIC into a running governed system.
+**Delivered:**
+- **PdpDaemon** (governance-hooks): a local socket server — the live enforcement seam. A per-agent hook connects, sends a `{type:'hello', agentId}` handshake (binds the connection to that agent), then streams hook payloads; each runs through a per-connection `HookSession` (the PDP) and gets a permission decision. Unidentified connections are denied.
+- **Host shell** (desktop): `createHost()` composes the Governor and starts the daemon; **fail-closed** — a missing/corrupt registry throws and the host cannot start ungoverned. (The Electron window is ring-3, added in Phase 9; this is the governed runtime it will wrap.)
+- **boundaryForAgent()** (core): derives a safe per-agent boundary set and structurally **excludes the governance dir / audit / state** (forbid list); throws if the agent is left with no writable root.
+- **Persistence:** snapshot/restore for TaskLedger + CapabilityLedger + ServiceRegistry; `persistGovernor()/restoreGovernor()` + atomic JSON writes — runtime state survives a restart.
+- **Registry hierarchy completed:** ServiceRegistry ("what is running", heartbeats/staleness), CapabilityLedger persisted to `capabilities.json`, AgentDef extended with `riskTier`. loadGovernor now **composes the full system** and registers subsystems as services.
+**Tests (8 new, 94 total):**
+- boundary derivation excludes governance; misconfig (no writable root) fails closed ✅
+- ServiceRegistry register/heartbeat/staleness ✅
+- persistence round-trip (tasks/capabilities/services survive restart) ✅
+- live daemon via a real socket client: permitted read allowed, unregistered denied, out-of-boundary denied; no-hello connection denied; fail-closed boot on missing registry ✅
+**Gates:** S-9 (fail-closed boot via host) ✅, S-7 (boundary derivation excludes governance) ✅, T-25 partial (PDP now a separate connectable service — process isolation seam in place) ✅.
+**Gating issues:** none.
+
+---
+
+## Phase 8 — Idea Board (Pam planner) + canvas logic ✅
+**Delivered (governance-core):** `planner.ts` — `classifyNode()` (capability→Toby intake / workflow→draft / vague→question / else→work) and `promoteCluster()` which turns idea-board nodes into **governed backlog drafts only** — nothing dispatches. Multi-item work clusters get a parent task (DAG via parentId); capability nodes route to Toby evaluation tasks; vague notes return as questions. Generative-not-executive: drafts are proposed by `pam` and, by proposer≠approver, Pam cannot move them out of backlog — a human/orchestrator must.
+**Tests (5 new, 99 total):**
+- TC-8.1 promote → backlog drafts only, linked to source nodes; multi-item cluster → parent/DAG ✅
+- TC-8.2 classification: capability→intake(evaluation), workflow→draft, vague→question ✅
+- TC-8.3 Pam can't move her own draft out of backlog (governance holds); a human can ✅
+**Note:** the visual Canvas screen is ring-3 presentation (built with the desktop GUI in the theme phase). The promote→governed-drafts LOGIC — the governance-relevant part — is what's implemented and tested here. `canvas.json` (node/edge persistence) is a renderer data file added with the UI.
+
+---
+
+## Phase 9 — theme-pack + sandbox seam + packaging (buildable parts) ✅
+**Delivered (desktop, ring 3):**
+- `theme.ts` — data-driven **Fleet** theme-pack (IP-safe): id→display personas (Captain Mykel, First Officer, Oh Brian, Constable Gooey, D8A, Deck Crew; GCS Starfish / Galactic Command / Grand Admiral Scotticus), labels (Bridge, Mission, PADD order, COMMS request; transporter metaphor for intake — "request to beam aboard", quarantine = "held in the transporter buffer", registered = "beamed aboard"), palette. `displayName()/label()`.
+- `runner.ts` — agent confinement seam (T-25 plug point): `WorktreeRunner` scrubs env (no secret inheritance) + confines cwd to the worktree; an OS-level runner implements the same interface for real kernel confinement.
+- `electron-builder.yml` + README — packaging config (IP-safe product name).
+**Tests (3 new, 102 total):**
+- Fleet theme maps ids→personas and contains **no trademarked Trek tokens** (CI-enforced) ✅
+- runner scrubs env (secret not inherited) + confines cwd ✅
+**Deferred to approval (see NEEDS_SCOTT_APPROVAL.md):** AI-generated pixel-art tileset/sprites (spend + AI-art license), the live Pixi/React GUI (needs a display), installer code-signing (certs), OS-container confinement (infra), and the ⚖ legal sign-offs. The theme **architecture** (swap a Theme object; personal full-Trek skin stays out of the distributed build) and the confinement **seam** are in place and tested.
+
+### Phase 9 gating issue & resolution
+The IP denylist scan failed (CI=1): (a) the theme conformance test lists the Trek tokens as
+literals to assert their *absence* — but the scan was reading test files; (b) the desktop README
+and electron-builder comment used "LCARS" descriptively in shipped files. Fixes: the scan now
+**excludes test files** (they are not shipped), and the trade-dress term was removed from the
+README/packaging prose. Re-ran: scan passes, CI green (102 tests).
