@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCS Starfish — Bridge (Mission Control)</title>
+<style>
+  /* ---- Theme system: a Theme pack = palette + personas/labels. Swap at runtime. ---- */
+  :root[data-theme="fleet"]{
+    --bg:#070b16; --panel:#0d1426; --panel-2:#111b33; --line:#1e2c4a;
+    --ink:#e8eefc; --muted:#8aa0c8; --accent:#37d6ff; --accent-2:#ffce5c;
+    --ok:#39d98a; --warn:#ffce5c; --deny:#ff5c7a; --ask:#b48cff;
+    --chip:#13203c; --brand:"GCS Starfish";
+  }
+  :root[data-theme="ops"]{
+    --bg:#0f1115; --panel:#171a21; --panel-2:#1c212b; --line:#2a313d;
+    --ink:#eef1f5; --muted:#9aa6b6; --accent:#5db0ff; --accent-2:#7bd88f;
+    --ok:#7bd88f; --warn:#f0c24b; --deny:#ff6b6b; --ask:#b98bff;
+    --chip:#222834; --brand:"Starfish Ops";
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  .app{display:grid;grid-template-columns:210px 1fr;grid-template-rows:54px 1fr;height:100vh}
+  /* top bar */
+  .top{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 18px;
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));border-bottom:1px solid var(--line)}
+  .logo{width:26px;height:26px;border-radius:6px;background:
+    radial-gradient(circle at 30% 30%,var(--accent),transparent 70%),var(--panel-2);
+    border:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.3px}
+  .brand small{color:var(--muted);font-weight:500;margin-left:8px}
+  .top .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;
+    background:var(--chip);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  select{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:6px 9px;font-size:12px}
+  /* nav */
+  .nav{background:var(--panel);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:var(--muted);
+    text-decoration:none;font-weight:600;font-size:13px}
+  .nav a .ic{width:18px;text-align:center;opacity:.9}
+  .nav a.active{background:var(--panel-2);color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}
+  .nav .grp{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em;margin:14px 11px 4px;opacity:.7}
+  /* main grid */
+  .main{padding:16px;overflow:auto;display:grid;grid-template-columns:1.4fr 1fr;gap:14px;
+    grid-auto-rows:min-content}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+    display:flex;align-items:center;justify-content:space-between}
+  .card h3 .src{font-size:10px;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:600}
+  .span2{grid-column:1/3}
+  /* crew */
+  .crew{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .crew .c{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;gap:10px}
+  .avatar{width:40px;height:40px;border-radius:9px;background:var(--chip);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted);text-align:center;flex:0 0 auto}
+  .c .nm{font-weight:700}
+  .c .role{color:var(--muted);font-size:12px}
+  .c .st{margin-top:6px;font-size:11px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tag{font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+  .tag.active{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+  .tag.paused{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+  .risk-L{color:var(--ok)} .risk-M{color:var(--warn)} .risk-H{color:var(--deny)} .risk-C{color:var(--deny);font-weight:700}
+  /* decision feed */
+  .feed{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto}
+  .dec{display:grid;grid-template-columns:60px 1fr auto;gap:10px;align-items:center;
+    background:var(--panel-2);border:1px solid var(--line);border-left-width:3px;border-radius:9px;padding:8px 10px}
+  .dec.allow{border-left-color:var(--ok)} .dec.deny{border-left-color:var(--deny)} .dec.ask{border-left-color:var(--ask)}
+  .verdict{font-weight:800;font-size:11px;letter-spacing:.05em}
+  .allow .verdict{color:var(--ok)} .deny .verdict{color:var(--deny)} .ask .verdict{color:var(--ask)}
+  .dec .what{font-size:12.5px}
+  .dec .what b{color:var(--ink)} .dec .what span{color:var(--muted)}
+  .dec .reason{font-size:11px;color:var(--muted)}
+  .dec .t{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+  /* budget meter */
+  .meter{height:10px;border-radius:6px;background:var(--chip);overflow:hidden;border:1px solid var(--line)}
+  .meter > i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--warn))}
+  .kv{display:flex;justify-content:space-between;font-size:12px;margin:8px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .btn{background:var(--chip);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+  .btn.primary{background:color-mix(in srgb,var(--accent) 22%,var(--panel-2));border-color:var(--accent);color:var(--ink)}
+  /* monitor */
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+  .stat .s{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 6px}
+  .stat .s .n{font-size:20px;font-weight:800}
+  .stat .s .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .ribbon{margin-top:10px;font-size:12px;padding:8px 10px;border-radius:9px;border:1px solid color-mix(in srgb,var(--ok) 35%,var(--line));
+    background:color-mix(in srgb,var(--ok) 8%,transparent);color:var(--ok)}
+  /* audit ticker */
+  .audit{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted);
+    display:flex;flex-direction:column;gap:5px;max-height:170px;overflow:auto}
+  .audit .row{display:flex;gap:8px}
+  .audit .h{color:var(--accent)}
+  .placeholder{display:flex;align-items:center;justify-content:center;color:var(--muted);
+    border:1px dashed var(--line);border-radius:8px;font-size:10px;letter-spacing:.05em}
+</style>
+</head>
+<body>
+<div class="app" id="root">
+  <div class="top">
+    <div class="logo"></div>
+    <div class="brand">GCS&nbsp;Starfish<small>Bridge · Mission Control</small></div>
+    <div class="spacer"></div>
+    <span class="pill"><span class="dot"></span> GOVERNED · fail-closed ✓</span>
+    <span class="pill">PDP daemon · connected</span>
+    <label class="pill" style="gap:8px">Theme
+      <select id="theme" onchange="document.getElementById('root-html').setAttribute('data-theme',this.value)">
+        <option value="fleet">Fleet</option>
+        <option value="ops">Ops (neutral)</option>
+      </select>
+    </label>
+  </div>
+
+  <nav class="nav">
+    <div class="grp">Operate</div>
+    <a class="active"><span class="ic">▣</span> Bridge</a>
+    <a><span class="ic">◷</span> Missions</a>
+    <a><span class="ic">⇄</span> Transporter</a>
+    <a><span class="ic">◈</span> Idea Board</a>
+    <div class="grp">Govern</div>
+    <a><span class="ic">❍</span> Memory</a>
+    <a><span class="ic">⛉</span> Audit</a>
+    <a><span class="ic">⚑</span> Crew</a>
+    <a><span class="ic">⚙</span> Policies</a>
+  </nav>
+
+  <main class="main">
+    <!-- CREW -->
+    <section class="card span2">
+      <h3>Crew <span class="src">← ServiceRegistry · AgentDef.riskTier</span></h3>
+      <div class="crew">
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">Captain Mykel</div><div class="role">Orchestrator (GOD)</div>
+          <div class="st"><span class="tag active">● active</span> <span>task <b>#412</b></span> <span class="risk-M">risk: Medium</span></div></div></div>
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">First Officer</div><div class="role">Planner</div>
+          <div class="st"><span class="tag active">● active</span> <span>task <b>#418</b></span> <span class="risk-L">risk: Low</span></div></div></div>
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">Oh Brian</div><div class="role">Execution</div>
+          <div class="st"><span class="tag paused">❚❚ paused</span> <span>budget hold</span> <span class="risk-H">risk: High</span></div></div></div>
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">Constable Gooey</div><div class="role">Security monitor (Hank)</div>
+          <div class="st"><span class="tag active">● sweeping</span> <span>read-only</span> <span class="risk-L">risk: Low</span></div></div></div>
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">D8A</div><div class="role">Memory / knowledge</div>
+          <div class="st"><span class="tag active">● active</span> <span>promoting claims</span> <span class="risk-L">risk: Low</span></div></div></div>
+        <div class="c"><div class="avatar">PLACEHOLDER<br>portrait</div>
+          <div><div class="nm">Toby</div><div class="role">Intake & vetting</div>
+          <div class="st"><span class="tag">○ idle</span> <span>1 in buffer</span> <span class="risk-M">risk: Medium</span></div></div></div>
+      </div>
+    </section>
+
+    <!-- DECISION FEED -->
+    <section class="card">
+      <h3>Live governance decisions <span class="src">← PDP via governance-hooks daemon</span></h3>
+      <div class="feed">
+        <div class="dec allow"><span class="verdict">ALLOW</span>
+          <div><div class="what"><b>First Officer</b> · <span>fs.read</span> <b>/proj/src/app.ts</b></div>
+          <div class="reason">registered ✓ · agent allowed ✓ · in boundary ✓ · risk Low</div></div><span class="t">20:31:04</span></div>
+        <div class="dec ask"><span class="verdict">ASK</span>
+          <div><div class="what"><b>Oh Brian</b> · <span>git_commit</span> <b>feat: planner</b></div>
+          <div class="reason">risk High → human approval required (proposer≠approver)</div></div><span class="t">20:31:02</span></div>
+        <div class="dec deny"><span class="verdict">DENY</span>
+          <div><div class="what"><b>Oh Brian</b> · <span>shell.raw</span> <b>curl … | sh</b></div>
+          <div class="reason">default-deny · raw shell unregistered · egress containment</div></div><span class="t">20:30:58</span></div>
+        <div class="dec deny"><span class="verdict">DENY</span>
+          <div><div class="what"><b>unknown</b> · <span>fs.write</span> <b>/governance/registry.json</b></div>
+          <div class="reason">out of boundary · governance dir is forbidden (S-7)</div></div><span class="t">20:30:51</span></div>
+        <div class="dec allow"><span class="verdict">ALLOW</span>
+          <div><div class="what"><b>D8A</b> · <span>memory.promote</span> <b>claim #88</b></div>
+          <div class="reason">high-confidence + low-stakes auto-approved · provenance kept</div></div><span class="t">20:30:44</span></div>
+      </div>
+    </section>
+
+    <!-- TOKEN GOVERNOR -->
+    <section class="card">
+      <h3>Token Governor <span class="src">← TokenGovernor</span></h3>
+      <div class="kv"><span>USD budget (today)</span><b>$6.40 / $10.00</b></div>
+      <div class="meter"><i style="width:64%"></i></div>
+      <div class="kv" style="margin-top:12px"><span>Reasoning tokens</span><b>812k / 1.5M</b></div>
+      <div class="meter"><i style="width:54%"></i></div>
+      <div class="kv" style="margin-top:12px;color:var(--warn)"><span>Oh Brian</span><b>hard cap — paused</b></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn primary">Resume (human)</button>
+        <button class="btn">Raise cap…</button>
+      </div>
+    </section>
+
+    <!-- HANK MONITOR -->
+    <section class="card">
+      <h3>Security monitor — Hank <span class="src">← SecurityMonitor.sweep()</span></h3>
+      <div class="stat">
+        <div class="s"><div class="n" style="color:var(--ok)">0</div><div class="l">Boundary esc.</div></div>
+        <div class="s"><div class="n" style="color:var(--ok)">0</div><div class="l">Hash mism.</div></div>
+        <div class="s"><div class="n" style="color:var(--warn)">3</div><div class="l">Denials</div></div>
+        <div class="s"><div class="n">1</div><div class="l">Casualties</div></div>
+      </div>
+      <div class="ribbon">✓ Watcher reconciled against deterministic counters — no discrepancy. Last sweep 12s ago.</div>
+    </section>
+
+    <!-- AUDIT -->
+    <section class="card span2">
+      <h3>Audit stream (hash-chained, append-only) <span class="src">← AuditLog</span></h3>
+      <div class="audit">
+        <div class="row"><span class="h">a91f…</span><span>20:31:04</span><span>DECISION allow first_officer fs.read /proj/src/app.ts</span></div>
+        <div class="row"><span class="h">7c02…</span><span>20:31:02</span><span>DECISION ask oh_brian git_commit (await human)</span></div>
+        <div class="row"><span class="h">3e88…</span><span>20:30:58</span><span>DECISION deny oh_brian shell.raw (default-deny)</span></div>
+        <div class="row"><span class="h">b145…</span><span>20:30:55</span><span>BUDGET hard oh_brian → pause+escalate</span></div>
+        <div class="row"><span class="h">f0aa…</span><span>20:30:51</span><span>DECISION deny unknown fs.write /governance (boundary)</span></div>
+        <div class="row"><span class="h">5d31…</span><span>20:30:44</span><span>MEMORY promote claim#88 (provenance ok)</span></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>document.documentElement.id='root-html';document.documentElement.setAttribute('data-theme','fleet');</script>
+</body>
+</html>

@@ -1,22 +1,62 @@
-// Theme-pack (ring 3) — data-driven, IP-safe. The DISTRIBUTED "Fleet" theme maps internal agent
-// ids to display personas and supplies labels/palette. No trademarked tokens (CI IP-scan enforces).
-// A closer personal skin is just another Theme object swapped in; nothing here touches governance.
+// Theme-pack (ring 3) — data-driven, IP-safe. A Theme maps internal agent ids to display
+// personas and supplies labels, palette, and an optional asset manifest. Themes are
+// user-swappable at runtime via ThemeRegistry; nothing here touches governance.
+// The distributed default is "Fleet". A closer personal skin is just another Theme object.
+// (CI IP-scan enforces: no trademarked tokens in any shipped theme.)
+
+export interface ThemeAssets {
+  appIcon?: string;
+  portraits?: Record<string, string>; // internal agent id -> image path/URL (PLACEHOLDER allowed)
+}
+
 export interface Theme {
-  id: string; shipName: string; org: string; admiral: string;
-  agents: Record<string, string>;
-  labels: Record<string, string>;
+  id: string;
+  name: string;                       // human-facing theme name (shown in the theme picker)
+  shipName: string; org: string; admiral: string;
+  agents: Record<string, string>;     // internal id -> display persona
+  labels: Record<string, string>;     // ui label key -> themed copy
   palette: Record<string, string>;
+  assets?: ThemeAssets;
 }
 
 export const FLEET: Theme = {
   id: 'fleet',
+  name: 'Fleet',
   shipName: 'GCS Starfish',
   org: 'Galactic Command',
   admiral: 'Grand Admiral Scotticus',
   agents: { michael: 'Captain Mykel', dwight: 'First Officer', toby: 'Oh Brian', hank: 'Constable Gooey', pam: 'D8A', worker: 'Deck Crew' },
   labels: { floor: 'Bridge', task: 'Mission', skillInvocation: 'PADD order', reasoningRequest: 'COMMS request', auditFeed: 'Activity log', escalation: 'Awaiting Galactic Command', casualty: 'redshirt down', transporterRoom: 'Transporter Room', addCapability: 'request to beam aboard', vetting: 'transporter scan', quarantine: 'held in the transporter buffer', registered: 'beamed aboard' },
   palette: { command: '#F2A23C', sciences: '#8699FF', security: '#D24C4C', ops: '#5FC98A', bg: '#0A0A0B' },
+  assets: { appIcon: 'PLACEHOLDER/fleet/app-icon.png', portraits: { michael: 'PLACEHOLDER/fleet/captain-mykel.png', dwight: 'PLACEHOLDER/fleet/first-officer.png', toby: 'PLACEHOLDER/fleet/oh-brian.png', hank: 'PLACEHOLDER/fleet/constable-gooey.png', pam: 'PLACEHOLDER/fleet/d8a.png', worker: 'PLACEHOLDER/fleet/deck-crew.png' } },
 };
+
+// A neutral, brand-free theme — proves the UI is fully re-skinnable.
+export const OPS: Theme = {
+  id: 'ops',
+  name: 'Ops (neutral)',
+  shipName: 'Starfish', org: 'Operations', admiral: 'Operator',
+  agents: { michael: 'Orchestrator', dwight: 'Planner', toby: 'Intake', hank: 'Monitor', pam: 'Memory', worker: 'Worker' },
+  labels: { floor: 'Dashboard', task: 'Task', skillInvocation: 'Skill call', reasoningRequest: 'Reasoning request', auditFeed: 'Audit', escalation: 'Awaiting approval', casualty: 'failure', transporterRoom: 'Intake', addCapability: 'request to add', vetting: 'vetting', quarantine: 'quarantined', registered: 'registered' },
+  palette: { command: '#5DB0FF', sciences: '#8699FF', security: '#FF6B6B', ops: '#7BD88F', bg: '#0F1115' },
+};
+
+// Runtime theme registry: register / select / list. Users add a Theme and switch to it live.
+export class ThemeRegistry {
+  private themes = new Map<string, Theme>();
+  private activeId: string;
+  constructor(initial: Theme[] = [FLEET, OPS], defaultId: string = FLEET.id) {
+    for (const t of initial) this.register(t);
+    if (!this.themes.has(defaultId)) throw new Error(`default theme not registered: ${defaultId}`);
+    this.activeId = defaultId;
+  }
+  register(t: Theme): void { this.themes.set(t.id, t); }
+  has(id: string): boolean { return this.themes.has(id); }
+  get(id: string): Theme { const t = this.themes.get(id); if (!t) throw new Error(`unknown theme: ${id}`); return t; }
+  list(): Theme[] { return [...this.themes.values()]; }
+  active(): Theme { return this.get(this.activeId); }
+  setActive(id: string): Theme { if (!this.themes.has(id)) throw new Error(`unknown theme: ${id}`); this.activeId = id; return this.active(); }
+}
 
 export function displayName(theme: Theme, internalId: string): string { return theme.agents[internalId] ?? internalId; }
 export function label(theme: Theme, key: string): string { return theme.labels[key] ?? key; }
