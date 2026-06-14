@@ -10,7 +10,7 @@ import { HookSession, type HookPayload, type HookResponse } from './handler';
 
 export class PdpDaemon {
   private server: Server | null = null;
-  constructor(private governor: Governor, private boundaryFor: (agentId: string) => BoundarySet) {}
+  constructor(private governor: Governor, private boundaryFor: (agentId: string) => BoundarySet, private boundaryForCapability?: (capabilityId: string) => BoundarySet) {}
 
   listen(path: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -24,12 +24,16 @@ export class PdpDaemon {
           while ((nl = buf.indexOf('\n')) !== -1) {
             const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
             if (!line.trim()) continue;
-            let msg: { type?: string; agentId?: string } & HookPayload;
+            let msg: { type?: string; agentId?: string; capabilityId?: string } & HookPayload;
             try { msg = JSON.parse(line); } catch { conn.write(JSON.stringify({ permissionDecision: 'deny', reason: 'bad json' }) + '\n'); continue; }
             if (msg.type === 'hello') {
               const agentId = String(msg.agentId ?? '');
-              try { session = new HookSession(this.governor, { expectedAgentId: agentId, boundary: this.boundaryFor(agentId) }); conn.write(JSON.stringify({ ok: true }) + '\n'); }
-              catch { conn.write(JSON.stringify({ ok: false, reason: 'boundary-derivation-failed' }) + '\n'); }   // fail closed
+              const capabilityId = msg.capabilityId ? String(msg.capabilityId) : undefined;   // bound here, never trusted from later payloads
+              try {
+                const boundary = capabilityId && this.boundaryForCapability ? this.boundaryForCapability(capabilityId) : this.boundaryFor(agentId);
+                session = new HookSession(this.governor, { expectedAgentId: agentId, boundary, capabilityId });
+                conn.write(JSON.stringify({ ok: true }) + '\n');
+              } catch { conn.write(JSON.stringify({ ok: false, reason: 'boundary-derivation-failed' }) + '\n'); }   // fail closed
               continue;
             }
             if (!session) { conn.write(JSON.stringify({ permissionDecision: 'deny', reason: 'no hello (unidentified connection)' }) + '\n'); continue; }

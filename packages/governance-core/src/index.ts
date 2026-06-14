@@ -17,7 +17,8 @@ export { readSkillFiles, scanSymlinks, fileIntegrityGate, runWithIntegrity, type
 export { governedList, type ListResult } from './listing';
 export { MessageRouter, type OutgoingMessage, type DeliveredMessage, type RouteResult, type MessageAct } from './messaging';
 export { GovernedMemory, type Evidence, type Claim, type Entity, type DecisionRecord } from './memory';
-export { vet, renderReport, hashFiles, fileManifest, diffManifest, verifyPublisherSignature, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';
+export { vet, renderReport, hashFiles, fileManifest, diffManifest, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';
+export { verifyPublisherSignature, verifyAgainstPinned, signManifest, generatePublisherKeypair, type PinnedPublisher } from './signature';
 export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from './monitor';
 export { scanEgress } from './containment';
 export { sha256 } from './hash';

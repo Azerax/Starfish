@@ -6,6 +6,7 @@
 import { sha256 } from './hash';
 import type { RiskTier } from './types';
 import type { AuditLog } from './audit';
+import { verifyAgainstPinned, type PinnedPublisher } from './signature';
 
 export interface CapabilityFile { path: string; content: string; }
 export interface VettingInput {
@@ -73,12 +74,9 @@ export function diffManifest(recorded: Record<string, string>, currentFiles: Cap
   for (const p of Object.keys(cur)) if (!(p in recorded)) changed.add(p);
   return [...changed].sort();
 }
-export function verifyPublisherSignature(_manifestHash: string, _signature?: string, _publicKeyPem?: string): { verified: boolean; reason: string } {
-  return { verified: false, reason: 'publisher signing not configured (stub)' };
-}
-
-export function vet(input: VettingInput): VettingReport {
+export function vet(input: VettingInput, opts?: { pinned?: PinnedPublisher[] }): VettingReport {
   const blob = input.files.map((f) => f.content).join('\n');
+  const contentHash = hashFiles(input.files);
   const findings: string[] = [];
   const mitigations: string[] = [];
   let tier: RiskTier = 'low';
@@ -99,7 +97,8 @@ export function vet(input: VettingInput): VettingReport {
   const injection = detectInjection(blob);
   if (injection) { findings.push('prompt-injection: contains instructions to ignore/override prior or system instructions'); tier = 'injection'; }
 
-  const trusted = isTrustedPublisher(input.provenance);
+  const sig = verifyAgainstPinned(contentHash, input.signature, opts?.pinned ?? []);
+  const trusted = sig.verified || isTrustedPublisher(input.provenance);
   const p = input.provenance;
   if (!p?.author && !trusted) { findings.push('unknown author'); tier = maxT(tier, 'medium'); mitigations.push('establish provenance / author'); }
   if (p?.license && !PERMISSIVE.test(p.license) && !trusted) { findings.push(`non-permissive license: ${p.license}`); tier = maxT(tier, 'medium'); }
@@ -109,8 +108,9 @@ export function vet(input: VettingInput): VettingReport {
 
   // Trusted-publisher adjudication — but NEVER for injection or destructive content.
   if (trusted && !destructive && !injection && !input.hasSymlinks) {
-    if (tier !== 'low') findings.push(`trusted publisher (${p?.repo ?? p?.author}) — raw risk ${tier}; adjudicated low (runtime governance still applies)`);
-    else findings.push(`trusted publisher (${p?.repo ?? p?.author})`);
+    const who = sig.verified ? `signed:${sig.publisherId}` : `${p?.repo ?? p?.author}`;
+    if (tier !== 'low') findings.push(`trusted publisher (${who}) — raw risk ${tier}; adjudicated low (runtime governance still applies)`);
+    else findings.push(`trusted publisher (${who})`);
     tier = 'low'; forceHuman = false; mitigations.length = 0;
   }
 
@@ -120,7 +120,7 @@ export function vet(input: VettingInput): VettingReport {
   if (disposition === 'reject') mitigations.push('REJECTED — remove instruction-override content; this cannot be approved');
 
   return {
-    id: input.id, kind: input.kind, contentHash: hashFiles(input.files), manifest: fileManifest(input.files),
+    id: input.id, kind: input.kind, contentHash, manifest: fileManifest(input.files),
     findings: findings.length ? findings : ['no risk signals detected'],
     riskTier: tier, disposition, injection, forceHuman, mitigations, at: new Date().toISOString(),
   };

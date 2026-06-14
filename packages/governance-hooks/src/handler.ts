@@ -7,17 +7,21 @@ export interface HookPayload {
   agent_id?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
+  capability_id?: string;
 }
 export interface HookResponse { permissionDecision?: 'allow' | 'deny' | 'ask'; reason?: string; }
-export interface HookContext { expectedAgentId: string; boundary: BoundarySet; }
+export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; }
 
 export function handleHook(payload: HookPayload, gov: Governor, ctx: HookContext): HookResponse {
   // socket↔agent binding (S-6): a payload claiming another agent over this connection is rejected.
   if (payload.agent_id && payload.agent_id !== ctx.expectedAgentId) {
     return { permissionDecision: 'deny', reason: 'agent-id mismatch (impersonation blocked)' };
   }
+  if (payload.capability_id && payload.capability_id !== ctx.capabilityId) {
+    return { permissionDecision: 'deny', reason: 'capability-id mismatch (confused-deputy blocked)' };
+  }
   if (payload.hook_event_name === 'PreToolUse') {
-    const call: ToolCall = { agentId: ctx.expectedAgentId, tool: payload.tool_name ?? '', input: payload.tool_input ?? {} };
+    const call: ToolCall = { agentId: ctx.expectedAgentId, tool: payload.tool_name ?? '', input: payload.tool_input ?? {}, capabilityId: ctx.capabilityId };
     const d = gov.pdp.decide('ingress', call, ctx.boundary);
     return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason };
   }
@@ -34,8 +38,11 @@ export class HookSession {
     if (payload.agent_id && payload.agent_id !== this.ctx.expectedAgentId) {
       return { permissionDecision: 'deny', reason: 'agent-id mismatch (impersonation blocked)' };
     }
+    if (payload.capability_id && payload.capability_id !== this.ctx.capabilityId) {
+      return { permissionDecision: 'deny', reason: 'capability-id mismatch (confused-deputy blocked)' };
+    }
     if (payload.hook_event_name === 'PreToolUse') {
-      const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: payload.tool_name ?? '', input: payload.tool_input ?? {} };
+      const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: payload.tool_name ?? '', input: payload.tool_input ?? {}, capabilityId: this.ctx.capabilityId };
       const d = this.gov.pdp.decide('ingress', call, this.ctx.boundary);   // audit-before-act happens inside decide()
       if (d.allow) this.pending.push(call.tool);
       return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason };
