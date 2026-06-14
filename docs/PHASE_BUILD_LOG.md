@@ -6,7 +6,7 @@ gating issue + its resolution (per the build discipline — self-heal, document,
 ---
 
 ## Phase 0 — Foundations ✅
-**Delivered:** monorepo (4 packages), TS/vitest tooling, CI workflow (5 layers), dependency-direction lint, IP denylist scan, SBOM+license check, GOVERNANCE.md (framework verbatim), LICENSE (MIT), NOTICE (upstream attribution), salvage + art-provenance ledgers.
+**Delivered:** monorepo (4 packages), TS/vitest tooling, CI workflow (5 layers), dependency-direction lint, IP denylist scan, SBOM+license check, GOVERNANCE.md (framework verbatim), LICENSE (MIT), NOTICE (attribution), third-party-code + art-provenance ledgers.
 **Tests:** TC-0.1 CI green ✅ · TC-0.2 planted bad import fails lint ✅ · TC-0.3 planted IP token fails scan ✅.
 **Gates:** L-4 (attribution) ✅, D-1 (SBOM) ✅.
 **Issues:** none.
@@ -34,7 +34,7 @@ gating issue + its resolution (per the build discipline — self-heal, document,
 2. *Symlinked-tmp false-negative risk* — `canonical()` realpaths the path but boundary roots were only `resolve()`d, which would mismatch on systems where the temp/parent dir is a symlink (e.g. macOS `/tmp`→`/private/tmp`), wrongly denying in-boundary paths. → Hardened `containCheck` to realpath existing roots too, so root and target are compared on the same (resolved) basis. Retested green on Linux; fix also covers macOS.
 3. *TC-1.7 needed state* — the stateless `handleHook` couldn't correlate Pre→Post. → Added `HookSession` (per-agent) tracking allowed PreToolUse and flagging orphan PostToolUse as a no-silent-execution violation. Added a conformance test; green.
 
-**Scope note (honest):** Phase 1 proves the *governance logic* end-to-end through the hook seam using a simulated agent driver (hook payloads), not a live `claude` process. The real PTY/`claude` wiring is ring-2 machinery salvaged in a later phase; the governance — which is what Phase 1 must prove — is fully implemented and tested.
+**Scope note (honest):** Phase 1 proves the *governance logic* end-to-end through the hook seam using a simulated agent driver (hook payloads), not a live `claude` process. The real PTY/`claude` wiring is ring-2 machinery built in a later phase; the governance — which is what Phase 1 must prove — is fully implemented and tested.
 
 ---
 

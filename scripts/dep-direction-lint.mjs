@@ -1,5 +1,5 @@
 // Dependency-direction lint (Phase 0).
-// Enforces the strangler layering: governance-core < hooks < overlay < desktop.
+// Enforces the ring layering: governance-core < hooks < overlay < desktop.
 // A package may import ONLY packages in strictly LOWER layers.
 // In particular: governance-core imports nothing internal; transports never import the app.
 import { readdirSync, readFileSync, statSync } from 'node:fs';

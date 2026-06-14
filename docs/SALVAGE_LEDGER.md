@@ -1,12 +1,13 @@
-# Salvage Ledger
+# Third-Party Code Ledger
 
-> Every file salvaged from the upstream fork must be recorded here: what came in,
-> from which upstream path, which ring it was placed in, who reviewed it for direct
-> side effects, and when. A file that cannot be cleanly demoted to ring 2/3 is
-> re-authored into ring 1 instead. Complete mediation is a property we build.
+> Project Starfish is built clean-room. No third-party source code is incorporated.
+> This ledger exists as a governance guard: if any external code is ever introduced,
+> it must be recorded here (path, origin, license, ring, reviewer, date), demoted to
+> ring 2/3 — or re-authored into ring 1 — and pass the IP denylist scan
+> (scripts/ip-denylist-scan.mjs).
 >
-> Status: **empty** — Phase 0 scaffold contains no salvaged code.
+> Status: **empty** — no third-party code present.
 
-| New path | Upstream origin | Ring (1/2/3) | Side-effects reviewed | Reviewer | Date | Notes |
+| New path | Origin | License | Ring (1/2/3) | Side-effects reviewed | Reviewer | Date |
 |---|---|---|---|---|---|---|
-| _(none yet)_ | | | | | | |
+| _(none)_ | | | | | | |

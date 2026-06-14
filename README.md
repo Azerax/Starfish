@@ -1,15 +1,15 @@
 # Project Starfish (monorepo)
 
 A portable **governance overlay** for Claude builds, and the **GCS Starfish** desktop
-reference app — built from one governance core under the "strangler" strategy.
+reference app — built from one governance core as layered governance rings.
 
 > Everyone ships skills. Nobody ships governance. Starfish is the governance.
 
-## Packages (strangler rings)
+## Packages (layered rings)
 
 | Package | Ring | Role |
 |---|---|---|
-| `@starfish/governance-core` | 1 (TCB) | PDP, boundary, registries, audit, fail-closed boot. No UI, no fork imports. |
+| `@starfish/governance-core` | 1 (TCB) | PDP, boundary, registries, audit, fail-closed boot. No UI, no app imports. |
 | `@starfish/governance-hooks` | 2 | PreToolUse/Stop shim + local PDP daemon — the enforcement seam. |
 | `@starfish/governance-overlay` | 2 | The product: `starfish govern <pack>`. |
 | `@starfish/desktop` | 3 | Project Starfish (Electron) bridge UI. |
