@@ -17,6 +17,7 @@ import { SecurityMonitor } from './monitor';
 import { ServiceRegistry } from './services';
 import { fileIntegrityGate } from './integrity';
 import { saveJson, loadJson } from './persistence';
+import { verifySelfIntegrity } from './selfintegrity';
 import type { ToolDef, AgentDef } from './types';
 
 export interface Governor {
@@ -25,7 +26,7 @@ export interface Governor {
   capabilities: CapabilityLedger; monitor: SecurityMonitor; services: ServiceRegistry; safeMode: boolean;
 }
 
-export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string }): Governor {
+export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number } }): Governor {
   const tools = new Registry<ToolDef>(join(governanceDir, 'tools.json'), (t) => t.id);
   const agents = new Registry<AgentDef>(join(governanceDir, 'agents.json'), (a) => a.id);
   const policy = new PolicyEngine(loadPolicies(join(governanceDir, 'policies.json')));
@@ -44,6 +45,20 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
   for (const s of ['pdp', 'router', 'tasks', 'memory', 'capabilities', 'monitor', 'audit']) services.register(s, '0.8.0');
   const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, router, capabilities, monitor, services, safeMode: false };
   if (opts?.stateDir) restoreGovernor(g, opts.stateDir);
+
+  // Self-integrity: verify the operator-signed manifest over our OWN config/state/audit. Any tamper,
+  // rollback, or audit truncation -> enter safe mode (PDP denies everything until the operator re-attests).
+  if (opts?.selfIntegrity) {
+    const r = verifySelfIntegrity({ governanceDir, stateDir: opts.stateDir, manifestPath: opts.selfIntegrity.manifestPath, expectedPublicKeyPem: opts.selfIntegrity.expectedPublicKeyPem, audit, minEpoch: opts.selfIntegrity.minEpoch });
+    if (!r.ok) {
+      g.safeMode = true;
+      pdp.setSafeMode(true, r.reason);
+      audit.append({ actor: 'system', domain: 'governance', action: 'self-integrity-fail', decision: 'deny', riskTier: 'critical', reason: r.reason, detail: { failures: r.failures } });
+      audit.append({ actor: 'system', domain: 'system', action: 'boot-attestation', decision: 'deny', reason: 'SAFE MODE — self-integrity failed; all actions denied until operator re-attests' });
+    } else {
+      audit.append({ actor: 'system', domain: 'system', action: 'boot-attestation', decision: 'allow', reason: `self-integrity verified (operator-signed, epoch ${r.epoch})` });
+    }
+  }
   return g;
 }
 

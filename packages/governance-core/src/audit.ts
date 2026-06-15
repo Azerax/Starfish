@@ -50,4 +50,8 @@ export class AuditLog {
   }
 
   count(): number { return this.seq; }
+
+  /** Current chain head: the last written event's seq + hash (GENESIS/-1 when empty). Used to
+   *  ANCHOR the log against tail truncation / rollback (a hash chain alone can't detect those). */
+  head(): { seq: number; headHash: string } { return { seq: this.seq - 1, headHash: this.prevHash }; }
 }

@@ -18,6 +18,8 @@ export class PDP {
   private policy: PolicyEngine;
   private taskBinding?: TaskBinding;
   private integrity?: IntegrityGate;
+  private safeMode = false;
+  private safeModeReason = '';
   constructor(
     private tools: Registry<ToolDef>,
     private agents: Registry<AgentDef>,
@@ -33,7 +35,17 @@ export class PDP {
     this.integrity = integrity;
   }
 
+  /** Lockdown: while in safe mode the PDP denies EVERYTHING (fail-closed) until the operator
+   *  re-attests integrity and clears it. Used when boot self-integrity verification fails. */
+  setSafeMode(on: boolean, reason = ''): void { this.safeMode = on; this.safeModeReason = on ? reason : ''; }
+  isSafeMode(): boolean { return this.safeMode; }
+
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
+    if (this.safeMode) {
+      const sd: Decision = { allow: false, reason: `safe-mode: ${this.safeModeReason || 'governance integrity failure'}` };
+      try { this.audit.append({ actor: call.agentId, domain: 'governance', action: `${face}:${call.tool}`, target: this.firstPath(call), decision: 'deny', reason: sd.reason }); } catch { /* already failing closed */ }
+      return sd;
+    }
     const d = face === 'egress' ? this.egress(call) : this.ingress(call, bs);
     try {
       this.audit.append({

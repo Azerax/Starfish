@@ -29,5 +29,7 @@ export { ProviderRegistry, AdapterRegistry, ANTHROPIC, OPENAI, GOOGLE, OPENROUTE
 export { ModelRouter, DEFAULT_ROUTING, type RoutingPolicy, type RouteRule, type RouteContext, type ModelRouteResult, type BudgetState } from './router';
 export { Dispatcher, type DispatchInput, type DispatchPlan, type DispatchTask, type DispatcherDeps } from './dispatch';
 export { HostRunner, parseUsage, type Fetcher, type KeyResolver, type RunResult, type RunnerDeps, type HttpResponse, type PriceTable } from './runner';
+export { AgentLoop, parseResponse, type AgentLoopDeps, type AgentRunInput, type AgentRunResult, type AgentTurn, type ToolRequest, type ToolExecutor, type ToolExecResult, type ResponseParser, type ToolRun, type StopReason } from './agentloop';
+export { buildSelfManifest, writeSelfManifest, verifySelfIntegrity, hashManifest, governanceArtifacts, type SelfManifest, type SignedSelfManifest, type SelfIntegrityResult, type AuditAnchor } from './selfintegrity';
 export { loadGovernor, persistGovernor, restoreGovernor } from './boot';
 export type { Governor } from './boot';
