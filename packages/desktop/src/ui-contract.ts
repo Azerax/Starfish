@@ -67,6 +67,16 @@ export interface OnboardingApi {
   completeOnboarding(input: CompleteOnboardingInput): Promise<OnboardingResult>;
 }
 
-export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi, OnboardingApi {
+// ---- Providers (model-agnostic). The API key is stored in the OS keychain by the host and is NEVER
+// returned to the renderer; only `hasKey` is exposed. `dataEgress` flags hosted routers (third party). ----
+export interface ProviderView { id: string; name: string; kind: string; model: string; baseUrl?: string; requiresKey: boolean; hasKey: boolean; dataEgress: boolean; }
+export interface ProviderApi {
+  getProviders(): Promise<ProviderView[]>;
+  getActiveProvider(): Promise<{ id: string; model: string }>;
+  setActiveProvider(id: string, model?: string): Promise<{ ok: boolean }>;
+  setProviderKey(id: string, key: string): Promise<{ ok: boolean; stored: 'keychain' | 'fallback' }>;
+}
+
+export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi, OnboardingApi, ProviderApi {
   readonly governed: true;
 }

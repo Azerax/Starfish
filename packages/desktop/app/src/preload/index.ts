@@ -19,5 +19,9 @@ const bridge = {
   getOnboarding: () => ipcRenderer.invoke('onboarding:get'),
   getDefaultSkills: () => ipcRenderer.invoke('onboarding:catalog'),
   completeOnboarding: (input: unknown) => ipcRenderer.invoke('onboarding:complete', input),
+  getProviders: () => ipcRenderer.invoke('provider:list'),
+  getActiveProvider: () => ipcRenderer.invoke('provider:active'),
+  setActiveProvider: (id: string, model?: string) => ipcRenderer.invoke('provider:setActive', { id, model }),
+  setProviderKey: (id: string, key: string) => ipcRenderer.invoke('provider:setKey', { id, key }),
 };
 contextBridge.exposeInMainWorld('starfish', bridge);

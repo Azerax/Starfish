@@ -1,13 +1,14 @@
 // Electron main — ring-3 host. Boots governance FIRST (fail-closed), shows the splash, and on
 // first run presents the OnboardingWizard whose intake routes through governDefaults
 // (vet -> CapabilityLedger). Nothing is registered except via that governed path.
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHost, type Host } from '@starfish/desktop';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults } from '@starfish/governance-overlay';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, type KeyResolver } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
@@ -16,6 +17,7 @@ let root = '';
 let host: Host | undefined;
 let splash: BrowserWindow | null = null;
 let win: BrowserWindow | null = null;
+const providerReg = new ProviderRegistry(AVAILABLE_PROVIDERS, 'anthropic');
 
 // Bundled default catalog (sourced from anthropics/skills). Candidates only — confer no trust.
 type CatSkill = { id: string; kind: string; category: string; summary: string; expectedRisk: string; recommended?: boolean; plugin: string };
@@ -97,6 +99,62 @@ function registerIpc(): void {
     ({ decision: { allow: false, ask: true, reason: 'human approval required (proposer != approver)' }, applied: false }));
   ipcMain.on('splash:enter', () => { win?.show(); splash?.close(); splash = null; });
 
+  // ---- providers (model selection + API key). Key stored via OS keychain; never returned. ----
+  const secFile = () => join(root, 'state', 'secrets.json');
+  const provFile = () => join(root, 'state', 'providers.json');
+  const readJson = <T,>(p: string, fb: T): T => { try { return JSON.parse(readFileSync(p, 'utf8')) as T; } catch { return fb; } };
+  const writeJsonSafe = (p: string, o: unknown) => { try { mkdirSync(join(root, 'state'), { recursive: true }); writeFileSync(p, JSON.stringify(o, null, 2)); } catch (e) { console.error('[providers] persist:', (e as Error).message); } };
+
+  ipcMain.handle('provider:list', () => {
+    const sec = readJson<Record<string, unknown>>(secFile(), {});
+    return providerReg.list().map((p) => ({ id: p.id, name: p.name, kind: p.kind, model: p.model, baseUrl: p.baseUrl, requiresKey: p.requiresKey, hasKey: !!sec[p.id], dataEgress: p.kind === 'router' }));
+  });
+  ipcMain.handle('provider:active', () => {
+    const a = providerReg.active();
+    const pj = readJson<{ activeId?: string; model?: string }>(provFile(), {});
+    return { id: pj.activeId ?? a.id, model: pj.model ?? a.model };
+  });
+  ipcMain.handle('provider:setActive', (_e, { id, model }: { id: string; model?: string }) => {
+    try { const p = providerReg.setActive(id); writeJsonSafe(provFile(), { activeId: id, model: model ?? p.model });
+      host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'provider:set-active', target: id, decision: 'allow', reason: `model=${model ?? p.model}` });
+      return { ok: true }; } catch { return { ok: false }; }
+  });
+  ipcMain.handle('provider:setKey', (_e, { id, key }: { id: string; key: string }) => {
+    const sec = readJson<Record<string, unknown>>(secFile(), {});
+    let stored: 'keychain' | 'fallback' = 'fallback';
+    try {
+      if (safeStorage.isEncryptionAvailable()) { sec[id] = { enc: safeStorage.encryptString(key).toString('base64') }; stored = 'keychain'; }
+      else { sec[id] = { b64: Buffer.from(key, 'utf8').toString('base64') }; }   // dev fallback
+    } catch { sec[id] = { b64: Buffer.from(key, 'utf8').toString('base64') }; }
+    writeJsonSafe(secFile(), sec);
+    host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'provider:key-set', target: id, decision: 'allow', reason: `stored via ${stored} (key never logged)` });
+    return { ok: true, stored };
+  });
+
+  // ---- host key resolver: decrypt the stored key on demand (mirrors provider:setKey). The key is
+  // handed straight to the runner's network call and never returned to the renderer or audited. ----
+  const resolveProviderKey: KeyResolver = (id) => {
+    const sec = readJson<Record<string, { enc?: string; b64?: string }>>(secFile(), {});
+    const e = sec[id]; if (!e) return undefined;
+    try {
+      if (e.enc) return safeStorage.decryptString(Buffer.from(e.enc, 'base64'));
+      if (e.b64) return Buffer.from(e.b64, 'base64').toString('utf8');
+    } catch { return undefined; }
+    return undefined;
+  };
+
+  // Runtime factory — wires router -> dispatcher -> runner with the live governor's audit + token
+  // governor. The agent-run loop (when built) calls dispatcher.plan(task) then runner.run(plan).
+  // OpenRouter (data-egress) stays opt-in via STARFISH_ALLOW_EGRESS.
+  const buildRuntime = () => {
+    if (!host) throw new Error('governance not booted');
+    const router = new ModelRouter(undefined, host.governor.audit);
+    const dispatcher = new Dispatcher({ providers: providerReg, router, tokens: host.governor.tokens, audit: host.governor.audit });
+    const runner = new HostRunner({ tokens: host.governor.tokens, keyResolver: resolveProviderKey, allowEgress: process.env.STARFISH_ALLOW_EGRESS === '1', audit: host.governor.audit });
+    return { dispatcher, runner };
+  };
+  void buildRuntime;   // exposed for the agent-run loop; referenced to satisfy lint until then
+
   // ---- onboarding ----
   ipcMain.handle('onboarding:get', () => { const o = readOnb(); return { done: !!o.done, operator: o.operator, theme: o.theme }; });
   ipcMain.handle('onboarding:catalog', () => CATALOG);
@@ -124,6 +182,7 @@ app.whenReady().then(async () => {
   createSplash();
   registerIpc();
   await bootGovernance();
+  try { const pj = JSON.parse(readFileSync(join(root, 'state', 'providers.json'), 'utf8')); if (pj.activeId) providerReg.setActive(pj.activeId); } catch { /* default anthropic */ }
   if (host && host.governor.capabilities.snapshot().length === 0) {
     host.governor.capabilities.restore(registrySeed as never);  // vetted default skills (Low enabled, Medium+ quarantined)
     host.persist();

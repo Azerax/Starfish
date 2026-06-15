@@ -18,6 +18,10 @@ const bridge: GovernanceBridge = {
   getOnboarding: async () => ({ done: false, operator: 'op', theme: 'fleet' }),
   getDefaultSkills: async () => [{ id: 'xlsx', kind: 'skill', category: 'document', summary: 's', expectedRisk: 'medium', plugin: 'document-skills' }],
   completeOnboarding: async () => ({ registered: [], quarantined: ['xlsx'], approved: [], missing: [] }),
+  getProviders: async () => [{ id: 'anthropic', name: 'Anthropic (Claude)', kind: 'anthropic', model: 'claude-opus-4-8', requiresKey: true, hasKey: false, dataEgress: false }],
+  getActiveProvider: async () => ({ id: 'anthropic', model: 'claude-opus-4-8' }),
+  setActiveProvider: async () => ({ ok: true }),
+  setProviderKey: async () => ({ ok: true, stored: 'keychain' as const }),
 };
 
 describe('UI <-> governance contract (ring 3)', () => {

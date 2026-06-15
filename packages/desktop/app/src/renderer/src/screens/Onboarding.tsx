@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { getBridge } from '../bridge/useBridge';
-import type { DefaultSkillView } from '../bridge/types';
+import type { DefaultSkillView, ProviderView } from '../bridge/types';
 import { useTheme } from '../theme/ThemeProvider';
 import { FleetBadge } from '../theme/icons';
 
-const LABELS = ['Welcome', 'Operator & theme', 'Governed intake', 'Ready'];
+const LABELS = ['Welcome', 'Operator & theme', 'Provider & API key', 'Governed intake', 'Ready'];
+const LAST = LABELS.length - 1; // 4
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const bridge = getBridge();
@@ -15,6 +16,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [consent, setConsent] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<{ registered: string[]; quarantined: string[]; approved: string[] } | null>(null);
 
+  // provider/model/key
+  const [providers, setProviders] = useState<ProviderView[]>([]);
+  const [providerId, setProviderId] = useState('anthropic');
+  const [apiKey, setApiKey] = useState('');
+  const [keyStored, setKeyStored] = useState<'keychain' | 'fallback' | null>(null);
+
   useEffect(() => { void bridge.getDefaultSkills().then((s) => {
     setSkills(s);
     const c: Record<string, boolean> = {};
@@ -22,19 +29,35 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     setConsent(c);
   }); }, [bridge]);
 
+  useEffect(() => {
+    void bridge.getProviders().then(setProviders);
+    void bridge.getActiveProvider().then((a) => setProviderId(a.id));
+  }, [bridge]);
+
   const enabledCount = Object.values(consent).filter(Boolean).length;
+  const selected = providers.find((p) => p.id === providerId);
+
+  async function saveProvider() {
+    await bridge.setActiveProvider(providerId, selected?.model);
+    if (apiKey.trim()) {
+      const r = await bridge.setProviderKey(providerId, apiKey.trim());
+      setKeyStored(r.stored);
+      setApiKey('');
+    }
+  }
 
   async function finish() {
     const enabledIds = Object.entries(consent).filter(([, v]) => v).map(([k]) => k);
     const r = await bridge.completeOnboarding({ operator, theme: theme.id, enabledIds });
     setResult({ registered: r.registered, quarantined: r.quarantined, approved: r.approved });
-    setStep(3);
+    setStep(LAST);
   }
 
   function next() {
-    if (step === 2) { void finish(); return; }
-    if (step === 3) { onDone(); return; }
-    setStep((s) => Math.min(3, s + 1));
+    if (step === 2) { void saveProvider().then(() => setStep(3)); return; }
+    if (step === 3) { void finish(); return; }
+    if (step === LAST) { onDone(); return; }
+    setStep((s) => Math.min(LAST, s + 1));
   }
 
   return (
@@ -45,8 +68,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           <div className="ti">Project Starfish<small>First-run setup</small></div>
           <span className="govpill">● GOVERNED · fail-closed</span>
         </div>
-        <div className="steps">{[0, 1, 2, 3].map((i) => <div key={i} className={`d${i <= step ? ' on' : ''}`} />)}</div>
-        <div className="steplabel">Step {step + 1} of 4 · {LABELS[step]}</div>
+        <div className="steps">{LABELS.map((_, i) => <div key={i} className={`d${i <= step ? ' on' : ''}`} />)}</div>
+        <div className="steplabel">Step {step + 1} of {LABELS.length} · {LABELS[step]}</div>
 
         <div className="wbody">
           {step === 0 && (
@@ -76,6 +99,31 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           )}
           {step === 2 && (
             <div className="pane">
+              <h2>Choose your engine</h2>
+              <p className="wsub">Starfish is <b>model-agnostic</b> — governance is the same whichever model runs the work. Pick a provider and paste its API key. The key is sealed in your <b>OS keychain by the host and never reaches the UI</b> (or any skill, log, or boundary).</p>
+              <div className="field"><label className="lbl">Provider</label>
+                <div className="themes">
+                  {providers.map((p) => (
+                    <div key={p.id} className={`themecard${p.id === providerId ? ' sel' : ''}`} onClick={() => setProviderId(p.id)}>
+                      <div className="nm">{p.name}</div>
+                      <div className="meta">{p.model}{p.dataEgress ? ' · ⚠ third-party egress' : ''}{!p.requiresKey ? ' · no key needed' : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {selected?.requiresKey && (
+                <div className="field"><label className="lbl">API key{selected.hasKey ? ' (a key is already stored)' : ''}</label>
+                  <input type="password" autoComplete="off" placeholder={selected.hasKey ? '•••••••• stored — leave blank to keep' : `Paste your ${selected.name} key`} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+                </div>
+              )}
+              {selected?.dataEgress && (
+                <div className="wnote" style={{ borderColor: 'var(--deny)' }}>⚠ <b>Data-egress warning:</b> a hosted router forwards your prompts and context to a third party. Only enable if your operator policy allows it.</div>
+              )}
+              {keyStored && <div className="whint">Key sealed via <b>{keyStored === 'keychain' ? 'OS keychain' : 'local fallback (dev)'}</b> — it is never returned to the UI.</div>}
+            </div>
+          )}
+          {step === 3 && (
+            <div className="pane">
               <h2>Governed intake</h2>
               <p className="wsub">Toby vets the default catalog (from <b>anthropics/skills</b>). <b>Low auto-enables; Medium+ is quarantined until you consent.</b> The only door into the registry.</p>
               {skills.map((s) => {
@@ -96,13 +144,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               <div className="whint">{enabledCount} enabled · {skills.length - enabledCount} held — change anytime on the Transporter screen.</div>
             </div>
           )}
-          {step === 3 && (
+          {step === LAST && (
             <div className="pane finish">
               <div className="seal">✓</div>
               <h2>You have the conn</h2>
               <div className="summary">
                 Operator: <b>{operator}</b><br />
                 Theme: <b>{theme.name}</b><br />
+                Engine: <b>{selected?.name ?? providerId}</b> ({selected?.model})<br />
                 Registry: <b>{result ? result.registered.length + result.approved.length : enabledCount} enabled</b>, <b>{result ? result.quarantined.length : 0} quarantined</b><br />
                 Governance: <b style={{ color: 'var(--ok)' }}>active · fail-closed ✓</b>
               </div>
@@ -112,7 +161,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
         <div className="wfoot">
           <button className="btn" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
-          <button className="btn primary" onClick={next}>{step === 0 ? 'Begin' : step === 2 ? 'Confirm & govern' : step === 3 ? 'Enter the Bridge' : 'Next'}</button>
+          <button className="btn primary" onClick={next}>{step === 0 ? 'Begin' : step === 2 ? 'Save & continue' : step === 3 ? 'Confirm & govern' : step === LAST ? 'Enter the Bridge' : 'Next'}</button>
         </div>
       </div>
     </div>

@@ -15,6 +15,8 @@ export interface DefaultSkillView { id: string; kind: string; category: string; 
 export interface CompleteOnboardingInput { operator: string; theme: string; enabledIds: string[]; }
 export interface OnboardingResult { registered: string[]; quarantined: string[]; approved: string[]; missing: string[]; }
 
+export interface ProviderView { id: string; name: string; kind: string; model: string; baseUrl?: string; requiresKey: boolean; hasKey: boolean; dataEgress: boolean; }
+
 export interface GovernanceBridge {
   governed: true;
   getCrew(): Promise<CrewMemberView[]>;
@@ -30,6 +32,10 @@ export interface GovernanceBridge {
   getOnboarding(): Promise<OnboardingState>;
   getDefaultSkills(): Promise<DefaultSkillView[]>;
   completeOnboarding(input: CompleteOnboardingInput): Promise<OnboardingResult>;
+  getProviders(): Promise<ProviderView[]>;
+  getActiveProvider(): Promise<{ id: string; model: string }>;
+  setActiveProvider(id: string, model?: string): Promise<{ ok: boolean }>;
+  setProviderKey(id: string, key: string): Promise<{ ok: boolean; stored: 'keychain' | 'fallback' }>;
 }
 
 declare global { interface Window { starfish?: GovernanceBridge } }

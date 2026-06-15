@@ -4,6 +4,7 @@ import { displayName } from './theme/themes';
 import { FleetBadge } from './theme/icons';
 import { Bridge } from './screens/Bridge';
 import { Onboarding } from './screens/Onboarding';
+import { Settings } from './screens/Settings';
 import { getBridge } from './bridge/useBridge';
 
 function Clock() {
@@ -12,7 +13,7 @@ function Clock() {
   return <span className="pill mono"><span className="dot live" /> {t}</span>;
 }
 
-function Header() {
+function Header({ onSettings }: { onSettings: () => void }) {
   const { theme, themes, setThemeId } = useTheme();
   return (
     <header className="topbar">
@@ -26,16 +27,18 @@ function Header() {
           {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      <button className="pill" onClick={onSettings} title="Provider & model settings">⚙ Settings</button>
     </header>
   );
 }
 
 function Shell() {
-  const [view, setView] = useState<'loading' | 'onboard' | 'bridge'>('loading');
+  const [view, setView] = useState<'loading' | 'onboard' | 'bridge' | 'settings'>('loading');
   useEffect(() => { getBridge().getOnboarding().then((s) => setView(s.done ? 'bridge' : 'onboard')).catch(() => setView('onboard')); }, []);
   if (view === 'loading') return null;
   if (view === 'onboard') return <Onboarding onDone={() => setView('bridge')} />;
-  return <><Header /><Bridge nameFor={displayName} /></>;
+  if (view === 'settings') return <Settings onBack={() => setView('bridge')} />;
+  return <><Header onSettings={() => setView('settings')} /><Bridge nameFor={displayName} /></>;
 }
 
 export function App() {

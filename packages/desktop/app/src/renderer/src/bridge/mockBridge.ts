@@ -51,4 +51,14 @@ export const mockBridge: GovernanceBridge = {
     const approved = i.enabledIds.filter((id) => medplus.includes(id));
     return { registered: low, quarantined: medplus.filter((id) => !approved.includes(id)), approved, missing: [] };
   },
+  getProviders: async () => [
+    { id: 'anthropic', name: 'Anthropic (Claude)', kind: 'anthropic', model: 'claude-opus-4-8', requiresKey: true, hasKey: false, dataEgress: false },
+    { id: 'openai', name: 'OpenAI', kind: 'openai', model: 'gpt-4o', requiresKey: true, hasKey: false, dataEgress: false },
+    { id: 'google', name: 'Google (Gemini)', kind: 'google', model: 'gemini-1.5-pro', requiresKey: true, hasKey: false, dataEgress: false },
+    { id: 'openrouter', name: 'OpenRouter (router)', kind: 'router', model: 'auto', baseUrl: 'https://openrouter.ai/api/v1', requiresKey: true, hasKey: false, dataEgress: true },
+    { id: 'local', name: 'Local (Ollama/llama.cpp)', kind: 'local', model: 'llama-3.1', requiresKey: false, hasKey: true, dataEgress: false },
+  ],
+  getActiveProvider: async () => ({ id: 'anthropic', model: 'claude-opus-4-8' }),
+  setActiveProvider: async () => ({ ok: true }),
+  setProviderKey: async () => ({ ok: true, stored: 'fallback' as const }),
 };

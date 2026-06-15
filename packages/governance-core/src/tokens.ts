@@ -30,6 +30,16 @@ export class TokenGovernor {
     return 'ok';
   }
 
+  /** Current budget pressure WITHOUT recording usage — used by the router to pick a cheaper model. */
+  status(agentId: string): BudgetStatus {
+    if (this.paused.has(agentId)) return 'hard';
+    const u = this.usage.get(agentId); const b = this.budgets.get(agentId);
+    if (!u || !b) return 'ok';
+    if ((b.hardUsd !== undefined && u.usd >= b.hardUsd) || (b.hardTokens !== undefined && u.tokens >= b.hardTokens)) return 'hard';
+    if ((b.softUsd !== undefined && u.usd >= b.softUsd) || (b.softTokens !== undefined && u.tokens >= b.softTokens)) return 'soft';
+    return 'ok';
+  }
+
   isPaused(agentId: string): boolean { return this.paused.has(agentId); }
   resume(agentId: string, by: string): void {
     this.paused.delete(agentId);
