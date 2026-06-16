@@ -5,7 +5,7 @@ type IconProps = { id: string; size?: number };
 
 const COLOR: Record<string, string> = {
   michael: 'var(--accent2)', dwight: 'var(--accent)', toby: 'var(--accent)',
-  hank: 'var(--deny)', pam: 'var(--ok)', worker: 'var(--muted)',
+  hank: 'var(--deny)', pam: 'var(--ok)', custodian: 'var(--warn)', worker: 'var(--muted)',
 };
 
 function Glyph({ id }: { id: string }) {
@@ -20,6 +20,8 @@ function Glyph({ id }: { id: string }) {
       return <><path d="M12 3l7 2.5v5c0 4.2-2.9 7.3-7 8.5-4.1-1.2-7-4.3-7-8.5v-5z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/></>;
     case 'pam':
       return <><ellipse cx="12" cy="6.5" rx="6.5" ry="2.4" fill="currentColor" opacity=".9"/><path d="M5.5 6.5v5c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4v-5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 11.5v5c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4v-5" fill="none" stroke="currentColor" stroke-width="1.4"/></>;
+    case 'custodian':
+      return <><path d="M9 3h6v3H9z" fill="currentColor" opacity=".9"/><path d="M10 6v4M14 6v4" stroke="currentColor" stroke-width="1.3"/><path d="M7 10h10l-1 9H8z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 13v3M14 13v3" stroke="currentColor" stroke-width="1.3"/></>;
     default:
       return <><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" stroke="currentColor" stroke-width="1.5"/></>;
   }
@@ -33,11 +35,13 @@ export function CrewIcon({ id, size = 22 }: IconProps) {
   );
 }
 
-// Portrait if available, else the SVG glyph (onError fallback handles missing/ungenerated art).
+// Portrait if available, else the SVG glyph. Tries .webp, then .png (sync:art may copy a raw PNG
+// when ffmpeg isn't available), then falls back to the inline glyph — so a missing format never blanks.
 export function CrewAvatar({ id }: { id: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return <CrewIcon id={id} />;
-  return <img className="portrait" src={`/portraits/${id}.webp`} alt="" onError={() => setFailed(true)} />;
+  const [stage, setStage] = useState<0 | 1 | 2>(0); // 0 = webp, 1 = png, 2 = svg glyph
+  if (stage === 2) return <CrewIcon id={id} />;
+  const src = `/portraits/${id}.${stage === 0 ? 'webp' : 'png'}`;
+  return <img className="portrait" src={src} alt="" onError={() => setStage((s) => (s + 1) as 0 | 1 | 2)} />;
 }
 
 export function FleetBadge({ size = 26 }: { size?: number }) {

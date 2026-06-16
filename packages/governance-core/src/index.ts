@@ -15,6 +15,7 @@ export { intakeRoute, ingestExternal, type IntakeRoute } from './intake';
 export { PDP, type IntegrityGate, type TaskBinding } from './pdp';
 export { readSkillFiles, scanSymlinks, fileIntegrityGate, runWithIntegrity, type VerifiedRun } from './integrity';
 export { governedList, type ListResult } from './listing';
+export { assessDeletion, governedDelete, defaultProtected, type DeletionTarget, type DeletionImpact, type DeletionConfig, type FsProbe, type DeleteOps, type GovernedDeleteDeps, type GovernedDeleteResult } from './deletion';
 export { MessageRouter, type OutgoingMessage, type DeliveredMessage, type RouteResult, type MessageAct } from './messaging';
 export { GovernedMemory, type Evidence, type Claim, type Entity, type DecisionRecord } from './memory';
 export { vet, renderReport, hashFiles, fileManifest, diffManifest, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';

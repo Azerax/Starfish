@@ -10,6 +10,9 @@ const tools = [
   { id: 'fs.read', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
   { id: 'fs.list', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
   { id: 'fs.write', category: 'write', pathParams: ['path'], allowedAgents: ['worker', 'pam'], riskTier: 'medium' },
+  // Deletion is file-level + soft (governed by the deletion gate); ONLY the Custodian may invoke it.
+  // Hard rules (no system files, no skills, no folders) are enforced by the gate regardless of policy.
+  { id: 'fs.delete', category: 'write', pathParams: ['path'], allowedAgents: ['custodian'], riskTier: 'medium' },
   { id: 'git_commit', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },
 ];
 const agents = [
@@ -18,10 +21,13 @@ const agents = [
   { id: 'toby', domain: 'intake', allowedTools: ['fs.read'], riskTier: 'medium' },
   { id: 'hank', domain: 'monitor', allowedTools: ['fs.read'], riskTier: 'low' },
   { id: 'pam', domain: 'memory', allowedTools: ['fs.read', 'fs.write'], riskTier: 'low' },
+  // Custodian: the only agent permitted safe, file-level cleanup (soft-delete). Bound by all hard rules.
+  { id: 'custodian', domain: 'custodial', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], riskTier: 'medium' },
   { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.write', 'git_commit'], riskTier: 'high' },
 ];
 const policies = [
   { id: 'p-read', subject: '*', action: 'fs.read', resource: '*', effect: 'allow' },
+  { id: 'p-delete', subject: 'custodian', action: 'fs.delete', resource: '*', effect: 'allow' },
   { id: 'p-commit', subject: 'worker', action: 'git_commit', resource: '*', effect: 'ask' },
 ];
 

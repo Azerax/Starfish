@@ -29,6 +29,7 @@ export const mockBridge: GovernanceBridge = {
     { id: 'toby', role: 'Intake & vetting', status: 'idle', riskTier: 'medium' },
     { id: 'hank', role: 'Security monitor', status: 'sweeping', riskTier: 'low' },
     { id: 'pam', role: 'Memory', status: 'active', riskTier: 'low' },
+    { id: 'custodian', role: 'Custodian (safe cleanup)', status: 'idle', riskTier: 'medium' },
     { id: 'worker', role: 'Execution', status: 'paused', currentTaskId: '#412', riskTier: 'high' },
   ],
   getDecisions: async (limit = 8) => { seq += 1; feed.unshift({ ...POOL[seq % POOL.length], id: 'd' + seq, ts: clock() }); feed.length = Math.min(feed.length, 40); return feed.slice(0, limit); },

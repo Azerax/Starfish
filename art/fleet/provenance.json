@@ -2,64 +2,43 @@
   {
     "asset": "captain-mykel.webp",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A composed starship captain in a fitted amber command tunic, calm and authoritative, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A composed Black woman starship captain with natural coiled hair in a fitted amber command tunic, calm and authoritative, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:38:41.655Z"
+    "date": "2026-06-16T11:29:55.003Z"
   },
   {
-    "asset": "first-officer.webp",
+    "asset": "first-officer.png",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A calm science officer in a deep-blue tunic, analytical and even-tempered, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A calm East Asian man science officer in a deep-blue tunic, analytical and even-tempered, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:39:53.429Z"
+    "date": "2026-06-16T11:31:10.296Z"
   },
   {
     "asset": "oh-brian-intake.webp",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A practical operations chief in a teal tunic standing beside a softly glowing transporter pad, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A practical South Asian woman operations chief in a teal tunic standing beside a softly glowing transporter pad, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:41:05.258Z"
+    "date": "2026-06-16T11:32:23.728Z"
   },
   {
     "asset": "constable-gooey.webp",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A watchful security constable in a deep-red tunic with a steady level gaze, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A watchful Latino man security constable in a deep-red tunic with a steady level gaze, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:42:11.661Z"
+    "date": "2026-06-16T11:33:36.284Z"
   },
   {
     "asset": "d8a-ops-android.webp",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A sleek pale operations android officer with faint circuitry under the skin and a neutral expression, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A sleek operations android officer with warm brown synthetic skin, softly feminine features, and faint circuitry beneath the surface, neutral expression, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:43:23.767Z"
+    "date": "2026-06-16T11:34:48.408Z"
   },
   {
     "asset": "deck-crew.webp",
     "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A generic deck-crew officer in a plain grey tunic, neutral expression, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
+    "prompt": "A generic Pacific Islander deck-crew officer with an androgynous presentation in a plain grey tunic, neutral expression, head-and-shoulders portrait. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
     "seed": 29,
-    "date": "2026-06-14T21:44:35.584Z"
-  },
-  {
-    "asset": "bridge-keyart.webp",
-    "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "An empty retro-futurist starship bridge interior with a central command chair and a large dark viewscreen, wide establishing shot. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
-    "seed": 29,
-    "date": "2026-06-14T21:45:47.297Z"
-  },
-  {
-    "asset": "transporter-room.webp",
-    "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A quiet retro-futurist transporter room with a circular pad and soft amber light, empty, wide shot. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
-    "seed": 29,
-    "date": "2026-06-14T21:46:59.125Z"
-  },
-  {
-    "asset": "redshirt-casualty.webp",
-    "tool": "FLUX.2 Pro (AtlasCloud)",
-    "prompt": "A single empty red officer tunic folded on a bare metal deck, somber and still, still-life. Painterly retro-futurist sci-fi game illustration, clean limited palette, soft even studio light, centered subject on a plain dark panel background, restrained and iconic. No real-person likenesses, no text, no letters, no numbers, no logos, no insignia, no modern brand objects.",
-    "seed": 29,
-    "date": "2026-06-14T21:48:11.126Z"
+    "date": "2026-06-16T11:36:00.965Z"
   }
 ]
