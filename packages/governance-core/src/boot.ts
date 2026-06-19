@@ -18,15 +18,18 @@ import { ServiceRegistry } from './services';
 import { fileIntegrityGate } from './integrity';
 import { saveJson, loadJson } from './persistence';
 import { verifySelfIntegrity } from './selfintegrity';
+import { Anchorer, NoopAnchor, makeAnchorAdapter, type AnchorReceipt } from './anchor';
+import { readFileSync, existsSync } from 'node:fs';
+import type { AuditEvent } from './types';
 import type { ToolDef, AgentDef } from './types';
 
 export interface Governor {
   pdp: PDP; tools: Registry<ToolDef>; agents: Registry<AgentDef>; audit: AuditLog;
   tasks: TaskLedger; tokens: TokenGovernor; memory: GovernedMemory; router: MessageRouter;
-  capabilities: CapabilityLedger; monitor: SecurityMonitor; services: ServiceRegistry; safeMode: boolean;
+  capabilities: CapabilityLedger; monitor: SecurityMonitor; services: ServiceRegistry; anchorer: Anchorer; safeMode: boolean;
 }
 
-export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number } }): Governor {
+export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number } }): Governor {
   const tools = new Registry<ToolDef>(join(governanceDir, 'tools.json'), (t) => t.id);
   const agents = new Registry<AgentDef>(join(governanceDir, 'agents.json'), (a) => a.id);
   const policy = new PolicyEngine(loadPolicies(join(governanceDir, 'policies.json')));
@@ -41,9 +44,12 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
   const services = new ServiceRegistry(audit);
   const taskBinding = opts?.enforceTaskBinding ? { enforce: true, provider: tasks } : undefined;
   const integrity = opts?.skillsRoot ? fileIntegrityGate(capabilities, opts.skillsRoot) : undefined;
-  const pdp = new PDP(tools, agents, audit, new RiskEngine(), policy, taskBinding, integrity);
+  const pdp = new PDP(tools, agents, audit, new RiskEngine(), policy, taskBinding, integrity, undefined, opts?.secretGatekeeper ?? 'toby');
   for (const s of ['pdp', 'router', 'tasks', 'memory', 'capabilities', 'monitor', 'audit']) services.register(s, '0.8.0');
-  const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, router, capabilities, monitor, services, safeMode: false };
+  const anchorer = opts?.anchor
+    ? new Anchorer(makeAnchorAdapter({ backend: opts.anchor.backend ?? 'noop', filePath: opts.anchor.filePath }), { enabled: opts.anchor.enabled, everyNEvents: opts.anchor.everyNEvents }, audit)
+    : new Anchorer(NoopAnchor, { enabled: false }, audit);   // OFF by default — zero overhead for personal use
+  const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, router, capabilities, monitor, services, anchorer, safeMode: false };
   if (opts?.stateDir) restoreGovernor(g, opts.stateDir);
 
   // Self-integrity: verify the operator-signed manifest over our OWN config/state/audit. Any tamper,
@@ -71,4 +77,13 @@ export function restoreGovernor(g: Governor, stateDir: string): void {
   g.tasks.restore(loadJson(join(stateDir, 'tasks.snapshot.json'), []));
   g.capabilities.restore(loadJson(join(stateDir, 'capabilities.json'), []));
   g.services.restore(loadJson(join(stateDir, 'services.json'), []));
+}
+
+
+/** Notarize the audit-to-date through the configured anchorer (best-effort; no-op when disabled). */
+export async function anchorAudit(g: Governor, auditPath: string): Promise<AnchorReceipt> {
+  const events: AuditEvent[] = existsSync(auditPath)
+    ? readFileSync(auditPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AuditEvent)
+    : [];
+  return g.anchorer.anchor(events);
 }

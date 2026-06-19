@@ -5,10 +5,11 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createHost, type Host } from '@starfish/desktop';
+import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete } from '@starfish/desktop';
+import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults } from '@starfish/governance-overlay';
-import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, type KeyResolver } from '@starfish/governance-core';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, type KeyResolver, type DeletionConfig, type BoundarySet } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
@@ -154,6 +155,33 @@ function registerIpc(): void {
     return { dispatcher, runner };
   };
   void buildRuntime;   // exposed for the agent-run loop; referenced to satisfy lint until then
+
+  // ---- governed deletion: the app's ONLY delete path. Soft (recoverable trash), hard-rule-gated,
+  // Custodian-only. Hard rules (no system files / no skills / no folders) are enforced in the core gate. ----
+  const delCfg = (): DeletionConfig => ({ projectRoot: root, homeDir: homedir(), skillsRoot: join(root, 'skills') });
+  const custodianBoundary: BoundarySet = { visibility: [root], write: [root] };   // cleanup scope = the project tree
+  const trashDir = () => join(root, 'state', 'trash');
+  let trash: TrashStore | null = null;
+  const store = () => (trash ??= new TrashStore(trashDir()));
+  const impactView = (i: ReturnType<typeof assessDeletion>) => ({ tier: i.tier, decision: i.decision, hard: i.hard, reversible: i.reversible, files: i.files, bytes: i.bytes, reasons: i.reasons });
+
+  ipcMain.handle('delete:assess', (_e, { path, recursive }: { path: string; recursive?: boolean }) =>
+    impactView(assessDeletion({ path, recursive }, delCfg(), realFsProbe(), custodianBoundary)));
+
+  ipcMain.handle('delete:file', (_e, { path, recursive, approved }: { path: string; recursive?: boolean; approved?: boolean }) => {
+    if (!host) return { ok: false, reason: 'governance not booted', impact: impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)) };
+    const r = governedCustodianDelete(host.governor.pdp, { agentId: 'custodian', tool: 'fs.delete', input: { path, recursive: !!recursive } }, custodianBoundary,
+      { cfg: delCfg(), store: store(), trashDir: trashDir(), audit: host.governor.audit, approved: !!approved });
+    return { ok: r.ok, reason: r.reason, impact: impactView(r.impact), trashedTo: r.trashedTo };
+  });
+
+  ipcMain.handle('delete:trash:list', () => store().list());
+  ipcMain.handle('delete:trash:restore', (_e, { id }: { id: string }) => store().restore(id));
+  ipcMain.handle('delete:trash:purge', (_e, { id, confirm }: { id: string; confirm: boolean }) => {
+    if (confirm !== true) return { ok: false };   // permanent — explicit operator confirmation required
+    host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'trash-purge', target: id, decision: 'allow', reason: 'permanent removal confirmed by operator' });
+    return { ok: store().purge(id) };
+  });
 
   // ---- onboarding ----
   ipcMain.handle('onboarding:get', () => { const o = readOnb(); return { done: !!o.done, operator: o.operator, theme: o.theme }; });

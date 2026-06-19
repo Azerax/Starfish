@@ -47,7 +47,7 @@ const INJECTION = [
   /you\s+are\s+now\s+(a|an|the)\b/i,
   /do\s+not\s+(follow|obey)\s+(the\s+)?(previous|prior|system)/i,
 ];
-function detectInjection(blob: string): boolean { return INJECTION.some((re) => re.test(blob)); }
+export function detectInjection(blob: string): boolean { return INJECTION.some((re) => re.test(blob)); }
 
 const SIGNALS: { re: RegExp; tier: RiskTier; finding: string; forceHuman?: boolean }[] = [
   { re: /\brm\s+-rf\b|\bmkfs\b|\bdd\s+if=|format\s+[a-z]:/i, tier: 'critical', finding: 'destructive command' },

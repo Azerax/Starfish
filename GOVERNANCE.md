@@ -110,6 +110,18 @@ without explicit human approval.
 
 ---
 
+## Principle 6: Evidence-Based Action ("No Unbacked Word")
+
+An agent's claim is not accepted unless it is backed by recorded evidence.
+
+If we do not validate that agents did what they say they did, governance is pointless. **Everything is evidence-based.**
+
+A claim — "I created X", "the suite is green", "I ran Y", "committed Z", "verified the certificate" — is judged only against the agent's own utterances and the system's own record (the hash-chained audit ledger and observed tool output), never against the world's truth. A claim that is unbacked, or contradicted by the record (e.g. "tests pass" over a recorded failure), is **blocked**: the action or the end-of-turn is denied and the agent retries against a one-line correction.
+
+A claim that passes is *spendable* — a reviewer or another agent can accept it without re-deriving it. There is no silent "warning" tier: a witnessed-but-allowed violation is itself an unbacked word.
+
+---
+
 # 4. System Layers
 
 Project Starfish consists of seven architectural layers.

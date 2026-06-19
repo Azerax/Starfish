@@ -1,0 +1,16 @@
+{
+  "name": "project-starfish",
+  "version": "0.9.0",
+  "description": "Project Starfish — a governance-first, deny-by-default overlay for AI agent & skill builds. Run: starfish govern <pack>.",
+  "keywords": ["ai", "agents", "governance", "security", "claude", "skills", "guardrails"],
+  "license": "MIT",
+  "type": "module",
+  "bin": { "starfish": "./dist/cli.mjs" },
+  "main": "./dist/cli.mjs",
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=18" },
+  "homepage": "https://projectstarfish.ca",
+  "repository": { "type": "git", "url": "git+https://github.com/Azerax/Starfish.git", "directory": "packages/cli" },
+  "publishConfig": { "access": "public" },
+  "scripts": { "prepublishOnly": "node ../../scripts/bundle-cli.mjs" }
+}

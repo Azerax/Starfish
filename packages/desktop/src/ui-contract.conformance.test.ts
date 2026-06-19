@@ -22,6 +22,11 @@ const bridge: GovernanceBridge = {
   getActiveProvider: async () => ({ id: 'anthropic', model: 'claude-opus-4-8' }),
   setActiveProvider: async () => ({ ok: true }),
   setProviderKey: async () => ({ ok: true, stored: 'keychain' as const }),
+  assessDelete: async () => ({ tier: 'low' as const, decision: 'allow' as const, hard: false, reversible: true, files: 1, bytes: 10, reasons: [] }),
+  deleteFile: async () => ({ ok: true, reason: 'soft-deleted', impact: { tier: 'low' as const, decision: 'allow' as const, hard: false, reversible: true, files: 1, bytes: 10, reasons: [] }, trashedTo: '/trash/x' }),
+  listTrash: async () => [],
+  restoreTrash: async () => ({ ok: true, restoredTo: '/x', reason: 'restored' }),
+  purgeTrash: async () => ({ ok: true }),
 };
 
 describe('UI <-> governance contract (ring 3)', () => {

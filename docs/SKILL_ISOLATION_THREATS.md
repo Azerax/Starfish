@@ -62,3 +62,29 @@ The two real **[GAP]/[PARTIAL]** items that matter most: **#5 publisher signing*
 ## Update — #5 + #8 closed (2026-06-14)
 - **#5 trusted-publisher spoofing → [MITIGATED]:** real **Ed25519 publisher signing** (`signature.ts`). A skill with a valid signature over its manifest hash from a **pinned publisher key** is cryptographically trusted; `vet(input, { pinned })` uses signature-trust (provenance strings are now the weaker, operator-asserted path). Tampering after signing invalidates it; wrong key fails. Tests: `signature.conformance.test.ts`.
 - **#8 capabilityId spoofing → [MITIGATED]:** the `PdpDaemon` now **binds `capabilityId` at the `hello` handshake** (like `agentId`); the `HookSession` stamps it on every call and **rejects any payload-supplied `capability_id` that differs** ("confused-deputy blocked"). Integrity is therefore checked against the bound skill, not a caller-chosen one. Tests: `capability-binding.conformance.test.ts`.
+
+---
+
+## .env / secret-file governance (added 2026-06-15)
+
+Secrets are governed on three faces; **Toby is the sole gatekeeper for add/modify/remove**, mirroring skills.
+
+**Threat — .env poisoning (a WRITE attack):** an attacker (malicious skill/agent, dependency postinstall,
+copied external content) writes `.env` to gain control:
+- code-execution env vars: `NODE_OPTIONS=--require …`, `LD_PRELOAD`/`DYLD_*`, `GIT_SSH_COMMAND`, `PATH=` rewrite, `PYTHONSTARTUP`, `PROMPT_COMMAND`, `BROWSER/EDITOR/SHELL`;
+- endpoint redirection: `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL` → attacker host (exfil / poisoned responses);
+- flipping Starfish's own flags: `STARFISH_ALLOW_EGRESS=1`, etc.;
+- credential swap; injection payload in a value.
+
+**Mitigations (all built):**
+| Face | Control |
+|---|---|
+| **Read** | `.env`/credential reads are deny-by-default (PDP, critical); allowed only by an explicit operator `SecretPolicy` grant. |
+| **Add / modify** | PDP routes any write to a secret path through the **gatekeeper (Toby)**; every other agent is denied (critical). |
+| **Content** | Even the gatekeeper's write is screened by `screenEnv` — code-exec / endpoint-redirect / `STARFISH_*` keys → rejected. |
+| **Remove** | `governedDelete` blocks secret-file removal by anyone but the gatekeeper (then soft-delete, recoverable). |
+| **Egress** | secret VALUES are blocked from leaving (`scanEgress` → `containsSecret`); `redactSecrets` neutralizes them in audit/context. |
+| **Governance flags** | `STARFISH_*` come only from operator config under the signed self-integrity manifest — never sourced from a project `.env`. |
+
+Defence in depth: command templates use fixed argv / no shell interpolation, so a poisoned `GIT_SSH_COMMAND`-style
+value cannot inject into Starfish's own shell path; and the model API key lives in the OS keychain, not `.env`.

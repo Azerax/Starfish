@@ -102,3 +102,29 @@ describe('governedDelete — soft-delete (recoverable), gated by hard rules', ()
     expect(b.ok).toBe(true); expect(h.moved).toEqual(['/proj/big.bin']);
   });
 });
+
+describe('governedDelete — secret files (.env) are removed only by the gatekeeper', () => {
+  const BS3: BoundarySet = { visibility: ['/'], write: ['/'] };
+  function h() {
+    const dir = mkdtempSync(join(tmpdir(), 'sf-secdel-'));
+    writeFileSync(join(dir, 'tools.json'), JSON.stringify([{ id: 'fs.delete', category: 'write', pathParams: ['path'], allowedAgents: '*' }] as ToolDef[]));
+    writeFileSync(join(dir, 'agents.json'), JSON.stringify([{ id: 'custodian' }, { id: 'toby' }] as AgentDef[]));
+    const audit = new AuditLog(join(dir, 'audit.jsonl'));
+    const pdp = new PDP(new Registry<ToolDef>(join(dir, 'tools.json'), (t) => t.id), new Registry<AgentDef>(join(dir, 'agents.json'), (a) => a.id),
+      audit, new RiskEngine(), new PolicyEngine([{ id: 'p', subject: '*', action: 'tool:fs.delete', resource: '*', effect: 'allow' }] as never), undefined, undefined, undefined, 'toby');
+    const moved: string[] = [];
+    const ops: DeleteOps = { moveToTrash: (p) => { moved.push(p); return `${dir}/trash/${p.split('/').pop()}`; } };
+    const probe = probeOf({ '/proj/.env': { files: 1 } });
+    const cfg: DeletionConfig = { projectRoot: '/proj', secretGatekeeper: 'toby' };
+    const del = (agentId: string) => governedDelete(pdp, { agentId, tool: 'fs.delete', input: { path: '/proj/.env' } }, BS3, { probe, cfg, ops, trashDir: `${dir}/trash`, audit });
+    return { del, moved };
+  }
+  it('the Custodian cannot remove .env (gatekeeper only)', () => {
+    const r = h();
+    expect(r.del('custodian').ok).toBe(false); expect(r.moved).toEqual([]);
+  });
+  it('Toby (gatekeeper) can soft-remove .env', () => {
+    const r = h();
+    expect(r.del('toby').ok).toBe(true); expect(r.moved).toEqual(['/proj/.env']);
+  });
+});

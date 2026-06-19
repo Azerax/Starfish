@@ -23,5 +23,10 @@ const bridge = {
   getActiveProvider: () => ipcRenderer.invoke('provider:active'),
   setActiveProvider: (id: string, model?: string) => ipcRenderer.invoke('provider:setActive', { id, model }),
   setProviderKey: (id: string, key: string) => ipcRenderer.invoke('provider:setKey', { id, key }),
+  assessDelete: (path: string, recursive?: boolean) => ipcRenderer.invoke('delete:assess', { path, recursive }),
+  deleteFile: (path: string, opts?: { recursive?: boolean; approved?: boolean }) => ipcRenderer.invoke('delete:file', { path, ...opts }),
+  listTrash: () => ipcRenderer.invoke('delete:trash:list'),
+  restoreTrash: (id: string) => ipcRenderer.invoke('delete:trash:restore', { id }),
+  purgeTrash: (id: string, confirm: true) => ipcRenderer.invoke('delete:trash:purge', { id, confirm }),
 };
 contextBridge.exposeInMainWorld('starfish', bridge);

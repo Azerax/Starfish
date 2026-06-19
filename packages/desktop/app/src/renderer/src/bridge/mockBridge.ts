@@ -62,4 +62,9 @@ export const mockBridge: GovernanceBridge = {
   getActiveProvider: async () => ({ id: 'anthropic', model: 'claude-opus-4-8' }),
   setActiveProvider: async () => ({ ok: true }),
   setProviderKey: async () => ({ ok: true, stored: 'fallback' as const }),
+  assessDelete: async (path: string) => ({ tier: path.includes('.git') || path.endsWith('/') ? 'critical' as const : 'low' as const, decision: path.includes('.git') ? 'deny' as const : 'allow' as const, hard: path.includes('.git'), reversible: true, files: 1, bytes: 2048, reasons: path.includes('.git') ? ['protected subtree (.git)'] : [] }),
+  deleteFile: async (path: string) => ({ ok: !path.includes('.git'), reason: path.includes('.git') ? 'HARD-DENY: protected subtree (.git)' : 'soft-deleted (recoverable from trash)', impact: { tier: 'low' as const, decision: 'allow' as const, hard: false, reversible: true, files: 1, bytes: 2048, reasons: [] }, trashedTo: '/trash/' + path.split('/').pop() }),
+  listTrash: async () => [{ id: 't1', originalPath: '/proj/old.log', trashedAt: new Date().toISOString(), name: 'old.log' }],
+  restoreTrash: async () => ({ ok: true, restoredTo: '/proj/old.log', reason: 'restored' }),
+  purgeTrash: async () => ({ ok: true }),
 };

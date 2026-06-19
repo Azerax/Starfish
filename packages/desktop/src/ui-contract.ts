@@ -77,6 +77,20 @@ export interface ProviderApi {
   setProviderKey(id: string, key: string): Promise<{ ok: boolean; stored: 'keychain' | 'fallback' }>;
 }
 
-export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi, OnboardingApi, ProviderApi {
+// ---- Governed deletion. Every delete is impact-assessed (deterministic blast radius + hard rules:
+// no system files, no skills [Toby retires them], no folders) and SOFT (recoverable from trash).
+// Only the Custodian agent is policy-permitted to delete; the operator approves elevated cases. ----
+export interface DeletionImpactView { tier: 'low' | 'medium' | 'high' | 'critical'; decision: 'allow' | 'ask' | 'deny'; hard: boolean; reversible: boolean; files: number; bytes: number; reasons: string[]; }
+export interface TrashEntryView { id: string; originalPath: string; trashedAt: string; name: string; }
+export interface DeleteResultView { ok: boolean; reason: string; impact: DeletionImpactView; trashedTo?: string; }
+export interface DeleteApi {
+  assessDelete(path: string, recursive?: boolean): Promise<DeletionImpactView>;   // preview, touches nothing
+  deleteFile(path: string, opts?: { recursive?: boolean; approved?: boolean }): Promise<DeleteResultView>;
+  listTrash(): Promise<TrashEntryView[]>;
+  restoreTrash(id: string): Promise<{ ok: boolean; restoredTo?: string; reason: string }>;
+  purgeTrash(id: string, confirm: true): Promise<{ ok: boolean }>;   // permanent — operator confirm required
+}
+
+export interface GovernanceBridge extends GovernanceReadApi, GovernanceActionApi, OnboardingApi, ProviderApi, DeleteApi {
   readonly governed: true;
 }

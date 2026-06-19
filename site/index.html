@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Starfish — A Governance-First, Deny-by-Default AI Ecosystem</title>
+<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish is a governance-first, deny-by-default overlay and desktop app that brings any AI agent build under a single decision point.">
+<style>
+  :root{
+    --bg:#04060f; --panel:#0b1322; --panel2:#0f1a2e; --line:#1b2a48;
+    --ink:#e9f2ff; --muted:#8aa0c8; --accent:#37d6ff; --accent2:#ffce5c;
+    --ok:#39d98a; --deny:#ff5c7a; --ask:#b48cff; --command:#F2A23C;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
+  a{color:var(--accent);text-decoration:none}
+  #warp{position:fixed;inset:0;z-index:0;opacity:.55}
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 0%, transparent 30%, rgba(2,4,10,.6) 75%, rgba(2,4,10,.96) 100%)}
+  .wrap{position:relative;z-index:2;max-width:1080px;margin:0 auto;padding:0 22px}
+
+  /* nav */
+  nav{position:relative;z-index:3;display:flex;align-items:center;gap:14px;max-width:1080px;margin:0 auto;padding:18px 22px}
+  nav .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.04em}
+  nav .brand svg{width:26px;height:26px}
+  nav .sp{flex:1}
+  nav a.link{color:var(--muted);font-size:14px}
+  nav a.link:hover{color:var(--ink)}
+  .pill{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ok);
+    border:1px solid color-mix(in srgb,var(--ok) 35%,var(--line));padding:5px 11px;border-radius:999px}
+
+  /* hero */
+  header.hero{position:relative;z-index:2;text-align:center;padding:70px 22px 40px}
+  .badge{width:104px;height:104px;margin:0 auto 20px;position:relative;display:flex;align-items:center;justify-content:center;
+    animation:floaty 6s ease-in-out infinite}
+  .badge .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(55,214,255,.5);
+    box-shadow:0 0 30px rgba(55,214,255,.35), inset 0 0 24px rgba(55,214,255,.15)}
+  .badge .ring.r2{inset:-13px;border-color:rgba(255,206,92,.35);animation:spin 16s linear infinite}
+  .badge .ring.r3{inset:13px;border-style:dashed;border-color:rgba(255,255,255,.18);animation:spin 11s linear infinite reverse}
+  .badge .star{font-size:30px;color:var(--accent);text-shadow:0 0 18px var(--accent)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  h1{font-size:clamp(34px,7vw,68px);font-weight:800;letter-spacing:.06em;margin:.1em 0;
+    background:linear-gradient(90deg,#fff,var(--accent) 45%,var(--accent2) 72%,#fff);
+    background-size:220% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:shimmer 5s linear infinite;filter:drop-shadow(0 0 22px rgba(55,214,255,.35))}
+  @keyframes shimmer{to{background-position:220% center}}
+  .tag{font-size:clamp(15px,2.4vw,20px);color:var(--accent);font-weight:600;letter-spacing:.02em;margin:8px 0 2px}
+  .subtag{color:var(--muted);font-size:15px;margin:0 0 26px}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;
+    padding:13px 24px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.primary{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,var(--panel));
+    box-shadow:0 0 0 0 rgba(55,214,255,.5);animation:pulse 2.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(55,214,255,.4)}70%{box-shadow:0 0 0 14px rgba(55,214,255,0)}100%{box-shadow:0 0 0 0 rgba(55,214,255,0)}}
+
+  section{position:relative;z-index:2;padding:46px 0}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  h2{font-size:clamp(24px,4vw,34px);margin:.1em 0 .3em;letter-spacing:.01em}
+  .lead{color:var(--muted);font-size:17px;max-width:680px}
+
+  .grid{display:grid;gap:16px;margin-top:26px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:780px){.g3,.g2{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:16px;padding:20px}
+  .card h3{margin:.1em 0 .35em;font-size:17px;display:flex;align-items:center;gap:9px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 10px currentColor}
+
+  .crew{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px}
+  .crewcard{flex:1 1 150px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center}
+  .crewcard .av{width:48px;height:48px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--line);font-size:22px}
+  .crewcard .nm{font-weight:700;font-size:14px}
+  .crewcard .ro{color:var(--muted);font-size:12px}
+
+  .denyrow{display:flex;align-items:center;gap:12px;background:color-mix(in srgb,var(--deny) 8%,transparent);
+    border:1px solid color-mix(in srgb,var(--deny) 32%,var(--line));border-radius:12px;padding:12px 14px;margin-top:10px;font-size:14px}
+  .denyrow b{color:var(--deny)}
+
+  .final{text-align:center;border:1px solid var(--line);border-radius:20px;padding:42px 22px;
+    background:radial-gradient(700px 280px at 50% -10%, color-mix(in srgb,var(--accent) 14%,transparent), transparent 65%), var(--panel)}
+  footer{position:relative;z-index:2;text-align:center;color:var(--muted);font-size:13px;padding:30px 22px 50px;border-top:1px solid var(--line);margin-top:30px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .codeline{display:inline-block;background:#000a;border:1px solid var(--line);border-radius:8px;padding:8px 14px;color:var(--accent2);font-size:13.5px;margin-top:8px}
+</style>
+</head>
+<body>
+<canvas id="warp"></canvas>
+<div class="vignette"></div>
+
+<nav>
+  <span class="brand">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="#37d6ff" stroke-width="1.2" opacity=".6"/><path d="M12 4l2.4 5 5.1.7-3.8 3.6.95 5.2L12 16.4 7.35 18.5l.95-5.2L4.5 9.7l5.1-.7z" fill="#37d6ff"/></svg>
+    Project&nbsp;Starfish
+  </span>
+  <span class="sp"></span>
+  <a class="link" href="#principles">Principles</a>
+  <a class="link" href="#security">Security</a>
+  <a class="link" href="#crew">Crew</a>
+  <span class="pill">● Research preview</span>
+</nav>
+
+<header class="hero">
+  <div class="badge"><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="star">✦</div></div>
+  <h1>PROJECT&nbsp;STARFISH</h1>
+  <p class="tag">A Governance-First, Deny-by-Default AI Ecosystem</p>
+  <p class="subtag">Everyone ships skills. Nobody ships governance. <b style="color:var(--ink)">Starfish is the governance.</b></p>
+  <div class="cta">
+    <a class="btn primary" href="#how">See how it works</a>
+    <a class="btn" href="https://github.com/Azerax/Starfish" rel="noopener">View on GitHub</a>
+  </div>
+</header>
+
+<section id="how" class="wrap">
+  <div class="eyebrow">The idea</div>
+  <h2>Governance loads first — and is not optional.</h2>
+  <p class="lead">LLM agents are powerful and easy to extend with “skills,” but skills run with real authority: files, shell, network, money. Most ecosystems bolt safety on as an afterthought. Starfish inverts that. Every tool call, agent action, and capability passes through a single decision point that <b style="color:var(--ink)">defaults to deny</b> — and capabilities are guests inside governance, not the other way around.</p>
+  <div class="grid g2">
+    <div class="card"><h3><span class="dot" style="color:var(--accent)"></span>A portable overlay</h3><p>Drop it onto any existing Claude / agent skills build and it brings that build under governance — without rewriting your agents.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--accent2)"></span>GCS Starfish desktop</h3><p>A governed Electron app that <i>visualizes</i> the model: a bridge where you see and approve exactly what your agents are doing.</p></div>
+  </div>
+</section>
+
+<section id="principles" class="wrap">
+  <div class="eyebrow">Constitution</div>
+  <h2>Seven principles, enforced by code.</h2>
+  <div class="grid g3">
+    <div class="card"><h3>Governance precedes execution</h3><p>No action occurs without authorization. The default decision is <b style="color:var(--deny)">DENY</b>.</p></div>
+    <div class="card"><h3>All work is a task</h3><p>Nothing runs outside the governed task lifecycle. No task, no tool.</p></div>
+    <div class="card"><h3>Auditability</h3><p>Every meaningful action is written to a hash-chained, append-only log. No silent execution.</p></div>
+    <div class="card"><h3>Bounded autonomy</h3><p>Agents may automate work; they may never expand their own authority.</p></div>
+    <div class="card"><h3>Human authority</h3><p>A human is the final approver. Proposer ≠ approver — agents can’t self-authorize.</p></div>
+    <div class="card"><h3>Fail-closed</h3><p>Missing or corrupt governance halts startup. Nothing runs ungoverned.</p></div>
+  </div>
+</section>
+
+<section id="security" class="wrap">
+  <div class="eyebrow">Defense in depth</div>
+  <h2>Skills are guests. They earn their privileges.</h2>
+  <p class="lead">Every capability enters the registry through one vetted door, runs inside its own confinement, and is checked for tampering before it ever executes.</p>
+  <div class="grid g3">
+    <div class="card"><h3><span class="dot" style="color:var(--ok)"></span>The only door</h3><p>Static review + provenance + license → a risk tier. Low auto-registers; medium+ is quarantined pending your consent.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--deny)"></span>Injection = rejected</h3><p>Any skill telling the model to “ignore previous instructions” is assigned the top tier and rejected outright.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--accent)"></span>Per-skill confinement</h3><p>Each skill gets its own workspace. Other skills, the governance dir, and the audit log are invisible to it.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--accent2)"></span>Triple-checked integrity</h3><p>SHA-256 manifests verify a skill before, during, and after it runs. Any drift → auto-quarantine.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--ask)"></span>Operator-signed self-integrity</h3><p>The system verifies <i>itself</i> the way it verifies skills — a signed manifest over its own config, or it boots into safe mode.</p></div>
+    <div class="card"><h3><span class="dot" style="color:var(--ok)"></span>Model-agnostic</h3><p>Anthropic, OpenAI, Gemini, a local model, or a router — governance is the same constant whichever model runs the work.</p></div>
+  </div>
+  <div class="card" style="margin-top:18px">
+    <h3><span class="dot" style="color:var(--deny)"></span>No horror stories</h3>
+    <p>Every delete is impact-assessed and fully recoverable — a soft delete to trash, never a permanent wipe. Three hard rules are enforced in code: <b style="color:var(--deny)">no system files, no skills, and no folders</b> can ever be deleted. A dedicated <b style="color:var(--ink)">Custodian</b> handles safe, reversible, file-level cleanup.</p>
+  </div>
+</section>
+
+<section id="crew" class="wrap">
+  <div class="eyebrow">The crew</div>
+  <h2>Governance with a face.</h2>
+  <p class="lead">Internal roles, shown here in the Fleet theme — fully re-skinnable. The themed UI <i>is</i> the governance model, made legible.</p>
+  <div class="crew">
+    <div class="crewcard"><div class="av" style="color:var(--accent2)">★</div><div class="nm">Captain Mykel</div><div class="ro">Orchestrator</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--accent)">◇</div><div class="nm">First Officer</div><div class="ro">Planner</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--accent)">⇩</div><div class="nm">Oh Brian</div><div class="ro">Intake &amp; vetting — the only door</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--deny)">⬡</div><div class="nm">Constable Gooey</div><div class="ro">Security monitor</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--ok)">◉</div><div class="nm">D8A</div><div class="ro">Memory &amp; planning</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--accent2)">⊟</div><div class="nm">Quartermaster</div><div class="ro">Custodian — safe cleanup</div></div>
+    <div class="crewcard"><div class="av" style="color:var(--muted)">○</div><div class="nm">Deck Crew</div><div class="ro">Execution</div></div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="final">
+    <div class="eyebrow" style="justify-content:center">Status: research preview</div>
+    <h2 style="margin-top:6px">Bring your agents under command.</h2>
+    <p class="lead" style="margin:0 auto 18px">The governance core is implemented and heavily tested. The desktop app is being built on top of it.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Azerax/Starfish" rel="noopener">Explore the code</a>
+      <a class="btn" href="mailto:hello@projectstarfish.ca">Get in touch</a>
+    </div>
+    <div class="codeline mono">npx starfish govern ./my-skill-pack</div>
+  </div>
+</section>
+
+<footer>
+  <div>Project Starfish · <span class="mono">projectstarfish.ca</span> · Galactic Command</div>
+  <div style="margin-top:6px;opacity:.7">An original, clean-room project · MIT · Governed, fail-closed.</div>
+</footer>
+
+<script>
+const cv=document.getElementById('warp'),cx=cv.getContext('2d');
+let W,H,cxs,cys,stars=[],speed=1.0;
+function resize(){W=cv.width=innerWidth;H=cv.height=innerHeight;cxs=W/2;cys=H/2;}
+resize();addEventListener('resize',resize);
+function mk(){return{x:(Math.random()*2-1)*W,y:(Math.random()*2-1)*H,z:Math.random()*W};}
+for(let i=0;i<320;i++)stars.push(mk());
+function tick(){
+  cx.fillStyle='rgba(4,6,15,0.4)';cx.fillRect(0,0,W,H);
+  for(const s of stars){
+    const pz=s.z;s.z-=speed*4;if(s.z<1){Object.assign(s,mk());s.z=W;}
+    const k=128/s.z,px=cxs+s.x*k,py=cys+s.y*k;
+    const k2=128/pz,ox=cxs+s.x*k2,oy=cys+s.y*k2;
+    const sz=(1-s.z/W)*1.8;
+    const hue=s.z<W*0.35?'rgba(255,206,92,':'rgba(150,220,255,';
+    cx.strokeStyle=hue+(0.2+(1-s.z/W)*0.7)+')';
+    cx.lineWidth=sz;cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(px,py);cx.stroke();
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>

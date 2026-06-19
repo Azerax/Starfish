@@ -2,6 +2,7 @@
 // ingress = authorization (integrity → gate basics → risk → policy → combine); egress = containment.
 // Audit-before-act on every decision. Deterministic: pure function of (input, policy, context).
 import type { Decision, Face, ToolCall, BoundarySet, ToolDef, AgentDef, RiskTier } from './types';
+import { isSecretPath, classifyPath, screenEnv, type SecretPolicy } from './secrets';
 import type { Registry } from './registry';
 import type { AuditLog } from './audit';
 import { containCheck } from './boundary';
@@ -18,6 +19,8 @@ export class PDP {
   private policy: PolicyEngine;
   private taskBinding?: TaskBinding;
   private integrity?: IntegrityGate;
+  private secretPolicy?: SecretPolicy;
+  private secretGatekeeper?: string;
   private safeMode = false;
   private safeModeReason = '';
   constructor(
@@ -28,11 +31,15 @@ export class PDP {
     policy?: PolicyEngine,
     taskBinding?: TaskBinding,
     integrity?: IntegrityGate,
+    secretPolicy?: SecretPolicy,
+    secretGatekeeper?: string,
   ) {
     this.risk = risk ?? new RiskEngine();
     this.policy = policy ?? new PolicyEngine();
     this.taskBinding = taskBinding;
     this.integrity = integrity;
+    this.secretPolicy = secretPolicy;
+    this.secretGatekeeper = secretGatekeeper;
   }
 
   /** Lockdown: while in safe mode the PDP denies EVERYTHING (fail-closed) until the operator
@@ -90,6 +97,16 @@ export class PDP {
           if (typeof v === 'string') {
             const r = containCheck(v, mode, bs);
             if (!r.allowed) return { allow: false, reason: `boundary: ${r.reason}` };
+            // secret-scoped: reading .env / credentials is denied by default (explicit grant only)
+            if (mode === 'read' && isSecretPath(v) && !this.secretPolicy?.allowReadByAgent(call.agentId, v)) {
+              return { allow: false, riskTier: 'critical', reason: `secret-file access denied (${classifyPath(v).why}) — explicit operator grant required` };
+            }
+            // secret-scoped: ADD/MODIFY .env / credentials goes through the gatekeeper (Toby), content-screened.
+            if (mode === 'write' && isSecretPath(v)) {
+              if (call.agentId !== this.secretGatekeeper) return { allow: false, riskTier: 'critical', reason: `secret-file changes go through the gatekeeper (${this.secretGatekeeper ?? 'unset'}) — ${call.agentId} denied` };
+              const content = typeof call.input.content === 'string' ? call.input.content : '';
+              if (content) { const sc = screenEnv(content); if (!sc.ok) return { allow: false, riskTier: 'critical', reason: `poisoned .env rejected: ${sc.findings.join('; ')}` }; }
+            }
           }
         }
       }

@@ -2,7 +2,7 @@
   "name": "starfish",
   "private": true,
   "version": "0.0.0",
-  "description": "Project Starfish — portable governance overlay for Claude builds (monorepo).",
+  "description": "Project Starfish \u2014 a governance-first, deny-by-default AI ecosystem (monorepo).",
   "license": "MIT",
   "workspaces": [
     "packages/*"
@@ -17,11 +17,22 @@
     "scan:ip": "node scripts/ip-denylist-scan.mjs",
     "sbom": "node scripts/sbom.mjs",
     "ci": "npm run typecheck && npm run test && npm run test:conformance && npm run test:determinism && npm run lint:deps && npm run scan:ip && npm run sbom",
-    "art:fleet": "node art/generate.mjs"
+    "art:fleet": "node art/generate.mjs",
+    "build:cli": "node scripts/bundle-cli.mjs",
+    "prepare": "node scripts/bundle-cli.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.7.5",
+    "esbuild": "^0.28.1",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.9",
-    "@types/node": "^22.7.5"
+    "vitest": "^2.1.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Azerax/Starfish.git"
+  },
+  "homepage": "https://projectstarfish.ca",
+  "bin": {
+    "starfish": "./packages/cli/dist/cli.mjs"
   }
 }

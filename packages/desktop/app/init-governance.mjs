@@ -27,7 +27,7 @@ const agents = [
 ];
 const policies = [
   { id: 'p-read', subject: '*', action: 'fs.read', resource: '*', effect: 'allow' },
-  { id: 'p-delete', subject: 'custodian', action: 'fs.delete', resource: '*', effect: 'allow' },
+  { id: 'p-delete', subject: 'agent:custodian', action: 'tool:fs.delete', resource: '*', effect: 'allow' },
   { id: 'p-commit', subject: 'worker', action: 'git_commit', resource: '*', effect: 'ask' },
 ];
 

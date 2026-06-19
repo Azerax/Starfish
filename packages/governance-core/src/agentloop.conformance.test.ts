@@ -19,7 +19,7 @@ const finalMsg = (text: string, tokens = 5) =>
 
 function harness(opts: {
   tools: ToolDef[]; rules?: unknown[]; script: string[]; execContent?: string;
-  budget?: { hardTokens?: number }; maxSteps?: number;
+  budget?: { hardTokens?: number }; maxSteps?: number; enforceClaims?: boolean; observe?: (c: ToolCall, r: { ok: boolean; content: string }, ev: { testsPassed: string[] }) => void;
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'sf-loop-'));
   writeFileSync(join(dir, 'tools.json'), JSON.stringify(opts.tools));
@@ -38,7 +38,7 @@ function harness(opts: {
   const runner = new HostRunner({ tokens, keyResolver: () => 'sk-test', fetcher, audit });
   const executed: ToolCall[] = [];
   const execute = (call: ToolCall) => { executed.push(call); return { ok: true, content: opts.execContent ?? `result of ${call.tool}` }; };
-  const loop = new AgentLoop({ dispatcher, runner, pdp, boundaryFor: () => BS, execute, audit, maxSteps: opts.maxSteps ?? 6 });
+  const loop = new AgentLoop({ dispatcher, runner, pdp, boundaryFor: () => BS, execute, audit, maxSteps: opts.maxSteps ?? 6, enforceClaims: opts.enforceClaims, observe: opts.observe as never });
   return { loop, executed, auditPath: join(dir, 'audit.jsonl') };
 }
 const RUN = { agentId: 'worker', task: { id: 'm1', riskTier: 'low' as const }, messages: [{ role: 'user' as const, content: 'do it' }] };
@@ -89,7 +89,7 @@ describe('agent-run loop — governed orchestration turn', () => {
   it('contains a tool result that leaks secret material (egress)', async () => {
     const { loop } = harness({
       tools: [{ id: 'read_file', category: 'read', pathParams: ['path'], allowedAgents: '*' }],
-      script: [toolMsg('read_file', { path: '/tmp/id_rsa' }), finalMsg('done')],
+      script: [toolMsg('read_file', { path: '/tmp/notes.txt' }), finalMsg('done')],
       execContent: '-----BEGIN RSA PRIVATE KEY-----\nMIIEabc...',
     });
     const r = await loop.run(RUN);
@@ -119,6 +119,46 @@ describe('agent-run loop — governed orchestration turn', () => {
     const r = await loop.run(RUN);
     expect(r.stopReason).toBe('budget-hard');
     expect(readFileSync(auditPath, 'utf8')).toContain('agent-stop');
+  });
+});
+
+
+describe('agent-run loop — Evidence Gate (no unbacked word)', () => {
+  it('blocks a fabricated completion and retries, then accepts once the deed is real', () => {
+    // turn 1: claims "created /proj/out.txt" with NO tool call -> unbacked -> retry; turn 2: plain done.
+    const { loop } = harness({
+      tools: [{ id: 'read_file', category: 'read', pathParams: ['path'], allowedAgents: '*' }],
+      script: [finalMsg('Done — I created /proj/out.txt'), finalMsg('Acknowledged.')],
+      maxSteps: 4, enforceClaims: true,
+    });
+    return loop.run(RUN).then((r) => {
+      expect(r.stopReason).toBe('completed');
+      expect(r.steps).toBeGreaterThanOrEqual(2);                 // it had to retry
+      expect(r.transcript.some((m) => m.content.includes('Evidence Gate'))).toBe(true);
+    });
+  });
+
+  it('stops as claim-unbacked if the agent keeps fabricating to the step cap', () => {
+    const { loop } = harness({
+      tools: [{ id: 'read_file', category: 'read', pathParams: ['path'], allowedAgents: '*' }],
+      script: [finalMsg('I ran the full pipeline and everything passes.')],   // repeated; never any tool call
+      maxSteps: 2, enforceClaims: true,
+    });
+    return loop.run(RUN).then((r) => {
+      expect(r.stopReason).toBe('claim-unbacked');
+      expect((r.unbackedClaims ?? []).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('accepts a green claim backed by an observed passing test', () => {
+    // observe teaches evidence from the tool output; the executed tool reports a pass.
+    const { loop } = harness({
+      tools: [{ id: 'run_tests', category: 'read', pathParams: [], allowedAgents: '*' }],
+      script: [toolMsg('run_tests', {}), finalMsg('test_login passes.')],
+      maxSteps: 4, enforceClaims: true, execContent: 'PASSED test_login',
+      observe: (_c, res, ev) => { const m = res.content.match(/PASSED (test_[A-Za-z0-9]+)/); if (m) ev.testsPassed.push(m[1]); },
+    });
+    return loop.run(RUN).then((r) => { expect(r.stopReason).toBe('completed'); expect(r.output).toMatch(/passes/); });
   });
 });
 

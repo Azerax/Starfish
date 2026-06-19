@@ -11,6 +11,7 @@ import type { ProviderKind, ChatTurn } from './provider';
 import type { PDP } from './pdp';
 import type { Dispatcher, DispatchTask } from './dispatch';
 import type { HostRunner } from './runner';
+import { evidenceGate, EMPTY_EVIDENCE, type TurnEvidence, type ClaimFinding } from './claims';
 
 export interface ToolRequest { id: string; name: string; input: Record<string, unknown>; }
 export interface AgentTurn { text: string; toolCalls: ToolRequest[]; stop: 'end' | 'tool'; }
@@ -27,11 +28,16 @@ export interface AgentLoopDeps {
   parse?: ResponseParser;
   audit?: AuditLog;
   maxSteps?: number;
+  // Evidence Gate: when on, the turn's closing CLAIMS are checked against the turn's recorded deeds;
+  // an unbacked claim blocks completion and the agent retries against a one-line correction.
+  enforceClaims?: boolean;
+  citations?: string[];                                           // known citation keys (e.g. CITATIONS.md)
+  observe?: (call: ToolCall, result: ToolExecResult, ev: TurnEvidence) => void;  // teach evidence from tool OUTPUT (tests/commits)
 }
 export interface AgentRunInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; }
 export interface ToolRun { tool: string; allowed: boolean; contained?: boolean; }
-export type StopReason = 'completed' | 'max-steps' | 'budget-hard' | 'no-progress';
-export interface AgentRunResult { output: string; steps: number; stopReason: StopReason; toolRuns: ToolRun[]; transcript: ChatTurn[]; }
+export type StopReason = 'completed' | 'max-steps' | 'budget-hard' | 'no-progress' | 'claim-unbacked';
+export interface AgentRunResult { output: string; steps: number; stopReason: StopReason; toolRuns: ToolRun[]; transcript: ChatTurn[]; unbackedClaims?: ClaimFinding[]; }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const safeJson = (t: string): unknown => { try { return JSON.parse(t); } catch { return undefined; } };
@@ -84,6 +90,7 @@ export class AgentLoop {
     const messages: ChatTurn[] = input.messages.map((m) => ({ ...m }));
     const toolRuns: ToolRun[] = [];
     let lastText = '';
+    const ev: TurnEvidence = { ...EMPTY_EVIDENCE, artifacts: [], commits: [], testsPassed: [], testsFailed: [], citations: [...(this.deps.citations ?? [])] };
 
     for (let step = 1; step <= this.maxSteps; step++) {
       let plan;
@@ -99,6 +106,16 @@ export class AgentLoop {
       lastText = turn.text || lastText;
 
       if (turn.toolCalls.length === 0) {
+        if (this.deps.enforceClaims) {
+          const verdict = evidenceGate(turn.text, ev);
+          if (!verdict.ok) {
+            const bad = verdict.findings.filter((x) => !x.backed);
+            for (const fnd of bad) audit?.append({ actor: input.agentId, domain: 'governance', action: 'claim-unbacked', target: input.task.id, decision: 'deny', reason: `${fnd.claim.kind}: ${fnd.reason}` });
+            const correction = 'Evidence Gate: unbacked claim(s) — ' + bad.map((b) => `[${b.claim.kind}] ${b.reason}. ${b.retryHint ?? ''}`).join(' | ');
+            if (step < this.maxSteps) { messages.push({ role: 'user', content: correction }); continue; }   // block-and-retry
+            return { output: turn.text, steps: step, stopReason: 'claim-unbacked', toolRuns, transcript: messages, unbackedClaims: bad };
+          }
+        }
         audit?.append({ actor: input.agentId, domain: 'system', action: 'agent-complete', target: input.task.id, reason: `steps=${step}` });
         return { output: turn.text, steps: step, stopReason: 'completed', toolRuns, transcript: messages };
       }
@@ -117,6 +134,9 @@ export class AgentLoop {
         }
         progressed = true;
         const exec = await execute(call);
+        ev.anyToolCall = true;
+        if (typeof call.input.path === 'string' && /write|edit|create|save|delete/i.test(call.tool)) ev.artifacts.push(call.input.path);
+        this.deps.observe?.(call, exec, ev);
         const eg = pdp.decide('egress', { agentId: input.agentId, tool: tc.name, input: { result: exec.content }, taskId: input.task.id }, bs);
         const contained = !eg.allow;
         messages.push({ role: 'tool', content: contained ? `[contained: ${eg.reason}]` : exec.content });

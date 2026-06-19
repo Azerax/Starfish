@@ -17,6 +17,10 @@ export interface OnboardingResult { registered: string[]; quarantined: string[];
 
 export interface ProviderView { id: string; name: string; kind: string; model: string; baseUrl?: string; requiresKey: boolean; hasKey: boolean; dataEgress: boolean; }
 
+export interface DeletionImpactView { tier: 'low' | 'medium' | 'high' | 'critical'; decision: 'allow' | 'ask' | 'deny'; hard: boolean; reversible: boolean; files: number; bytes: number; reasons: string[]; }
+export interface TrashEntryView { id: string; originalPath: string; trashedAt: string; name: string; }
+export interface DeleteResultView { ok: boolean; reason: string; impact: DeletionImpactView; trashedTo?: string; }
+
 export interface GovernanceBridge {
   governed: true;
   getCrew(): Promise<CrewMemberView[]>;
@@ -36,6 +40,11 @@ export interface GovernanceBridge {
   getActiveProvider(): Promise<{ id: string; model: string }>;
   setActiveProvider(id: string, model?: string): Promise<{ ok: boolean }>;
   setProviderKey(id: string, key: string): Promise<{ ok: boolean; stored: 'keychain' | 'fallback' }>;
+  assessDelete(path: string, recursive?: boolean): Promise<DeletionImpactView>;
+  deleteFile(path: string, opts?: { recursive?: boolean; approved?: boolean }): Promise<DeleteResultView>;
+  listTrash(): Promise<TrashEntryView[]>;
+  restoreTrash(id: string): Promise<{ ok: boolean; restoredTo?: string; reason: string }>;
+  purgeTrash(id: string, confirm: true): Promise<{ ok: boolean }>;
 }
 
 declare global { interface Window { starfish?: GovernanceBridge } }

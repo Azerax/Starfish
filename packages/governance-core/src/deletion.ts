@@ -11,6 +11,7 @@
 // audited. Bulk/file cleanup is the job of the Custodian agent (policy-gated), still bound by all of
 // the above — the Custodian is accountable cleanup, never an exception to the hard rules.
 import { containCheck } from './boundary';
+import { isSecretPath, classifyPath } from './secrets';
 import type { RiskTier, ToolCall, BoundarySet } from './types';
 import type { PDP } from './pdp';
 import type { AuditLog } from './audit';
@@ -28,6 +29,7 @@ export interface DeletionConfig {
   protectedTrees?: string[];   // extra no-delete subtrees
   protectedRoots?: string[];   // extra no-delete-at-or-above roots
   systemTrees?: string[];      // extra OS trees to forbid
+  secretGatekeeper?: string;   // only this agent may remove a secret file (.env/credentials) — like Toby for skills
   maxFiles?: number;           // above => high (default 1000)
   maxBytes?: number;           // above => high (default 500 MB)
   fileCap?: number;            // measure cap (default 5000)
@@ -102,6 +104,12 @@ export interface GovernedDeleteResult { ok: boolean; impact: DeletionImpact; tra
 /** The ONE sanctioned delete path: hard-rule + blast-radius gate + PDP gate, then SOFT delete. */
 export function governedDelete(pdp: PDP, call: ToolCall, bs: BoundarySet, deps: GovernedDeleteDeps): GovernedDeleteResult {
   const target: DeletionTarget = { path: typeof call.input.path === 'string' ? call.input.path : '', recursive: call.input.recursive === true };
+  // secret files (.env / credentials) are removed only by the gatekeeper (Toby), like skills.
+  if (isSecretPath(target.path) && call.agentId !== deps.cfg.secretGatekeeper) {
+    const impact0 = assessDeletion(target, deps.cfg, deps.probe, bs);
+    deps.audit.append({ actor: call.agentId, domain: 'governance', action: 'delete-blocked', target: target.path, decision: 'deny', riskTier: 'critical', reason: `secret-file removal goes through the gatekeeper (${deps.cfg.secretGatekeeper ?? 'unset'}) — ${classifyPath(target.path).why}` });
+    return { ok: false, impact: impact0, reason: `secret-file removal goes through the gatekeeper (${deps.cfg.secretGatekeeper ?? 'unset'})` };
+  }
   const impact = assessDeletion(target, deps.cfg, deps.probe, bs);
   deps.audit.append({ actor: call.agentId, domain: 'governance', action: 'delete-assessed', target: target.path, riskTier: impact.tier,
     reason: `tier=${impact.tier} hard=${impact.hard} files=${impact.files}${impact.truncated ? '+' : ''} decision=${impact.decision}`, detail: { reasons: impact.reasons, protectedHits: impact.protectedHits } });

@@ -1,17 +1,5 @@
-node_modules/
+
+# build artifacts
+packages/*/dist/
 dist/
-out/
-*.log
-sbom.json
-.DS_Store
-# build / probe artifacts (not source)
-*.tgz
-.probe
-*.probe
-
-# secrets — never commit
 .env
-.env.*
-
-# generated art intermediates (keep the optimized .webp)
-art/fleet/_raw/
