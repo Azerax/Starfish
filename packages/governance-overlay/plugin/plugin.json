@@ -2,7 +2,7 @@
   "name": "starfish-governance",
   "version": "0.7.0",
   "description": "Drop governance onto any Claude build: default-deny, vetted capabilities, audit, bounded autonomy.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "skills": ["./skills/starfish-govern"],
   "hooks": {
     "PreToolUse": "@starfish/governance-hooks",
