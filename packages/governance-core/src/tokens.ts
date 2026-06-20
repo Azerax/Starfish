@@ -40,6 +40,15 @@ export class TokenGovernor {
     return 'ok';
   }
 
+  /** Read-only per-scope view for the Bridge: every scope that has a budget OR recorded usage. */
+  snapshot(): { scope: string; status: BudgetStatus; usd: number; tokens: number; usdLimit: number; tokensLimit: number }[] {
+    const scopes = new Set<string>([...this.budgets.keys(), ...this.usage.keys()]);
+    return [...scopes].map((scope) => {
+      const u = this.usage.get(scope) ?? { usd: 0, tokens: 0 };
+      const b = this.budgets.get(scope) ?? {};
+      return { scope, status: this.status(scope), usd: u.usd, tokens: u.tokens, usdLimit: b.hardUsd ?? 0, tokensLimit: b.hardTokens ?? 0 };
+    });
+  }
   isPaused(agentId: string): boolean { return this.paused.has(agentId); }
   resume(agentId: string, by: string): void {
     this.paused.delete(agentId);

@@ -2,7 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const bridge = {
   governed: true as const,
+  getBaseRoot: () => ipcRenderer.invoke('setup:getBaseRoot'),
+  pickBaseDir: () => ipcRenderer.invoke('setup:pickDir'),
+  setBaseRoot: (dir, operator, theme) => ipcRenderer.invoke('setup:setBaseRoot', { dir, operator, theme }),
   getCrew: () => ipcRenderer.invoke('gov:getCrew'),
+  getAgentDetail: (id) => ipcRenderer.invoke('gov:getAgentDetail', id),
   getDecisions: (limit?: number) => ipcRenderer.invoke('gov:getDecisions', limit),
   getAudit: (sinceSeq?: number) => ipcRenderer.invoke('gov:getAudit', sinceSeq),
   getTasks: (status?: string) => ipcRenderer.invoke('gov:getTasks', status),

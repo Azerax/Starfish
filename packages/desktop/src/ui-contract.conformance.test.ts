@@ -6,6 +6,7 @@ import type { GovernanceBridge, ActionResult } from './index';
 const bridge: GovernanceBridge = {
   governed: true,
   getCrew: async () => [{ id: 'michael', role: 'Orchestrator', status: 'active', currentTaskId: '#412', riskTier: 'medium' }],
+  getAgentDetail: async (id) => ({ id, role: 'Orchestrator', domain: 'orchestration', status: 'active', riskTier: 'medium', currentTaskId: '#412', allowedTools: ['delegate'], boundary: { visibility: ['/proj'], write: ['/proj/agents/michael'] } }),
   getDecisions: async () => [],
   getAudit: async () => [],
   getTasks: async () => [],
@@ -16,6 +17,10 @@ const bridge: GovernanceBridge = {
   subscribe: () => () => {},
   requestAction: async (): Promise<ActionResult> => ({ decision: { allow: false, ask: true, reason: 'human approval required (proposer != approver)' }, applied: false }),
   getOnboarding: async () => ({ done: false, operator: 'op', theme: 'fleet' }),
+  getBaseRoot: async () => ({ root: '/root', locked: false, suggested: '/root' }),
+  pickBaseDir: async () => ({ path: null }),
+  setBaseRoot: async (dir: string) => ({ ok: true, root: dir, reason: 'seeded' }),
+
   getDefaultSkills: async () => [{ id: 'xlsx', kind: 'skill', category: 'document', summary: 's', expectedRisk: 'medium', plugin: 'document-skills' }],
   completeOnboarding: async () => ({ registered: [], quarantined: ['xlsx'], approved: [], missing: [] }),
   getProviders: async () => [{ id: 'anthropic', name: 'Anthropic (Claude)', kind: 'anthropic', model: 'claude-opus-4-8', requiresKey: true, hasKey: false, dataEgress: false }],

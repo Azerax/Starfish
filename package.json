@@ -2,7 +2,7 @@
   "name": "starfish",
   "private": true,
   "version": "0.0.0",
-  "description": "Project Starfish \u2014 a governance-first, deny-by-default AI ecosystem (monorepo).",
+  "description": "Project Starfish — a governance-first, deny-by-default AI ecosystem (monorepo).",
   "license": "Apache-2.0",
   "workspaces": [
     "packages/*"
@@ -25,7 +25,7 @@
     "@types/node": "^22.7.5",
     "esbuild": "^0.28.1",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.9"
   },
   "repository": {
     "type": "git",

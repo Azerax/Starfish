@@ -29,8 +29,17 @@ export interface TaskView { task: Task; needsApproval: boolean; proposer?: strin
 export type Channel = 'decisions' | 'audit' | 'tasks' | 'services' | 'budgets' | 'monitor' | 'buffer';
 export type Unsubscribe = () => void;
 
+export interface AgentDetailView {
+  id: string; role: string; domain: string; status: CrewMemberView['status']; riskTier: RiskTier;
+  currentTaskId?: string;
+  allowedTools: string[];                       // capabilities this agent may invoke (deny-by-default otherwise)
+  boundary: { visibility: string[]; write: string[] };  // where it can see / where it can write
+  notes?: string[];                             // governance notes (e.g. read-only monitor, secret gatekeeper)
+}
+
 export interface GovernanceReadApi {
   getCrew(): Promise<CrewMemberView[]>;
+  getAgentDetail(id: string): Promise<AgentDetailView>;  // boundary + allowlist + recent posture for one crew member
   getDecisions(limit?: number): Promise<DecisionLogEntry[]>;
   getAudit(sinceSeq?: number): Promise<AuditEvent[]>;
   getTasks(status?: TaskStatus): Promise<TaskView[]>;
@@ -49,7 +58,10 @@ export type UiIntent =
   | { kind: 'capability.approve'; capabilityId: string }
   | { kind: 'capability.quarantine'; capabilityId: string }
   | { kind: 'capability.reject'; capabilityId: string; reason?: string }
-  | { kind: 'idea.promote'; nodeIds: string[] };
+  | { kind: 'idea.promote'; nodeIds: string[] }
+  | { kind: 'approve'; decisionId: string }       // operator resolves a broker-pending decision
+  | { kind: 'deny'; decisionId: string }
+  | { kind: 'resume'; agentId: string };           // clear a token-governor hard pause
 export interface ActionRequest { actor: string; intent: UiIntent; }
 export interface ActionResult { decision: Decision; applied: boolean; }
 export interface GovernanceActionApi { requestAction(req: ActionRequest): Promise<ActionResult>; }
@@ -61,6 +73,10 @@ export interface CompleteOnboardingInput { operator: string; theme: string; enab
 export interface OnboardingResult { registered: string[]; quarantined: string[]; approved: string[]; missing: string[] }
 export interface OnboardingApi {
   getOnboarding(): Promise<OnboardingState>;
+  getBaseRoot(): Promise<{ root: string; locked: boolean; lockedBy?: string; suggested: string }>;
+  pickBaseDir(): Promise<{ path: string | null }>;
+  setBaseRoot(dir: string, operator?: string, theme?: string): Promise<{ ok: boolean; root: string; reason: string }>;
+
   getDefaultSkills(): Promise<DefaultSkillView[]>;
   // Persists operator/theme, marks onboarded, and runs governDefaults (vet -> CapabilityLedger,
   // consenting to enabledIds). Nothing is registered except via that governed path.

@@ -54,4 +54,14 @@ export class AuditLog {
   /** Current chain head: the last written event's seq + hash (GENESIS/-1 when empty). Used to
    *  ANCHOR the log against tail truncation / rollback (a hash chain alone can't detect those). */
   head(): { seq: number; headHash: string } { return { seq: this.seq - 1, headHash: this.prevHash }; }
+
+  /** Read-only tail of the chain (newest last). `sinceSeq` returns events with seq >= sinceSeq;
+   *  `limit` caps to the most recent N. Reads from disk; never mutates. */
+  recent(limit?: number, sinceSeq?: number): AuditEvent[] {
+    if (!existsSync(this.path)) return [];
+    let evs = readFileSync(this.path, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AuditEvent);
+    if (sinceSeq !== undefined) evs = evs.filter((e) => e.seq >= sinceSeq);
+    if (limit !== undefined && evs.length > limit) evs = evs.slice(evs.length - limit);
+    return evs;
+  }
 }

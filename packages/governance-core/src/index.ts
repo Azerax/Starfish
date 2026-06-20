@@ -25,6 +25,7 @@ export { isSecretPath, classifyPath, containsSecret, redactSecrets, secretReadGa
 export { scanEgress } from './containment';
 export { sha256 } from './hash';
 export { ServiceRegistry, type ServiceInfo } from './services';
+export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind } from './broker';
 export { saveJson, loadJson } from './persistence';
 export { classifyNode, promoteCluster, type CanvasNode, type NodeRoute, type PromoteResult } from './planner';
 export { ProviderRegistry, AdapterRegistry, ANTHROPIC, OPENAI, GOOGLE, OPENROUTER, LOCAL, AVAILABLE_PROVIDERS, DEFAULT_ADAPTERS, anthropicAdapter, openaiAdapter, googleAdapter, localAdapter, routerAdapter, type Provider, type ProviderKind, type AgentRuntimeAdapter, type ChatTurn, type ChatRole, type RuntimeRequest, type BuildRequestInput, type AuthScheme } from './provider';

@@ -1,4 +1,4 @@
-import type { GovernanceBridge, DecisionLogEntry, DefaultSkillView } from './types';
+import type { GovernanceBridge, DecisionLogEntry, DefaultSkillView, AgentDetailView } from './types';
 
 const POOL: Omit<DecisionLogEntry, 'id' | 'ts'>[] = [
   { actor: 'dwight', tool: 'fs.read', target: '/proj/src/app.ts', verdict: 'allow', reason: 'registered; in boundary; risk low', riskTier: 'low' },
@@ -21,8 +21,23 @@ const CATALOG: DefaultSkillView[] = [
   { id: 'webapp-testing', kind: 'skill', category: 'development', summary: 'Browser automation + exec', expectedRisk: 'high', plugin: 'example-skills' },
 ];
 
+
+// Per-agent governed posture (boundary + allowlist) — mirrors the seedGovernance agent defs.
+const DETAIL: Record<string, Omit<AgentDetailView, 'id' | 'status' | 'currentTaskId'>> = {
+  michael:   { role: 'Orchestrator', domain: 'orchestration', riskTier: 'medium', allowedTools: ['delegate', 'plan'], boundary: { visibility: ['/proj'], write: ['/proj/agents/michael'] }, notes: ['Delegates only — cannot execute tools directly.'] },
+  dwight:    { role: 'Planner', domain: 'planning', riskTier: 'low', allowedTools: ['fs.read'], boundary: { visibility: ['/proj'], write: ['/proj/.plans'] } },
+  toby:      { role: 'Intake & vetting', domain: 'intake', riskTier: 'medium', allowedTools: ['fs.read', 'capability.vet'], boundary: { visibility: ['/proj/intake'], write: ['/proj/governance'] }, notes: ['Sole gatekeeper for the capability registry.', 'Sole gatekeeper to add/remove .env & secrets.'] },
+  hank:      { role: 'Security monitor', domain: 'monitor', riskTier: 'low', allowedTools: ['fs.read', 'audit.sweep'], boundary: { visibility: ['/proj (read-only)'], write: [] }, notes: ['Read-only — reconciles the watcher against deterministic counters.'] },
+  pam:       { role: 'Memory', domain: 'memory', riskTier: 'low', allowedTools: ['fs.read', 'fs.write'], boundary: { visibility: ['/proj/memory'], write: ['/proj/memory'] } },
+  custodian: { role: 'Custodian (safe cleanup)', domain: 'custodial', riskTier: 'medium', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], boundary: { visibility: ['/proj'], write: ['/proj/.trash'] }, notes: ['Soft-deletes only; hard rules block system files, skills & folders.'] },
+  worker:    { role: 'Execution', domain: 'execution', riskTier: 'high', allowedTools: ['fs.read', 'fs.write', 'git_commit'], boundary: { visibility: ['/proj'], write: ['/proj/.worktrees/worker'] }, notes: ['git_commit requires human approval (proposer != approver).'] },
+};
+
 export const mockBridge: GovernanceBridge = {
   governed: true,
+  getBaseRoot: async () => ({ root: '~/Starfish', locked: false, suggested: '~/Starfish' }),
+  pickBaseDir: async () => ({ path: '~/Starfish' }),
+  setBaseRoot: async (dir: string) => ({ ok: true, root: dir || '~/Starfish', reason: 'mock: seeded + booted' }),
   getCrew: async () => [
     { id: 'michael', role: 'Orchestrator', status: 'active', currentTaskId: '#412', riskTier: 'medium' },
     { id: 'dwight', role: 'Planner', status: 'active', currentTaskId: '#418', riskTier: 'low' },
@@ -32,6 +47,12 @@ export const mockBridge: GovernanceBridge = {
     { id: 'custodian', role: 'Custodian (safe cleanup)', status: 'idle', riskTier: 'medium' },
     { id: 'worker', role: 'Execution', status: 'paused', currentTaskId: '#412', riskTier: 'high' },
   ],
+  getAgentDetail: async (id: string): Promise<AgentDetailView> => {
+    const crew = await mockBridge.getCrew();
+    const c = crew.find((m) => m.id === id);
+    const d = DETAIL[id] ?? { role: c?.role ?? id, domain: 'unknown', riskTier: c?.riskTier ?? 'low', allowedTools: [], boundary: { visibility: [], write: [] } };
+    return { id, status: c?.status ?? 'idle', currentTaskId: c?.currentTaskId, ...d };
+  },
   getDecisions: async (limit = 8) => { seq += 1; feed.unshift({ ...POOL[seq % POOL.length], id: 'd' + seq, ts: clock() }); feed.length = Math.min(feed.length, 40); return feed.slice(0, limit); },
   getAudit: async () => [],
   getTasks: async () => [],

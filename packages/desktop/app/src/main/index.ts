@@ -1,21 +1,34 @@
 // Electron main — ring-3 host. Boots governance FIRST (fail-closed), shows the splash, and on
 // first run presents the OnboardingWizard whose intake routes through governDefaults
 // (vet -> CapabilityLedger). Nothing is registered except via that governed path.
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, dialog } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete } from '@starfish/desktop';
+import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
+  crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView } from '@starfish/desktop';
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults } from '@starfish/governance-overlay';
-import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, type KeyResolver, type DeletionConfig, type BoundarySet } from '@starfish/governance-core';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, type KeyResolver, type DeletionConfig, type BoundarySet } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let root = '';
 let host: Host | undefined;
+let broker: DecisionBroker | undefined;
+// Paths an agent may never see/write — kept in sync with createHost's forbid list.
+const forbidList = (): string[] => [join(root, 'governance'), join(root, 'audit.jsonl'), join(root, 'state')];
+// Base root resolution order: --starfish-dir <path> (passed by `starfish init` launch) > env > cwd/.starfish.
+function resolveBaseRoot(): string {
+  const a = process.argv;
+  const i = a.indexOf('--starfish-dir');
+  if (i >= 0 && a[i + 1] && !a[i + 1].startsWith('--')) return a[i + 1];
+  const eq = a.find((x) => x.startsWith('--starfish-dir='));
+  if (eq) return eq.split('=').slice(1).join('=');
+  return process.env.STARFISH_PROJECT_ROOT ?? join(process.cwd(), '.starfish');
+}
 let splash: BrowserWindow | null = null;
 let win: BrowserWindow | null = null;
 const providerReg = new ProviderRegistry(AVAILABLE_PROVIDERS, 'anthropic');
@@ -35,8 +48,72 @@ async function bootGovernance(): Promise<void> {
       listenPath: process.platform === 'win32' ? '\\\\.\\pipe\\starfish-pdp' : join(root, 'pdp.sock'),
     });
     console.log('[governance] booted — fail-closed checks passed');
+    // Human-in-the-loop seam: a quarantined capability is a real 'needs operator' item — surface each.
+    broker = new DecisionBroker(host.governor.audit, join(root, 'state', 'decisions.json'));
+    for (const c of host.governor.capabilities.snapshot()) {
+      if (c.status === 'quarantined') broker.file({ actor: 'toby', kind: 'capability', tool: 'capability:vet', target: c.id, refId: c.id, riskTier: c.riskTier, reason: `${c.kind} quarantined (tier=${c.riskTier}) — operator consent required` });
+    }
   } catch (err) {
     console.error('[governance] fail-closed boot error (run `npm run init:gov`):', (err as Error).message);
+  }
+}
+
+// ---- single-init-per-install lock. Whichever path (CLI `starfish init` OR the desktop wizard) seeds
+// the base root first writes this; the other refuses to re-init. ----
+function lockFile(dir: string): string { return join(dir, '.starfish-init.lock'); }
+function isInitialized(dir: string): boolean { return existsSync(lockFile(dir)); }
+function readLock(dir: string): { by?: string; at?: string; baseRoot?: string } { try { return JSON.parse(readFileSync(lockFile(dir), 'utf8')); } catch { return {}; } }
+
+// Seed governance + the governed workspace tree at `dir` (the base root = absolute visibility ceiling),
+// then write the init lock. Mirrors `starfish init` so the two setups produce identical installs.
+function seedGovernanceAt(dir: string, operator: string, theme: string, by: 'cli' | 'ui'): void {
+  const gov = join(dir, 'governance');
+  mkdirSync(gov, { recursive: true }); mkdirSync(join(dir, 'state'), { recursive: true });
+  const auditPath = join(dir, 'audit.jsonl'); if (!existsSync(auditPath)) writeFileSync(auditPath, '');
+  const tools = [
+    { id: 'fs.read', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
+    { id: 'fs.list', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
+    { id: 'fs.write', category: 'write', pathParams: ['path'], allowedAgents: ['worker', 'pam'], riskTier: 'medium' },
+    { id: 'fs.delete', category: 'write', pathParams: ['path'], allowedAgents: ['custodian'], riskTier: 'medium' },
+    { id: 'git_commit', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },
+  ];
+  const agents = [
+    { id: 'michael', domain: 'orchestration', riskTier: 'medium' },
+    { id: 'dwight', domain: 'planning', allowedTools: ['fs.read'], riskTier: 'low' },
+    { id: 'toby', domain: 'intake', allowedTools: ['fs.read'], riskTier: 'medium' },
+    { id: 'hank', domain: 'monitor', allowedTools: ['fs.read'], riskTier: 'low' },
+    { id: 'pam', domain: 'memory', allowedTools: ['fs.read', 'fs.write'], riskTier: 'low' },
+    { id: 'custodian', domain: 'custodial', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], riskTier: 'medium' },
+    { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.write', 'git_commit'], riskTier: 'high' },
+  ];
+  const policies = [
+    { id: 'p-read', subject: '*', action: 'tool:fs.read', resource: '*', effect: 'allow' },
+    { id: 'p-delete', subject: 'agent:custodian', action: 'tool:fs.delete', resource: '*', effect: 'allow' },
+    { id: 'p-commit', subject: 'agent:worker', action: 'tool:git_commit', resource: '*', effect: 'ask' },
+  ];
+  writeFileSync(join(gov, 'tools.json'), JSON.stringify(tools, null, 2));
+  writeFileSync(join(gov, 'agents.json'), JSON.stringify(agents, null, 2));
+  writeFileSync(join(gov, 'policies.json'), JSON.stringify(policies, null, 2));
+  for (const t of tools) { const td = join(dir, 'tools', t.id); mkdirSync(td, { recursive: true }); const m = join(td, 'tool.json'); if (!existsSync(m)) writeFileSync(m, JSON.stringify({ id: t.id, category: t.category, riskTier: t.riskTier, builtin: true }, null, 2)); }
+  for (const a of agents) { mkdirSync(join(dir, 'agents', a.id, 'workspace'), { recursive: true }); const m = join(dir, 'agents', a.id, 'agent.json'); if (!existsSync(m)) writeFileSync(m, JSON.stringify({ id: a.id, domain: a.domain, riskTier: a.riskTier }, null, 2)); }
+  mkdirSync(join(dir, 'skills'), { recursive: true });
+  const shared = join(dir, 'shared'); mkdirSync(shared, { recursive: true });
+  if (!existsSync(join(shared, 'PROTOCOL.md'))) writeFileSync(join(shared, 'PROTOCOL.md'), '# Shared protocol\n');
+  if (!existsSync(join(shared, 'board.md'))) writeFileSync(join(shared, 'board.md'), '# Idea board\n');
+  if (!existsSync(join(shared, 'tasks.json'))) writeFileSync(join(shared, 'tasks.json'), '[]\n');
+  writeFileSync(join(dir, 'starfish.config.json'), JSON.stringify({ baseRoot: dir, installDir: dir, operator, theme, secretGatekeeper: 'toby', createdAt: new Date().toISOString() }, null, 2));
+  writeFileSync(lockFile(dir), JSON.stringify({ by, at: new Date().toISOString(), baseRoot: dir }, null, 2));   // single-init lock
+}
+
+// Re-point the running host at a new base root (used by the desktop base-root step). Boots governance
+// there, restoring the vetted default registry on first boot — same as the cold-start path.
+async function rebootAt(dir: string): Promise<void> {
+  try { host?.stop(); } catch { /* ignore */ }
+  host = undefined; root = dir;
+  await bootGovernance();
+  if (host && host.governor.capabilities.snapshot().length === 0) {
+    host.governor.capabilities.restore(registrySeed as never);
+    host.persist();
   }
 }
 
@@ -90,15 +167,58 @@ const DEV = {
 };
 
 function registerIpc(): void {
-  const reads: Record<string, () => unknown> = {
-    'gov:getCrew': () => DEV.crew, 'gov:getDecisions': () => DEV.decisions, 'gov:getAudit': () => DEV.audit,
-    'gov:getTasks': () => DEV.tasks, 'gov:getServices': () => DEV.services, 'gov:getBudgets': () => DEV.budgets,
-    'gov:getMonitor': () => DEV.monitor, 'gov:getBuffer': () => DEV.buffer,
-  };
-  for (const [ch, fn] of Object.entries(reads)) ipcMain.handle(ch, () => fn());
-  ipcMain.handle('gov:requestAction', (_e, _req: ActionRequest): ActionResult =>
-    ({ decision: { allow: false, ask: true, reason: 'human approval required (proposer != approver)' }, applied: false }));
+  // ---- LIVE read path: every view is projected from the booted Governor (DEV is the pre-boot fallback). ----
+  const G = () => host?.governor;
+  ipcMain.handle('gov:getCrew', () => { const g = G(); return g ? crewView(g) : DEV.crew; });
+  ipcMain.handle('gov:getDecisions', (_e, limit?: number) => {
+    const g = G(); if (!g) return DEV.decisions;
+    const asks = broker ? pendingAsView(broker.list()) : [];            // STABLE operator queue (front)
+    return [...asks, ...decisionLog(g, limit ?? 12)].slice(0, Math.max(limit ?? 12, asks.length));
+  });
+  ipcMain.handle('gov:getAudit', (_e, sinceSeq?: number) => { const g = G(); return g ? g.audit.recent(200, sinceSeq) : DEV.audit; });
+  ipcMain.handle('gov:getTasks', () => { const g = G(); return g ? g.tasks.all() : DEV.tasks; });
+  ipcMain.handle('gov:getServices', () => { const g = G(); return g ? serviceView(g) : DEV.services; });
+  ipcMain.handle('gov:getBudgets', () => { const g = G(); return g ? budgetView(g) : DEV.budgets; });
+  ipcMain.handle('gov:getMonitor', () => { const g = G(); return g ? monitorView(g) : DEV.monitor; });
+  ipcMain.handle('gov:getBuffer', () => { const g = G(); return g ? bufferView(g) : DEV.buffer; });
+  ipcMain.handle('gov:getAgentDetail', (_e, id: string) => { const g = G(); return g ? agentDetail(g, id, root, forbidList()) : null; });
+
+  // ---- LIVE action path: operator intents adjudicated against the broker / token governor. Nothing
+  // mutates governance state except through here, and proposer != approver is enforced in the broker. ----
+  ipcMain.handle('gov:requestAction', (_e, req: ActionRequest): ActionResult => {
+    const g = G();
+    const intent = (req?.intent ?? {}) as { kind?: string; decisionId?: string; agentId?: string };
+    const by = req?.actor || 'operator';
+    if (!g || !broker) return { decision: { allow: false, ask: true, reason: 'governance not booted' }, applied: false };
+
+    if ((intent.kind === 'approve' || intent.kind === 'deny') && intent.decisionId) {
+      const d = broker.get(intent.decisionId);
+      const r = broker.resolve(intent.decisionId, intent.kind === 'approve' ? 'approve' : 'deny', by);
+      if (r.ok && intent.kind === 'approve' && d?.kind === 'capability' && d.refId) g.capabilities.approve(d.refId, by);  // side-effect: enable the consented capability
+      return { decision: { allow: r.ok && intent.kind === 'approve', ask: false, reason: r.reason }, applied: r.ok };
+    }
+    if (intent.kind === 'resume' && intent.agentId) {
+      g.tokens.resume(intent.agentId, by);
+      return { decision: { allow: true, ask: false, reason: `resumed ${intent.agentId}` }, applied: true };
+    }
+    // Unknown / not-yet-wired intents (e.g. dispatch orders — Phase 3) stay fail-closed.
+    return { decision: { allow: false, ask: true, reason: 'not yet wired (requires Phase 3 dispatch)' }, applied: false };
+  });
   ipcMain.on('splash:enter', () => { win?.show(); splash?.close(); splash = null; });
+
+  // ---- base root (visibility ceiling) + single-init lock. Mirrors `starfish init`; only one init
+  // per install — if the CLI already initialized this root, the wizard step is locked (and vice versa). ----
+  ipcMain.handle('setup:getBaseRoot', () => ({ root, locked: isInitialized(root), lockedBy: readLock(root).by, suggested: join(homedir(), 'Starfish') }));
+  ipcMain.handle('setup:pickDir', async () => {
+    const r = await dialog.showOpenDialog(win ?? undefined as never, { title: 'Choose the Starfish base root (the top Starfish can see)', defaultPath: join(homedir(), 'Starfish'), properties: ['openDirectory', 'createDirectory'] });
+    return { path: r.canceled || !r.filePaths[0] ? null : r.filePaths[0] };
+  });
+  ipcMain.handle('setup:setBaseRoot', async (_e, { dir, operator, theme }: { dir: string; operator?: string; theme?: string }) => {
+    const target = (dir || '').trim() || join(homedir(), 'Starfish');
+    if (isInitialized(target)) { const l = readLock(target); return { ok: false, root: target, reason: `already initialized by ${l.by ?? 'another setup'} on ${l.at ?? 'a prior run'} — one init per install` }; }
+    try { mkdirSync(target, { recursive: true }); seedGovernanceAt(target, operator || 'Operator', theme || 'fleet', 'ui'); await rebootAt(target); return { ok: true, root: target, reason: 'seeded + booted' }; }
+    catch (e) { return { ok: false, root: target, reason: (e as Error).message }; }
+  });
 
   // ---- providers (model selection + API key). Key stored via OS keychain; never returned. ----
   const secFile = () => join(root, 'state', 'secrets.json');
@@ -206,7 +326,8 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
-  root = process.env.STARFISH_PROJECT_ROOT ?? join(process.cwd(), '.starfish');
+  root = resolveBaseRoot();
+  console.log('[governance] base root (visibility ceiling):', root);
   createSplash();
   registerIpc();
   await bootGovernance();

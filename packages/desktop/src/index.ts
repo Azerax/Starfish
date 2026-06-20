@@ -10,3 +10,4 @@ export type {
   Channel, Unsubscribe, GovernanceReadApi,
   UiIntent, ActionRequest, ActionResult, GovernanceActionApi, GovernanceBridge,
 } from './ui-contract';
+export * from './projections';

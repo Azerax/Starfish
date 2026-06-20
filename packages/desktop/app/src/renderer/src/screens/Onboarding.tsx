@@ -4,14 +4,17 @@ import type { DefaultSkillView, ProviderView } from '../bridge/types';
 import { useTheme } from '../theme/ThemeProvider';
 import { FleetBadge } from '../theme/icons';
 
-const LABELS = ['Welcome', 'Operator & theme', 'Provider & API key', 'Governed intake', 'Ready'];
-const LAST = LABELS.length - 1; // 4
+const LABELS = ['Welcome', 'Base root', 'Operator & theme', 'Provider & API key', 'Governed intake', 'Ready'];
+const LAST = LABELS.length - 1; // 5
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const bridge = getBridge();
   const { theme, themes, setThemeId } = useTheme();
   const [step, setStep] = useState(0);
   const [operator, setOperator] = useState('Grand Admiral Scotticus');
+  const [baseDir, setBaseDir] = useState('');
+  const [baseInfo, setBaseInfo] = useState<{ root: string; locked: boolean; lockedBy?: string } | null>(null);
+  const [baseErr, setBaseErr] = useState('');
   const [skills, setSkills] = useState<DefaultSkillView[]>([]);
   const [consent, setConsent] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<{ registered: string[]; quarantined: string[]; approved: string[] } | null>(null);
@@ -34,6 +37,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     void bridge.getActiveProvider().then((a) => setProviderId(a.id));
   }, [bridge]);
 
+  useEffect(() => { void bridge.getBaseRoot().then((b) => { setBaseInfo(b); setBaseDir(b.locked ? b.root : b.suggested); }); }, [bridge]);
+
   const enabledCount = Object.values(consent).filter(Boolean).length;
   const selected = providers.find((p) => p.id === providerId);
 
@@ -46,6 +51,17 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     }
   }
 
+  async function applyBaseRoot(): Promise<boolean> {
+    setBaseErr('');
+    if (baseInfo?.locked) return true;                       // already initialized — nothing to do
+    const r = await bridge.setBaseRoot(baseDir, operator, theme.id);
+    if (!r.ok) { setBaseErr(r.reason); return false; }
+    setBaseInfo({ root: r.root, locked: true, lockedBy: 'ui' });
+    return true;
+  }
+
+  async function pickDir() { const r = await bridge.pickBaseDir(); if (r.path) setBaseDir(r.path); }
+
   async function finish() {
     const enabledIds = Object.entries(consent).filter(([, v]) => v).map(([k]) => k);
     const r = await bridge.completeOnboarding({ operator, theme: theme.id, enabledIds });
@@ -54,8 +70,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   }
 
   function next() {
-    if (step === 2) { void saveProvider().then(() => setStep(3)); return; }
-    if (step === 3) { void finish(); return; }
+    if (step === 1) { void applyBaseRoot().then((ok) => { if (ok) setStep(2); }); return; }
+    if (step === 3) { void saveProvider().then(() => setStep(4)); return; }
+    if (step === 4) { void finish(); return; }
     if (step === LAST) { onDone(); return; }
     setStep((s) => Math.min(LAST, s + 1));
   }
@@ -81,6 +98,26 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           )}
           {step === 1 && (
             <div className="pane">
+              <h2>Set the base root</h2>
+              <p className="wsub">This is the <b>absolute top Starfish can see</b> — the visibility ceiling. Everything lives under it: <code>tools/</code>, <code>agents/&lt;id&gt;/workspace</code>, <code>skills/</code>, <code>shared/</code>. Governance, the audit log and state sit above the agents and are invisible to them.</p>
+              {baseInfo?.locked ? (
+                <div className="wnote">✓ This install is already initialized at <b>{baseInfo.root}</b>{baseInfo.lockedBy ? ` (by ${baseInfo.lockedBy === 'cli' ? 'the CLI' : 'the app'})` : ''}. One init per install — the base root is locked.</div>
+              ) : (
+                <>
+                  <div className="field"><label className="lbl">Base root directory</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input type="text" value={baseDir} onChange={(e) => setBaseDir(e.target.value)} style={{ flex: 1 }} />
+                      <button className="btn" onClick={() => void pickDir()}>Choose folder…</button>
+                    </div>
+                  </div>
+                  {baseErr && <div className="wnote" style={{ borderColor: 'var(--deny)' }}>✗ {baseErr}</div>}
+                  <div className="whint">Governance is seeded here (fail-closed) when you continue. Pick once — this can't be re-run for this install.</div>
+                </>
+              )}
+            </div>
+          )}
+          {step === 2 && (
+            <div className="pane">
               <h2>Who's in command?</h2>
               <p className="wsub">Your name is stamped on every approval. By <b>proposer ≠ approver</b>, agents can never self-authorize.</p>
               <div className="field"><label className="lbl">Operator name</label>
@@ -97,7 +134,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               </div>
             </div>
           )}
-          {step === 2 && (
+          {step === 3 && (
             <div className="pane">
               <h2>Choose your engine</h2>
               <p className="wsub">Starfish is <b>model-agnostic</b> — governance is the same whichever model runs the work. Pick a provider and paste its API key. The key is sealed in your <b>OS keychain by the host and never reaches the UI</b> (or any skill, log, or boundary).</p>
@@ -122,7 +159,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               {keyStored && <div className="whint">Key sealed via <b>{keyStored === 'keychain' ? 'OS keychain' : 'local fallback (dev)'}</b> — it is never returned to the UI.</div>}
             </div>
           )}
-          {step === 3 && (
+          {step === 4 && (
             <div className="pane">
               <h2>Governed intake</h2>
               <p className="wsub">Toby vets the default catalog (from <b>anthropics/skills</b>). <b>Low auto-enables; Medium+ is quarantined until you consent.</b> The only door into the registry.</p>
@@ -161,7 +198,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
         <div className="wfoot">
           <button className="btn" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
-          <button className="btn primary" onClick={next}>{step === 0 ? 'Begin' : step === 2 ? 'Save & continue' : step === 3 ? 'Confirm & govern' : step === LAST ? 'Enter the Bridge' : 'Next'}</button>
+          <button className="btn primary" onClick={next}>{step === 0 ? 'Begin' : step === 1 ? (baseInfo?.locked ? 'Continue' : 'Set root & continue') : step === 3 ? 'Save & continue' : step === 4 ? 'Confirm & govern' : step === LAST ? 'Enter the Bridge' : 'Next'}</button>
         </div>
       </div>
     </div>

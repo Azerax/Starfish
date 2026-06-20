@@ -3,215 +3,198 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Project Starfish — A Governance-First, Deny-by-Default AI Ecosystem</title>
-<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish is a governance-first, deny-by-default overlay and desktop app that brings any AI agent build under a single decision point.">
-<style>
-  :root{
-    --bg:#04060f; --panel:#0b1322; --panel2:#0f1a2e; --line:#1b2a48;
-    --ink:#e9f2ff; --muted:#8aa0c8; --accent:#37d6ff; --accent2:#ffce5c;
-    --ok:#39d98a; --deny:#ff5c7a; --ask:#b48cff; --command:#F2A23C;
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--ink);
-    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
-  a{color:var(--accent);text-decoration:none}
-  #warp{position:fixed;inset:0;z-index:0;opacity:.55}
-  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
-    background:radial-gradient(ellipse at 50% 0%, transparent 30%, rgba(2,4,10,.6) 75%, rgba(2,4,10,.96) 100%)}
-  .wrap{position:relative;z-index:2;max-width:1080px;margin:0 auto;padding:0 22px}
-
-  /* nav */
-  nav{position:relative;z-index:3;display:flex;align-items:center;gap:14px;max-width:1080px;margin:0 auto;padding:18px 22px}
-  nav .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.04em}
-  nav .brand svg{width:26px;height:26px}
-  nav .sp{flex:1}
-  nav a.link{color:var(--muted);font-size:14px}
-  nav a.link:hover{color:var(--ink)}
-  .pill{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ok);
-    border:1px solid color-mix(in srgb,var(--ok) 35%,var(--line));padding:5px 11px;border-radius:999px}
-
-  /* hero */
-  header.hero{position:relative;z-index:2;text-align:center;padding:70px 22px 40px}
-  .badge{width:104px;height:104px;margin:0 auto 20px;position:relative;display:flex;align-items:center;justify-content:center;
-    animation:floaty 6s ease-in-out infinite}
-  .badge .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(55,214,255,.5);
-    box-shadow:0 0 30px rgba(55,214,255,.35), inset 0 0 24px rgba(55,214,255,.15)}
-  .badge .ring.r2{inset:-13px;border-color:rgba(255,206,92,.35);animation:spin 16s linear infinite}
-  .badge .ring.r3{inset:13px;border-style:dashed;border-color:rgba(255,255,255,.18);animation:spin 11s linear infinite reverse}
-  .badge .star{font-size:30px;color:var(--accent);text-shadow:0 0 18px var(--accent)}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-  h1{font-size:clamp(34px,7vw,68px);font-weight:800;letter-spacing:.06em;margin:.1em 0;
-    background:linear-gradient(90deg,#fff,var(--accent) 45%,var(--accent2) 72%,#fff);
-    background-size:220% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
-    animation:shimmer 5s linear infinite;filter:drop-shadow(0 0 22px rgba(55,214,255,.35))}
-  @keyframes shimmer{to{background-position:220% center}}
-  .tag{font-size:clamp(15px,2.4vw,20px);color:var(--accent);font-weight:600;letter-spacing:.02em;margin:8px 0 2px}
-  .subtag{color:var(--muted);font-size:15px;margin:0 0 26px}
-  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;
-    padding:13px 24px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s}
-  .btn:hover{transform:translateY(-2px)}
-  .btn.primary{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,var(--panel));
-    box-shadow:0 0 0 0 rgba(55,214,255,.5);animation:pulse 2.6s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(55,214,255,.4)}70%{box-shadow:0 0 0 14px rgba(55,214,255,0)}100%{box-shadow:0 0 0 0 rgba(55,214,255,0)}}
-
-  section{position:relative;z-index:2;padding:46px 0}
-  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
-  h2{font-size:clamp(24px,4vw,34px);margin:.1em 0 .3em;letter-spacing:.01em}
-  .lead{color:var(--muted);font-size:17px;max-width:680px}
-
-  .grid{display:grid;gap:16px;margin-top:26px}
-  .g3{grid-template-columns:repeat(3,1fr)}
-  .g2{grid-template-columns:repeat(2,1fr)}
-  @media(max-width:780px){.g3,.g2{grid-template-columns:1fr}}
-  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
-    border-radius:16px;padding:20px}
-  .card h3{margin:.1em 0 .35em;font-size:17px;display:flex;align-items:center;gap:9px}
-  .card p{margin:0;color:var(--muted);font-size:14.5px}
-  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 10px currentColor}
-
-  .crew{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px}
-  .crewcard{flex:1 1 150px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center}
-  .crewcard .av{width:48px;height:48px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    border:1px solid var(--line);font-size:22px}
-  .crewcard .nm{font-weight:700;font-size:14px}
-  .crewcard .ro{color:var(--muted);font-size:12px}
-
-  .denyrow{display:flex;align-items:center;gap:12px;background:color-mix(in srgb,var(--deny) 8%,transparent);
-    border:1px solid color-mix(in srgb,var(--deny) 32%,var(--line));border-radius:12px;padding:12px 14px;margin-top:10px;font-size:14px}
-  .denyrow b{color:var(--deny)}
-
-  .final{text-align:center;border:1px solid var(--line);border-radius:20px;padding:42px 22px;
-    background:radial-gradient(700px 280px at 50% -10%, color-mix(in srgb,var(--accent) 14%,transparent), transparent 65%), var(--panel)}
-  footer{position:relative;z-index:2;text-align:center;color:var(--muted);font-size:13px;padding:30px 22px 50px;border-top:1px solid var(--line);margin-top:30px}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .codeline{display:inline-block;background:#000a;border:1px solid var(--line);border-radius:8px;padding:8px 14px;color:var(--accent2);font-size:13.5px;margin-top:8px}
-</style>
+<title>Project Starfish - A Governance-First, Deny-by-Default AI Ecosystem</title>
+<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish puts every AI agent action through one deny-by-default decision point - authorized on the way in, contained on the way out, and written to a tamper-evident audit log.">
+<link rel="canonical" href="https://projectstarfish.ca/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://projectstarfish.ca/">
+<meta property="og:title" content="Project Starfish - Governance-First AI">
+<meta property="og:description" content="One deny-by-default decision point for every AI agent action. Authorized in, contained out, fully audited. Apache-2.0, local-first.">
+<meta property="og:image" content="https://projectstarfish.ca/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Project Starfish - Governance-First AI">
+<meta name="twitter:description" content="One deny-by-default decision point for every AI agent action. Apache-2.0, local-first.">
+<meta name="twitter:image" content="https://projectstarfish.ca/og.png">
+<meta name="theme-color" content="#04060f">
+<link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<canvas id="warp"></canvas>
-<div class="vignette"></div>
+<canvas id="warp" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
 
 <nav>
-  <span class="brand">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="#37d6ff" stroke-width="1.2" opacity=".6"/><path d="M12 4l2.4 5 5.1.7-3.8 3.6.95 5.2L12 16.4 7.35 18.5l.95-5.2L4.5 9.7l5.1-.7z" fill="#37d6ff"/></svg>
-    Project&nbsp;Starfish
-  </span>
-  <span class="sp"></span>
-  <a class="link" href="#principles">Principles</a>
-  <a class="link" href="#security">Security</a>
-  <a class="link" href="#crew">Crew</a>
-  <span class="pill">● Research preview</span>
+  <div class="inner">
+    <a class="brand" href="/">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#37d6ff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      Project&nbsp;Starfish
+    </a>
+    <span class="sp"></span>
+    <a class="link hideable" href="#how">How it works</a>
+    <a class="link hideable" href="#principles">Principles</a>
+    <a class="link hideable" href="#crew">The crew</a>
+    <a class="link" href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </div>
 </nav>
 
 <header class="hero">
-  <div class="badge"><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="star">✦</div></div>
-  <h1>PROJECT&nbsp;STARFISH</h1>
-  <p class="tag">A Governance-First, Deny-by-Default AI Ecosystem</p>
-  <p class="subtag">Everyone ships skills. Nobody ships governance. <b style="color:var(--ink)">Starfish is the governance.</b></p>
-  <div class="cta">
-    <a class="btn primary" href="#how">See how it works</a>
-    <a class="btn" href="https://github.com/Azerax/Starfish" rel="noopener">View on GitHub</a>
+  <div class="badge" aria-hidden="true">
+    <span class="ring"></span><span class="ring r2"></span>
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#37d6ff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+  </div>
+  <h1>Everyone ships skills.<br><span class="grad">Nobody ships governance.</span></h1>
+  <p class="sub">Project Starfish is a governance-first, deny-by-default AI ecosystem. Every agent action passes through one decision point - authorized on the way in, contained on the way out, and written to a tamper-evident log. No task, no tool.</p>
+  <div class="cmd" role="group" aria-label="Install command">
+    <span class="dollar">$</span><code id="installcmd">npm i -g project-starfish</code>
+    <button id="copybtn" type="button" aria-label="Copy install command">Copy</button>
+  </div>
+  <div class="hero-cta">
+    <a class="btn primary" href="#install">Get started</a>
+    <a class="btn ghost" href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">★ Star on GitHub</a>
+  </div>
+  <div class="hero-pills">
+    <span class="pill">Apache-2.0</span>
+    <span class="pill">Local-first</span>
+    <span class="pill">Deny-by-default</span>
+    <span class="pill">Model-agnostic</span>
   </div>
 </header>
 
-<section id="how" class="wrap">
-  <div class="eyebrow">The idea</div>
-  <h2>Governance loads first — and is not optional.</h2>
-  <p class="lead">LLM agents are powerful and easy to extend with “skills,” but skills run with real authority: files, shell, network, money. Most ecosystems bolt safety on as an afterthought. Starfish inverts that. Every tool call, agent action, and capability passes through a single decision point that <b style="color:var(--ink)">defaults to deny</b> — and capabilities are guests inside governance, not the other way around.</p>
-  <div class="grid g2">
-    <div class="card"><h3><span class="dot" style="color:var(--accent)"></span>A portable overlay</h3><p>Drop it onto any existing Claude / agent skills build and it brings that build under governance — without rewriting your agents.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--accent2)"></span>GCS Starfish desktop</h3><p>A governed Electron app that <i>visualizes</i> the model: a bridge where you see and approve exactly what your agents are doing.</p></div>
-  </div>
-</section>
-
-<section id="principles" class="wrap">
-  <div class="eyebrow">Constitution</div>
-  <h2>Seven principles, enforced by code.</h2>
-  <div class="grid g3">
-    <div class="card"><h3>Governance precedes execution</h3><p>No action occurs without authorization. The default decision is <b style="color:var(--deny)">DENY</b>.</p></div>
-    <div class="card"><h3>All work is a task</h3><p>Nothing runs outside the governed task lifecycle. No task, no tool.</p></div>
-    <div class="card"><h3>Auditability</h3><p>Every meaningful action is written to a hash-chained, append-only log. No silent execution.</p></div>
-    <div class="card"><h3>Bounded autonomy</h3><p>Agents may automate work; they may never expand their own authority.</p></div>
-    <div class="card"><h3>Human authority</h3><p>A human is the final approver. Proposer ≠ approver — agents can’t self-authorize.</p></div>
-    <div class="card"><h3>Fail-closed</h3><p>Missing or corrupt governance halts startup. Nothing runs ungoverned.</p></div>
-  </div>
-</section>
-
-<section id="security" class="wrap">
-  <div class="eyebrow">Defense in depth</div>
-  <h2>Skills are guests. They earn their privileges.</h2>
-  <p class="lead">Every capability enters the registry through one vetted door, runs inside its own confinement, and is checked for tampering before it ever executes.</p>
-  <div class="grid g3">
-    <div class="card"><h3><span class="dot" style="color:var(--ok)"></span>The only door</h3><p>Static review + provenance + license → a risk tier. Low auto-registers; medium+ is quarantined pending your consent.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--deny)"></span>Injection = rejected</h3><p>Any skill telling the model to “ignore previous instructions” is assigned the top tier and rejected outright.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--accent)"></span>Per-skill confinement</h3><p>Each skill gets its own workspace. Other skills, the governance dir, and the audit log are invisible to it.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--accent2)"></span>Triple-checked integrity</h3><p>SHA-256 manifests verify a skill before, during, and after it runs. Any drift → auto-quarantine.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--ask)"></span>Operator-signed self-integrity</h3><p>The system verifies <i>itself</i> the way it verifies skills — a signed manifest over its own config, or it boots into safe mode.</p></div>
-    <div class="card"><h3><span class="dot" style="color:var(--ok)"></span>Model-agnostic</h3><p>Anthropic, OpenAI, Gemini, a local model, or a router — governance is the same constant whichever model runs the work.</p></div>
-  </div>
-  <div class="card" style="margin-top:18px">
-    <h3><span class="dot" style="color:var(--deny)"></span>No horror stories</h3>
-    <p>Every delete is impact-assessed and fully recoverable — a soft delete to trash, never a permanent wipe. Three hard rules are enforced in code: <b style="color:var(--deny)">no system files, no skills, and no folders</b> can ever be deleted. A dedicated <b style="color:var(--ink)">Custodian</b> handles safe, reversible, file-level cleanup.</p>
-  </div>
-</section>
-
-<section id="crew" class="wrap">
-  <div class="eyebrow">The crew</div>
-  <h2>Governance with a face.</h2>
-  <p class="lead">Internal roles, shown here in the Fleet theme — fully re-skinnable. The themed UI <i>is</i> the governance model, made legible.</p>
-  <div class="crew">
-    <div class="crewcard"><div class="av" style="color:var(--accent2)">★</div><div class="nm">Captain Mykel</div><div class="ro">Orchestrator</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--accent)">◇</div><div class="nm">First Officer</div><div class="ro">Planner</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--accent)">⇩</div><div class="nm">Oh Brian</div><div class="ro">Intake &amp; vetting — the only door</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--deny)">⬡</div><div class="nm">Constable Gooey</div><div class="ro">Security monitor</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--ok)">◉</div><div class="nm">D8A</div><div class="ro">Memory &amp; planning</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--accent2)">⊟</div><div class="nm">Quartermaster</div><div class="ro">Custodian — safe cleanup</div></div>
-    <div class="crewcard"><div class="av" style="color:var(--muted)">○</div><div class="nm">Deck Crew</div><div class="ro">Execution</div></div>
-  </div>
-</section>
-
-<section class="wrap">
-  <div class="final">
-    <div class="eyebrow" style="justify-content:center">Status: research preview</div>
-    <h2 style="margin-top:6px">Bring your agents under command.</h2>
-    <p class="lead" style="margin:0 auto 18px">The governance core is implemented and heavily tested. The desktop app is being built on top of it.</p>
-    <div class="cta">
-      <a class="btn primary" href="https://github.com/Azerax/Starfish" rel="noopener">Explore the code</a>
-      <a class="btn" href="mailto:hello@projectstarfish.ca">Get in touch</a>
+<section class="s" id="problem">
+  <div class="wrap">
+    <div class="eyebrow">The problem</div>
+    <h2>Agents act first. They ask never.</h2>
+    <p class="lead">An AI agent with tools is a process that can read, write, delete, spend, and reach the network on your behalf - usually with nothing standing between its intent and your system. That's fine until it isn't.</p>
+    <div class="grid g4">
+      <div class="card bad"><h3><span class="ic">🗑️</span>Drive-by deletion</h3><p>"My agent deleted my whole drive." One bad path, no blast-radius check, no undo.</p></div>
+      <div class="card bad"><h3><span class="ic">💉</span>Prompt injection</h3><p>A web page or document says "ignore your instructions" - and the agent obeys.</p></div>
+      <div class="card bad"><h3><span class="ic">📤</span>Silent exfiltration</h3><p>Secrets and context leave through a tool call no one reviewed.</p></div>
+      <div class="card bad"><h3><span class="ic">📦</span>Unvetted skills</h3><p>You install a skill pack. You have no idea what it can actually do.</p></div>
     </div>
-    <div class="codeline mono">npx starfish govern ./my-skill-pack</div>
+  </div>
+</section>
+
+<section class="s" id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>One decision point. Every action. Both directions.</h2>
+    <p class="lead">Starfish isn't a wrapper that asks nicely. It's an isolated Policy Decision Point that brackets every transport - file I/O, shell, network, MCP - on the way in <em>and</em> the way out. Nothing reaches your system except through it, and it defaults to deny.</p>
+    <div class="flow">
+      <div class="node"><div class="k">Agent</div><div class="v">proposes a tool call</div></div>
+      <div class="node gate"><div class="k">PDP · ingress</div><div class="v">authorize: registered? in boundary? task-bound? risk?</div></div>
+      <div class="node"><div class="k">Tool</div><div class="v">runs only if allowed</div></div>
+      <div class="node gate"><div class="k">PDP · egress</div><div class="v">contain: strip secrets, taint external data</div></div>
+      <div class="node"><div class="k">Audit</div><div class="v">hash-chained, append-only</div></div>
+    </div>
+    <div class="note">
+      <span class="tagline"><b>No task, no tool.</b> every action traces to an assigned, vetted purpose</span>
+      <span class="tagline"><b>proposer ≠ approver.</b> an agent can never self-authorize</span>
+      <span class="tagline"><b>fail-closed.</b> if governance can't load, nothing runs</span>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="principles">
+  <div class="wrap">
+    <div class="eyebrow">What's inside</div>
+    <h2>Governance as machinery, not vibes.</h2>
+    <p class="lead">Eight controls that don't depend on the agent's cooperation.</p>
+    <div class="grid g4">
+      <div class="card"><h3><span class="ic">⛔</span>Deny-by-default PDP</h3><p>A single choke point. If no policy explicitly allows it, it doesn't happen.</p></div>
+      <div class="card"><h3><span class="ic">⛓️</span>Hash-chained audit</h3><p>Append-only, tamper-evident record of every decision - allow and deny.</p></div>
+      <div class="card"><h3><span class="ic">🧱</span>Boundary engine</h3><p>Per-agent visibility and write scopes; escapes (incl. symlinks) are denied and flagged.</p></div>
+      <div class="card"><h3><span class="ic">⛽</span>Token Governor</h3><p>Soft-warn, hard-pause budgets so a runaway agent can't run up a bill.</p></div>
+      <div class="card"><h3><span class="ic">🛂</span>Vetting intake</h3><p>Every skill/tool is risk-rated before it enters the registry. The only door in.</p></div>
+      <div class="card"><h3><span class="ic">🔬</span>Evidence Gate</h3><p>No unbacked word: a claim ("tests pass") is blocked unless the deed is on the record.</p></div>
+      <div class="card"><h3><span class="ic">🪪</span>Self-integrity</h3><p>Operator-signed manifest; tampered config boots into safe mode and denies all.</p></div>
+      <div class="card"><h3><span class="ic">🔗</span>Optional anchoring</h3><p>Batch audit roots to a notary/ledger for institutions that need it. Off by default.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="crew">
+  <div class="wrap">
+    <div class="eyebrow">The crew</div>
+    <h2>Roles with separated duties.</h2>
+    <p class="lead">Starfish ships a small governed crew. Each has a narrow mandate - and no one is above the rules, including the captain.</p>
+    <div class="crew">
+      <div class="member"><div class="av">🧭</div><div class="nm">Captain Mykel</div><div class="rl">Orchestrator</div><p>Delegates and sequences. Holds no special tool powers - privilege is a role, not a bypass.</p></div>
+      <div class="member"><div class="av">🗒️</div><div class="nm">First Officer</div><div class="rl">Planner</div><p>Breaks missions into tasks and drafts plans for approval.</p></div>
+      <div class="member"><div class="av">📡</div><div class="nm">Oh Brian</div><div class="rl">Intake &amp; vetting</div><p>The only door into the registry. Vets and risk-rates every new capability - and gatekeeps secrets.</p></div>
+      <div class="member"><div class="av">🛡️</div><div class="nm">Constable Gooey</div><div class="rl">Security monitor</div><p>Read-only sweeps, reconciled against deterministic counters. Reports; never blocks.</p></div>
+      <div class="member"><div class="av">🧠</div><div class="nm">D8A</div><div class="rl">Memory</div><p>Evidence → claims → governed knowledge, provenance first.</p></div>
+      <div class="member"><div class="av">🧹</div><div class="nm">Quartermaster</div><div class="rl">Custodian</div><p>The only agent allowed cleanup - soft, file-level, reversible. Hard rules block system files, skills and folders.</p></div>
+      <div class="member"><div class="av">⚙️</div><div class="nm">Deck Crew</div><div class="rl">Execution</div><p>Does the work inside a write-scoped worktree; high-risk acts go to you for go/no-go.</p></div>
+      <div class="member"><div class="av">🎖️</div><div class="nm">You</div><div class="rl">Operator</div><p>Final authority. The one legitimate ungoverned action is a human launching the system.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="s center" id="agnostic">
+  <div class="wrap">
+    <div class="eyebrow">Model-agnostic</div>
+    <h2>Bring your own model. Governance stays the same.</h2>
+    <p class="lead">Claude, OpenAI, Gemini, OpenRouter, or a local model - the rules don't change. Your API key is sealed in the OS keychain and is never placed in a request object, a log, an audit entry, or a skill's reach.</p>
+    <div class="hero-pills" style="margin-top:24px">
+      <span class="pill" style="color:var(--muted);border-color:var(--line)">Anthropic</span>
+      <span class="pill" style="color:var(--muted);border-color:var(--line)">OpenAI</span>
+      <span class="pill" style="color:var(--muted);border-color:var(--line)">Google Gemini</span>
+      <span class="pill" style="color:var(--muted);border-color:var(--line)">OpenRouter</span>
+      <span class="pill" style="color:var(--muted);border-color:var(--line)">Local · Ollama</span>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="install">
+  <div class="wrap">
+    <div class="eyebrow">Get started</div>
+    <h2>Two commands to a governed build.</h2>
+    <p class="lead">Free for personal <em>and</em> commercial use under Apache-2.0. Install the CLI, initialize a governed root, then bring any existing skill pack under governance.</p>
+    <div class="steps">
+      <div>
+        <div class="codeblock">
+<span class="ln"><span class="c"># 1 · install (npm or GitHub)</span></span>
+<span class="ln"><span class="p">npm</span> i -g project-starfish</span>
+<span class="ln"><span class="p">npm</span> i -g github:Azerax/Starfish</span>
+<span class="ln"> </span>
+<span class="ln"><span class="c"># 2 · set up your governed base root</span></span>
+<span class="ln"><span class="p">starfish</span> init</span>
+<span class="ln"> </span>
+<span class="ln"><span class="c"># bring an existing skill pack under governance</span></span>
+<span class="ln"><span class="p">starfish</span> govern ./my-skill-pack</span>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="height:100%">
+          <h3><span class="ic">📦</span>What you get</h3>
+          <p style="margin-bottom:12px">A fail-closed governance core, a vetting intake, a hash-chained audit log, and an optional desktop mission-control app - <span class="mono">GCS&nbsp;Starfish</span>.</p>
+          <div class="links" style="display:flex;gap:14px;flex-wrap:wrap">
+            <a class="btn" href="https://www.npmjs.com/package/project-starfish" target="_blank" rel="noopener noreferrer">npm package →</a>
+            <a class="btn ghost" href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer>
-  <div>Project Starfish · <span class="mono">projectstarfish.ca</span> · Galactic Command</div>
-  <div style="margin-top:6px;opacity:.7">An original, clean-room project · MIT · Governed, fail-closed.</div>
+  <div class="inner">
+    <a class="brand" href="/" style="display:flex;align-items:center;gap:9px;font-weight:800;color:var(--ink)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#37d6ff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      Project Starfish
+    </a>
+    <span class="sp"></span>
+    <div class="links">
+      <a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://www.npmjs.com/package/project-starfish" target="_blank" rel="noopener noreferrer">npm</a>
+      <a href="https://github.com/Azerax/Starfish/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">License</a>
+      <a href="#how">How it works</a>
+    </div>
+  </div>
+  <div class="wrap fineprint">© 2026 Project Starfish · Apache-2.0. “Project Starfish” and the Starfish mark are trademarks of the project; the licence grants no trademark rights. A governance-first, deny-by-default AI ecosystem.</div>
 </footer>
 
-<script>
-const cv=document.getElementById('warp'),cx=cv.getContext('2d');
-let W,H,cxs,cys,stars=[],speed=1.0;
-function resize(){W=cv.width=innerWidth;H=cv.height=innerHeight;cxs=W/2;cys=H/2;}
-resize();addEventListener('resize',resize);
-function mk(){return{x:(Math.random()*2-1)*W,y:(Math.random()*2-1)*H,z:Math.random()*W};}
-for(let i=0;i<320;i++)stars.push(mk());
-function tick(){
-  cx.fillStyle='rgba(4,6,15,0.4)';cx.fillRect(0,0,W,H);
-  for(const s of stars){
-    const pz=s.z;s.z-=speed*4;if(s.z<1){Object.assign(s,mk());s.z=W;}
-    const k=128/s.z,px=cxs+s.x*k,py=cys+s.y*k;
-    const k2=128/pz,ox=cxs+s.x*k2,oy=cys+s.y*k2;
-    const sz=(1-s.z/W)*1.8;
-    const hue=s.z<W*0.35?'rgba(255,206,92,':'rgba(150,220,255,';
-    cx.strokeStyle=hue+(0.2+(1-s.z/W)*0.7)+')';
-    cx.lineWidth=sz;cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(px,py);cx.stroke();
-  }
-  requestAnimationFrame(tick);
-}
-tick();
-</script>
+<script src="/main.js" defer></script>
 </body>
 </html>

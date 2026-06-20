@@ -32,3 +32,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+docs/BRIDGE_LIVE_PLAN.md
+docs/SEED_REFACTOR_PLAN.md

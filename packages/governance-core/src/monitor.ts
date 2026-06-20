@@ -85,6 +85,10 @@ export class SecurityMonitor {
     return { ok: true };
   }
 
+  /** Read-only deterministic counters over the full audit. Does not advance the cursor or file
+   *  findings — safe to call on every Bridge refresh. */
+  counters(): SweepCounters { return this.count(this.peek()); }
+
   /** Read the full audit (not cursor-advancing) — used by reconcile so it sees the same ground truth. */
   private peek(): AuditEvent[] {
     if (!existsSync(this.auditPath)) return [];
