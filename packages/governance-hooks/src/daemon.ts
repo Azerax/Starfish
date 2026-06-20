@@ -10,6 +10,7 @@ import { HookSession, type HookPayload, type HookResponse } from './handler';
 
 export class PdpDaemon {
   private server: Server | null = null;
+  private sessions = new Map<string, HookSession>();   // keyed by CC session id (+agent) so PreToolUse->PostToolUse correlate across the per-call connections
   constructor(private governor: Governor, private boundaryFor: (agentId: string) => BoundarySet, private boundaryForCapability?: (capabilityId: string) => BoundarySet) {}
 
   listen(path: string): Promise<void> {
@@ -29,9 +30,16 @@ export class PdpDaemon {
             if (msg.type === 'hello') {
               const agentId = String(msg.agentId ?? '');
               const capabilityId = msg.capabilityId ? String(msg.capabilityId) : undefined;   // bound here, never trusted from later payloads
+              const sid = String((msg as { session_id?: string }).session_id ?? '') + '|' + agentId + '|' + (capabilityId ?? '');
               try {
-                const boundary = capabilityId && this.boundaryForCapability ? this.boundaryForCapability(capabilityId) : this.boundaryFor(agentId);
-                session = new HookSession(this.governor, { expectedAgentId: agentId, boundary, capabilityId });
+                let sh = this.sessions.get(sid);
+                if (!sh) {
+                  const boundary = capabilityId && this.boundaryForCapability ? this.boundaryForCapability(capabilityId) : this.boundaryFor(agentId);
+                  sh = new HookSession(this.governor, { expectedAgentId: agentId, boundary, capabilityId });
+                  if (this.sessions.size > 1000) this.sessions.delete(this.sessions.keys().next().value);   // bound memory (evict oldest)
+                  this.sessions.set(sid, sh);
+                }
+                session = sh;
                 conn.write(JSON.stringify({ ok: true }) + '\n');
               } catch { conn.write(JSON.stringify({ ok: false, reason: 'boundary-derivation-failed' }) + '\n'); }   // fail closed
               continue;

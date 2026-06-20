@@ -43,6 +43,11 @@ export function containCheck(path: string, mode: 'read' | 'write', bs: BoundaryS
   try { canon = canonical(path); } catch { return { allowed: false, reason: 'canonicalization-failed' }; }
   const root = roots.find((rr) => { const withSep = rr.endsWith(sep) ? rr : rr + sep; return canon === rr || canon.startsWith(withSep); });
   if (!root) return { allowed: false, reason: `outside ${mode} boundary` };       // no path leak
+  // Denied subtrees win even when inside a write/visibility root (e.g. governance/audit under the project).
+  const denied = (bs.deny ?? []).map((r) => (existsSync(r) ? realpathSync(r) : resolve(r)));
+  if (denied.some((dd) => { const withSep = dd.endsWith(sep) ? dd : dd + sep; return canon === dd || canon.startsWith(withSep); })) {
+    return { allowed: false, reason: 'within denied subtree' };
+  }
   if (symlinkBelowRoot(path, root)) return { allowed: false, reason: 'symlink-component-rejected' };
   return { allowed: true, reason: 'within boundary' };
 }

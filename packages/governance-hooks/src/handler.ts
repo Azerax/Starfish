@@ -8,6 +8,7 @@ export interface HookPayload {
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   capability_id?: string;
+  session_id?: string;
 }
 export interface HookResponse { permissionDecision?: 'allow' | 'deny' | 'ask'; reason?: string; }
 export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; }

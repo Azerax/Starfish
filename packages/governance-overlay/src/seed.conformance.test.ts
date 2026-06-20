@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { seedInstall, isInitialized, GOVERNANCE_SEED } from './seed';
+import { seedInstall, seedOverlay, isInitialized, GOVERNANCE_SEED } from './seed';
 import { loadGovernor } from '@starfish/governance-core';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'sf-seed-'));
@@ -45,5 +45,27 @@ describe('seedInstall — single source of truth for governance + base-root scaf
     expect(g.agents.all().length).toBe(GOVERNANCE_SEED.agents.length);
     expect(g.tools.all().length).toBe(GOVERNANCE_SEED.tools.length);
     expect(g.safeMode).toBe(false);
+  });
+});
+
+describe('seedOverlay — govern an existing project in place', () => {
+  it('puts governance under .starfish, leaves the project tree untouched, and boots', () => {
+    const proj = mkdtempSync(join(tmpdir(), 'sf-ovl-'));
+    const r = seedOverlay(proj, { operator: 'Scott' });
+    expect(r.ok).toBe(true);
+    for (const p of ['.starfish/governance/policies.json', '.starfish/audit.jsonl', '.starfish/starfish.config.json', '.starfish/.starfish-init.lock'])
+      expect(existsSync(join(proj, p)), p).toBe(true);
+    // no workspace scatter at the project root
+    expect(existsSync(join(proj, 'tools'))).toBe(false);
+    expect(existsSync(join(proj, 'agents'))).toBe(false);
+    expect(isInitialized(join(proj, '.starfish'))).toBe(true);
+    const g = loadGovernor(join(proj, '.starfish', 'governance'), join(proj, '.starfish', 'audit.jsonl'), { stateDir: join(proj, '.starfish', 'state') });
+    expect(g.agents.all().length).toBe(GOVERNANCE_SEED.agents.length);
+  });
+  it('refuses a second overlay init unless forced', () => {
+    const proj = mkdtempSync(join(tmpdir(), 'sf-ovl2-'));
+    expect(seedOverlay(proj).ok).toBe(true);
+    expect(seedOverlay(proj).alreadyInitialized).toBe(true);
+    expect(seedOverlay(proj, { force: true }).ok).toBe(true);
   });
 });

@@ -14,7 +14,7 @@ export interface ToolDef {
 }
 export interface AgentDef { id: string; domain?: string; allowedTools?: string[]; riskTier?: RiskTier; }
 
-export interface BoundarySet { visibility: string[]; write: string[]; }
+export interface BoundarySet { visibility: string[]; write: string[]; deny?: string[]; }   // deny = subtrees forbidden even when inside a write/visibility root (e.g. .starfish governance)
 export interface ToolCall { agentId: string; tool: string; input: Record<string, unknown>; taskId?: string; capabilityId?: string; }
 
 export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure'] as const;
