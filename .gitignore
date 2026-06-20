@@ -1,5 +1,34 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
 
 # build artifacts
 packages/*/dist/
 dist/
-.env
+out/
+build/
+*.tsbuildinfo
+
+# runtime / governance state
+.starfish/
+**/.starfish/
+*.log
+npm-debug.log*
+
+# art raw intermediates
+art/fleet/_raw/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
