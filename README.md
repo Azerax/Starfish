@@ -3,86 +3,124 @@
 > **A Governance-First, Deny-by-Default AI Ecosystem.**
 > Everyone ships skills. Nobody ships governance. **Starfish is the governance.**
 
+[![npm](https://img.shields.io/npm/v/project-starfish.svg)](https://www.npmjs.com/package/project-starfish)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Project Starfish is two things built from one trusted core:
 
-1. **A portable governance overlay** — drop it onto *any* existing Claude / agent skills build and it brings that build under governance: every tool call, agent action, and capability passes a single decision point that defaults to **deny**.
-2. **GCS Starfish** — a governed desktop app (Electron + React) that *visualizes* the governance model: a bridge/mission-control UI where you can see and approve what your agents are doing.
+1. **A portable governance overlay** — drop it onto *any* existing Claude / AI agent or skill build and
+   it brings that build under governance: every tool call, agent action, and capability passes a single
+   decision point that defaults to **deny**.
+2. **GCS Starfish** — a governed desktop app (Electron + React) that *visualizes* the model: a
+   bridge / mission-control UI where you see and approve what your agents are doing.
 
-It is an original, clean-room project. (Conceptually inspired by the open-source `munder-difflin` project, MIT — no upstream code or assets are used. See `NOTICE`.)
+It's an original, clean-room project. (Conceptually inspired by the open-source `munder-difflin`
+project, MIT — no upstream code or assets are used; see `NOTICE`.)
 
-> ⚠️ **Status: research preview / active build.** The governance core is implemented and heavily tested (143 conformance/determinism tests green); the desktop UI is being built on top of it.
+> ⚠️ **Status: research preview / active build.** The governance core is implemented and heavily
+> tested (**274 conformance/determinism tests green**); the desktop UI is being built on top of it.
+> 🌐 [projectstarfish.ca](https://projectstarfish.ca)
 
 ---
 
+## Install
+
+The `starfish` CLI installs from **npm** or **GitHub** as one self-contained bundle (no runtime deps):
+
+```bash
+# npm
+npm install -g project-starfish        # or: npx project-starfish govern <pack-dir>
+
+# GitHub
+npm install -g github:Azerax/Starfish  # builds the bundle on install
+
+# from a clone (contributors)
+git clone https://github.com/Azerax/Starfish.git && cd Starfish && npm install
+```
+
+Then:
+
+```bash
+starfish govern ./my-skill-pack [--apply] [--approve id1,id2]
+```
+
+`starfish govern` inventories a build, **vets every capability** (static review + provenance +
+prompt-injection screen → a risk tier) and installs the gate: **low** auto-registers; **medium+** is
+quarantined pending your `--approve`; **prompt-injection** is rejected outright. Requires Node ≥ 18.
+See [`INSTALL.md`](INSTALL.md).
+
 ## Why
 
-LLM agents are getting powerful and easy to extend with "skills," but skills run with real authority — files, shell, network, money. Most ecosystems bolt safety on as an afterthought. Starfish inverts that: **governance loads first and is not optional**, and capabilities are guests inside it, not the other way around.
+LLM agents are powerful and easy to extend with "skills," but skills run with real authority — files,
+shell, network, money. Most ecosystems bolt safety on afterward. Starfish inverts that: **governance
+loads first and is not optional**, and capabilities are guests inside it, not the other way around.
 
-## Philosophy
+## Constitutional principles
 
-The constitutional principles (see `GOVERNANCE.md`, the supreme source of truth):
+The supreme source of truth is [`GOVERNANCE.md`](GOVERNANCE.md):
 
-- **Governance precedes execution.** No action occurs without authorization. Default decision: **DENY**.
-- **All work is a task.** Nothing executes outside the governed task lifecycle. *No task, no tool.*
-- **Auditability.** Every meaningful action is recorded to a hash-chained, append-only log. No silent execution.
-- **Bounded autonomy.** Agents may automate work; they may never expand their own authority.
-- **Deterministic operation.** Same inputs + policy ⇒ same decision.
-- **Human authority.** A human is the final approver. **Proposer ≠ approver** — agents can never self-authorize.
-- **Fail-closed.** Missing or corrupt governance halts startup; nothing runs ungoverned.
-
-## Architecture — layered "rings"
-
-A package may import only strictly **lower** layers (CI-enforced). Governance imports nothing from transports or the app.
-
-| Package | Ring | Role |
-|---|---|---|
-| `@starfish/governance-core` | 1 (TCB) | The trusted core: **PDP** choke point, boundary engine, hash-chained audit, registries, risk/policy engines, task lifecycle, Token Governor, governed memory, capability vetting, runtime monitor, planner. No UI, no app imports. |
-| `@starfish/governance-hooks` | 2 | PreToolUse/Stop hook shim + a local **PDP daemon** — the live enforcement seam between agents and the core. |
-| `@starfish/governance-overlay` | 2 | The product: `starfish govern <pack>` — inventory → vet → consent → install. |
-| `@starfish/desktop` | 3 | GCS Starfish: the governed Electron host + React UI (Bridge, onboarding, themes). |
-
-The **crew** (agents), shown in the IP-safe *Fleet* theme: an orchestrator, a planner, **Toby** (capability intake & vetting — the only door into the registry), **Hank** (read-only runtime security monitor), and a memory/knowledge agent. Internal ids stay stable; the theme is just a swappable skin.
+- **Governance precedes execution** — no action without authorization. Default: **DENY**.
+- **All work is a task** — nothing runs outside the governed task lifecycle. *No task, no tool.*
+- **Auditability** — every meaningful action is recorded to a hash-chained, append-only log.
+- **Bounded autonomy** — agents may automate work; they may never expand their own authority.
+- **Human authority** — a human is the final approver. **Proposer ≠ approver.**
+- **Evidence-based ("no unbacked word")** — an agent's claims ("tests pass," "I ran X") are checked
+  against the recorded deeds; unbacked or contradicted claims are blocked.
+- **Fail-closed** — missing or corrupt governance halts startup; nothing runs ungoverned.
 
 ## Security & integrity model
 
-Skills are **not trusted by default**. Every capability enters the registry only through Toby's vetting:
+- **Vetting is the only door** — provenance, license, static signals (network / code-exec /
+  obfuscation / fs-write / credential), and a prompt-injection screen → a risk tier. **Low** auto-
+  registers; **medium+** is quarantined pending consent.
+- **Prompt-injection = highest tier → hard reject** — overrides even a trusted publisher.
+- **Publisher signing (Ed25519)** — a skill signed over its manifest hash by a pinned key is
+  cryptographically trusted.
+- **Per-skill confinement** — each skill gets a unique workspace (`source` read-only, `workspace`
+  read/write); other skills, the governance dir, and the audit log are invisible to it. No symlinks.
+- **Integrity, triple-checked** — per-file SHA-256 manifests; verify-before-invoke + before/during/
+  after hashing; drift → auto-quarantine.
+- **Governed deletion** — every delete is impact-assessed and **soft** (recoverable). Hard rules:
+  **no system files, no skills, no folders.** A dedicated **Custodian** does safe file-level cleanup.
+- **Secret-scoped (`.env`/credentials)** — reading is deny-by-default; **Toby is the gatekeeper** for
+  add/modify/remove; content is screened for poisoning; secret values never egress.
+- **External sources (MCP / network / websites)** — deny-by-default until an agent verifies safety or
+  the operator overrides; admitted sources are **tainted** (content injection-screened before re-entry;
+  tainted data can't egress to a foreign destination). Signed blocklist = remote kill.
+- **Model-agnostic** — Anthropic, OpenAI, Gemini, a local model, or a router; governance is the same
+  constant whichever model runs the work. API keys live in the OS keychain, never in code or `.env`.
+- **Operator-signed self-integrity** — the system verifies *itself* the way it verifies skills; tamper
+  → safe mode. Optional external **anchoring** of the audit root (for institutions / auditors).
 
-- **Vetting (the only door):** deterministic static review (network / code-exec / obfuscation / fs-write / credential signals) + provenance + license → a risk tier and disposition. **Low** auto-registers; **Medium+** is quarantined pending the operator's explicit **consent**.
-- **Prompt-injection = highest tier → hard reject.** Any skill containing instructions to ignore/override prior or system instructions is assigned the top `injection` tier and **rejected outright** — it can never be registered or approved, and this **overrides trusted-publisher** status.
-- **Publisher signing (Ed25519).** A skill signed over its manifest hash by a **pinned publisher key** is cryptographically trusted — stronger than a self-asserted provenance string.
-- **Integrity, triple-checked.** Per-file SHA-256 manifest captured at vet time; **verify-before-invoke** plus a before/during/after hash check around execution. Any drift → auto-quarantine + Critical audit. (SHA-256, not MD5.)
-- **Per-skill confinement.** Each skill gets a **unique workspace** (`source` read-only, `workspace` read/write); other skills, the governance dir, audit, and state are **invisible**. Enforced on every call by the boundary engine.
-- **No symlinks, anywhere.** Skill trees containing symlinks are rejected; the boundary engine rejects symlink traversal at runtime.
-- **Identity binding.** `agentId` and `capabilityId` are bound at the connection handshake, never trusted from the payload (blocks impersonation / confused-deputy).
-- **Governed listing.** Even `dir`/`ls` goes through the PDP and is audited; Hank flags listing-probing/enumeration.
-- **Tamper-evident audit.** Append-only + hash-chained; a watcher that reports "all clear" while real events exist trips its own Critical alarm.
+Full adversarial analysis: [`docs/SKILL_ISOLATION_THREATS.md`](docs/SKILL_ISOLATION_THREATS.md).
+Design plans: `docs/SLASH_COMMAND_GOVERNANCE.md`, `docs/EXTERNAL_SOURCE_GOVERNANCE.md`.
 
-Full adversarial analysis: [`docs/SKILL_ISOLATION_THREATS.md`](docs/SKILL_ISOLATION_THREATS.md). Governance vetting record: [`packages/governance-overlay/defaults/VETTING.md`](packages/governance-overlay/defaults/VETTING.md).
+## Architecture — layered "rings"
 
-## Default skills
+A package may import only strictly **lower** layers (CI-enforced). Governance imports nothing from
+transports or the app.
 
-A starter catalog ([`packages/governance-overlay/defaults/default-skills.json`](packages/governance-overlay/defaults/default-skills.json)) sourced from [`anthropics/skills`](https://github.com/anthropics/skills) — document skills (docx/pdf/pptx/xlsx), example skills, and the Claude API reference. They are candidates only: each is vetted through the same governed door before it can run.
+| Package | Ring | Role |
+|---|---|---|
+| `@starfish/governance-core` | 1 (TCB) | PDP choke point, boundary engine, hash-chained audit, registries, risk/policy, task lifecycle, Token Governor, vetting, runtime monitor, model router / dispatch / runner, agent loop, evidence gate, deletion + secrets + external-source gates, self-integrity, anchoring. No UI. |
+| `@starfish/governance-hooks` | 2 | PreToolUse/Stop hook shim + a local PDP daemon — the live enforcement seam. |
+| `@starfish/governance-overlay` | 2 | `starfish govern <pack>` — inventory → vet → consent → install. |
+| `@starfish/desktop` | 3 | GCS Starfish: the governed Electron host + React UI. |
+| `project-starfish` (`packages/cli`) | — | the published, self-contained `starfish` CLI bundle. |
 
-## The desktop app (GCS Starfish)
-
-Electron + React (`packages/desktop/app`). A flashy governed-boot **splash**, a first-run **onboarding wizard** (operator identity → theme → governed intake/consent), and the **Bridge** (Mission Control): live crew status, the PDP decision feed, Token Governor budgets, and Hank's monitor — themeable at runtime (Fleet + a neutral Ops theme; users can add their own). UI design references live in [`docs/ui-mockups/`](docs/ui-mockups/).
-
-```bash
-cd packages/desktop/app
-npm install
-npm run init:gov     # seed a minimal governance config (one-time)
-npm run dev          # Electron: splash → onboarding → Bridge
-npm run dev:web      # browser-only UI preview (mock bridge), no Electron
-```
+The **crew** (IP-safe *Fleet* theme): an orchestrator, a planner, **Oh Brian** (intake & vetting — the
+only door), **Constable Gooey** (read-only runtime monitor), a memory/planner, and the **Quartermaster**
+(Custodian — safe cleanup). Internal ids are stable; the theme is a swappable skin.
 
 ## Develop
 
 ```bash
 npm install
-npm run ci    # typecheck + tests + conformance + determinism + dependency-direction lint + IP scan + SBOM/licence check
+npm run ci    # typecheck + tests + conformance + determinism + dep-direction lint + IP scan + SBOM/licence
 ```
 
-The repo is governed by its own gates: a **dependency-direction lint** (the ring layering holds), an **IP-denylist scan** over shippable source, and an **SBOM + license check**.
+Self-governed gates: a **dependency-direction lint** (ring layering holds), an **IP-denylist scan** over
+shippable source, and an **SBOM + license check**.
 
 ## Repository layout
 
@@ -92,11 +130,15 @@ packages/
   governance-hooks/     ring 2 — hook shim + PDP daemon
   governance-overlay/   ring 2 — `starfish govern`; default-skills catalog + vetting records
   desktop/              ring 3 — governed host (src/) + Electron+React app (app/)
-docs/                   GOVERNANCE-adjacent docs, threat model, UI mockups
-scripts/                CI gates (dep-direction lint, IP scan, SBOM)
+  cli/                  the published `project-starfish` CLI bundle
+docs/                   GOVERNANCE-adjacent docs, threat model, design plans, UI mockups
+site/                   projectstarfish.ca landing page
+scripts/                CI gates + the CLI bundler
 GOVERNANCE.md           constitutional source of truth
 ```
 
 ## License & attribution
 
-MIT (see `LICENSE`). The document-creation skills referenced from the default catalog are source-available (not OSS) — confirm their terms before redistribution. See `NOTICE` for full attribution. All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).
+MIT (see `LICENSE`). The document-creation skills referenced from the default catalog are
+source-available (not OSS) — confirm their terms before redistribution. See `NOTICE` for attribution.
+All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).
