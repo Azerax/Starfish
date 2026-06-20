@@ -2,7 +2,7 @@
   "name": "@starfish/desktop-app",
   "private": true,
   "version": "0.1.0",
-  "description": "Project Starfish — governed desktop (ring 3) Electron shell.",
+  "description": "Project Starfish \u2014 governed desktop (ring 3) Electron shell.",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
@@ -14,7 +14,10 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "init:gov": "node init-governance.mjs",
-    "sync:art": "node sync-art.mjs"
+    "sync:art": "node sync-art.mjs",
+    "build:app": "electron-vite build",
+    "pack": "electron-vite build && npx --yes electron-builder --dir",
+    "dist": "electron-vite build && npx --yes electron-builder"
   },
   "dependencies": {
     "@starfish/governance-core": "file:../../governance-core",

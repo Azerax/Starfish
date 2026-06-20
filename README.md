@@ -4,7 +4,7 @@
 > Everyone ships skills. Nobody ships governance. **Starfish is the governance.**
 
 [![npm](https://img.shields.io/npm/v/project-starfish.svg)](https://www.npmjs.com/package/project-starfish)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Project Starfish is two things built from one trusted core:
 
@@ -139,6 +139,6 @@ GOVERNANCE.md           constitutional source of truth
 
 ## License & attribution
 
-MIT (see `LICENSE`). The document-creation skills referenced from the default catalog are
+Apache-2.0 (see `LICENSE`) — free for personal **and** commercial use. The Project Starfish name/logo are trademarks (see `TRADEMARK.md`); enterprise/compliance/cloud modules are offered separately (see `COMMERCIAL.md`). The document-creation skills referenced from the default catalog are
 source-available (not OSS) — confirm their terms before redistribution. See `NOTICE` for attribution.
 All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).

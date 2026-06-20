@@ -1,9 +1,9 @@
 {
   "name": "project-starfish",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Project Starfish — a governance-first, deny-by-default overlay for AI agent & skill builds. Run: starfish govern <pack>.",
   "keywords": ["ai", "agents", "governance", "security", "claude", "skills", "guardrails"],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": { "starfish": "dist/cli.mjs" },
   "main": "dist/cli.mjs",

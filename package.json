@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "description": "Project Starfish \u2014 a governance-first, deny-by-default AI ecosystem (monorepo).",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "workspaces": [
     "packages/*"
   ],

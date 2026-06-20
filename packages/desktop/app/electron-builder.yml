@@ -1,0 +1,25 @@
+# Packaging config for GCS Starfish (the governed desktop UI). Build with `npm run dist`.
+appId: ca.projectstarfish.app
+productName: GCS Starfish
+copyright: Copyright 2026 Scott Holmes / Project Starfish
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# Windows: NSIS installer that lets the user pick the install directory (per the customizable-dir goal).
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  target: [dmg]
+  category: public.app-category.developer-tools
+linux:
+  target: [AppImage]
+  category: Development

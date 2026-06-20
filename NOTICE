@@ -1,18 +1,16 @@
 Project Starfish
-================
+Copyright 2026 Scott Holmes / Project Starfish
 
-This product is licensed under the MIT License (see LICENSE).
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
-Origin
-------
-Project Starfish is an original, clean-room project. No third-party source code
-or assets are incorporated.
+The Project Starfish name and logo are trademarks of the project owner and are
+NOT licensed under Apache-2.0 (see TRADEMARK.md). The Apache license grants no
+trademark rights.
 
-Conceptually inspired by the munder-difflin project
-(https://github.com/chaitanyagiri/munder-difflin, MIT). None of that project's
-code is used here. That project bundled pixel-art assets under a non-commercial
-license (LimeZu FREE VERSION); none of those assets are used either. All Project
-Starfish art is original (see docs/ART_PROVENANCE_LEDGER.md).
+Conceptually inspired by the open-source `munder-difflin` project (MIT). No
+upstream code or assets are used; this is an original, clean-room implementation.
 
-A CI scan (scripts/ip-denylist-scan.mjs) guards the shippable source under
-packages/ against third-party IP tokens.
+The document-creation skills referenced from the default catalog are
+source-available (not OSS) — confirm their terms before redistribution.
+
+All Project Starfish art is original (see docs/ART_PROVENANCE_LEDGER.md).
