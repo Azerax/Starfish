@@ -5,9 +5,9 @@
 // `init` walks first-run setup (customizable install dir), seeds fail-closed governance, then launches
 // the UI. `govern` brings a skill/agent build under governance. Apache-2.0. Local-only.
 import { AuditLog, CapabilityLedger } from '@starfish/governance-core';
-import { govern } from '@starfish/governance-overlay';
+import { govern, seedInstall } from '@starfish/governance-overlay';
 import { resolve, join } from 'node:path';
-import { mkdirSync, writeFileSync, existsSync, appendFileSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
@@ -58,63 +58,8 @@ function launchUI(installDir) {
   return openTarget('https://projectstarfish.ca/app') ? 'browser' : null;
 }
 
-// ---- fail-closed governance seed (correct policy format: agent:<id> / tool:<id>) ----
-function seedGovernance(dir, operator, theme) {
-  const gov = join(dir, 'governance');
-  mkdirSync(gov, { recursive: true });
-  mkdirSync(join(dir, 'state'), { recursive: true });
-  const auditPath = join(dir, 'audit.jsonl');
-  if (!existsSync(auditPath)) appendFileSync(auditPath, '');
-  const tools = [
-    { id: 'fs.read', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
-    { id: 'fs.list', category: 'read', pathParams: ['path'], allowedAgents: '*', riskTier: 'low' },
-    { id: 'fs.write', category: 'write', pathParams: ['path'], allowedAgents: ['worker', 'pam'], riskTier: 'medium' },
-    { id: 'fs.delete', category: 'write', pathParams: ['path'], allowedAgents: ['custodian'], riskTier: 'medium' },
-    { id: 'git_commit', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },
-  ];
-  const agents = [
-    { id: 'michael', domain: 'orchestration', riskTier: 'medium' },
-    { id: 'dwight', domain: 'planning', allowedTools: ['fs.read'], riskTier: 'low' },
-    { id: 'toby', domain: 'intake', allowedTools: ['fs.read'], riskTier: 'medium' },
-    { id: 'hank', domain: 'monitor', allowedTools: ['fs.read'], riskTier: 'low' },
-    { id: 'pam', domain: 'memory', allowedTools: ['fs.read', 'fs.write'], riskTier: 'low' },
-    { id: 'custodian', domain: 'custodial', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], riskTier: 'medium' },
-    { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.write', 'git_commit'], riskTier: 'high' },
-  ];
-  const policies = [
-    { id: 'p-read', subject: '*', action: 'tool:fs.read', resource: '*', effect: 'allow' },
-    { id: 'p-delete', subject: 'agent:custodian', action: 'tool:fs.delete', resource: '*', effect: 'allow' },
-    { id: 'p-commit', subject: 'agent:worker', action: 'tool:git_commit', resource: '*', effect: 'ask' },
-  ];
-  writeFileSync(join(gov, 'tools.json'), JSON.stringify(tools, null, 2));
-  writeFileSync(join(gov, 'agents.json'), JSON.stringify(agents, null, 2));
-  writeFileSync(join(gov, 'policies.json'), JSON.stringify(policies, null, 2));
-
-  // --- governed workspace tree under the BASE ROOT (the absolute ceiling Starfish can see) ---
-  //   <root>/tools/<toolname>/      one folder per registered tool (impl + manifest land here)
-  //   <root>/agents/<id>/workspace  one folder per agent (own dir + write-scoped workspace)
-  //   <root>/skills/                vetted skill packs are materialized here
-  //   <root>/shared/                shared reads (protocol, board, task list)
-  // governance/ + state/ + audit.jsonl stay ABOVE the agents' reach (forbidden by the boundary).
-  for (const t of tools) {
-    const td = join(dir, 'tools', t.id); mkdirSync(td, { recursive: true });
-    const man = join(td, 'tool.json');
-    if (!existsSync(man)) writeFileSync(man, JSON.stringify({ id: t.id, category: t.category, riskTier: t.riskTier, builtin: true }, null, 2));
-  }
-  for (const a of agents) {
-    mkdirSync(join(dir, 'agents', a.id, 'workspace'), { recursive: true });
-    const man = join(dir, 'agents', a.id, 'agent.json');
-    if (!existsSync(man)) writeFileSync(man, JSON.stringify({ id: a.id, domain: a.domain, riskTier: a.riskTier }, null, 2));
-  }
-  mkdirSync(join(dir, 'skills'), { recursive: true });
-  const shared = join(dir, 'shared'); mkdirSync(shared, { recursive: true });
-  if (!existsSync(join(shared, 'PROTOCOL.md'))) writeFileSync(join(shared, 'PROTOCOL.md'), '# Shared protocol\n\nReadable by all crew. Governance, audit and state live above this and are invisible to agents.\n');
-  if (!existsSync(join(shared, 'board.md'))) writeFileSync(join(shared, 'board.md'), '# Idea board\n');
-  if (!existsSync(join(shared, 'tasks.json'))) writeFileSync(join(shared, 'tasks.json'), '[]\n');
-
-  writeFileSync(join(dir, 'starfish.config.json'), JSON.stringify({ baseRoot: dir, installDir: dir, operator, theme, secretGatekeeper: 'toby', createdAt: new Date().toISOString() }, null, 2));
-  writeFileSync(join(dir, '.starfish-init.lock'), JSON.stringify({ by: 'cli', at: new Date().toISOString(), baseRoot: dir }, null, 2));   // single-init-per-install lock
-}
+// Governance seeding + the base-root scaffold now live in ONE place: seedInstall() in
+// @starfish/governance-overlay. CLI, desktop wizard, and `npm run init:gov` all call it.
 
 async function runInit() {
   const interactive = process.stdin.isTTY && !flag('yes');
@@ -143,7 +88,7 @@ async function runInit() {
   if (theme !== 'fleet' && theme !== 'ops') theme = 'fleet';
 
   mkdirSync(dir, { recursive: true });
-  seedGovernance(dir, operator, theme);
+  seedInstall(dir, { operator, theme, by: 'cli', force: flag('force') });
 
   console.log(`\n  ✓ Base root (visibility ceiling): ${dir}`);
   console.log('  ✓ Layout: governance/ state/ audit.jsonl (above agents) · tools/<tool>/ agents/<id>/workspace/ skills/ shared/');
