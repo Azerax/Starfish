@@ -64,7 +64,7 @@ describe('Integration — live PDP daemon through the host shell', () => {
     host = await createHost({ governanceDir: e.gov, auditPath: e.audit, stateDir: e.state, projectRoot: e.project, listenPath: e.sock });
     const t = host.governor.tasks.create({ type: 'mission', subject: 'persist me', proposer: 'a', assignee: 'a' });
     host.persist(); host.stop();
-    const host2 = await createHost({ governanceDir: e.gov, auditPath: join(e.base, 'audit2.jsonl'), stateDir: e.state, projectRoot: e.project, listenPath: join(e.base, 's2.sock') });
+    const host2 = await createHost({ governanceDir: e.gov, auditPath: join(e.base, 'audit2.jsonl'), stateDir: e.state, projectRoot: e.project, listenPath: process.platform === 'win32' ? `\\\\.\\pipe\\sf-host2-${process.pid}-${Math.random().toString(36).slice(2)}` : join(e.base, 's2.sock') });
     expect(host2.governor.tasks.get(t.id)?.subject).toBe('persist me');
     host2.stop();
   });
