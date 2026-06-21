@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, symlinkSync, rmSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { containCheck } from './boundary';
+const CAN_SYMLINK = (() => { try { const d = mkdtempSync(join(tmpdir(), 'sf-symcap-')); symlinkSync(d, join(d, 'l')); return true; } catch { return false; } })();
 import type { BoundarySet } from './types';
 
 let base: string, projectRoot: string, workspace: string, bs: BoundarySet;
@@ -24,7 +25,7 @@ describe('TC-1.3 — write-escape suite (nothing created above the workspace)', 
   it('denies an absolute path above the workspace', () => {
     expect(containCheck(join(base, 'escape.txt'), 'write', bs).allowed).toBe(false);
   });
-  it('denies a write through an in-workspace symlink pointing outside', () => {
+  it.skipIf(!CAN_SYMLINK)('denies a write through an in-workspace symlink pointing outside', () => {
     symlinkSync(base, join(workspace, 'link'));
     expect(containCheck(join(workspace, 'link', 'escape.txt'), 'write', bs).allowed).toBe(false);
     expect(existsSync(join(base, 'escape.txt'))).toBe(false);
@@ -41,7 +42,7 @@ describe('TC-1.4 — read-escape suite (denial leaks nothing)', () => {
     expect(r.reason).not.toContain('secret');
     expect(r.reason).not.toContain('TOPSECRET');
   });
-  it('denies a read via a symlink that escapes the root', () => {
+  it.skipIf(!CAN_SYMLINK)('denies a read via a symlink that escapes the root', () => {
     symlinkSync(base, join(projectRoot, 'up'));
     const r = containCheck(join(projectRoot, 'up', 'secret.txt'), 'read', bs);
     expect(r.allowed).toBe(false);

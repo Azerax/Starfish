@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuditLog, CapabilityLedger, vet, readSkillFiles, scanSymlinks, fileIntegrityGate, runWithIntegrity, skillWorkspaceLayout } from './index';
+const CAN_SYMLINK = (() => { try { const d = mkdtempSync(join(tmpdir(), 'sf-symcap2-')); symlinkSync(d, join(d, 'l')); return true; } catch { return false; } })();
 
 const ledger = () => new CapabilityLedger(new AuditLog(join(mkdtempSync(join(tmpdir(), 'sf-h-')), 'a.jsonl')));
 
@@ -27,7 +28,7 @@ describe('prompt-injection = highest tier, hard reject', () => {
 });
 
 describe('no symlinks allowed', () => {
-  it('readSkillFiles never follows symlinks; gate rejects + quarantines a tree with a symlink', () => {
+  it.skipIf(!CAN_SYMLINK)('readSkillFiles never follows symlinks; gate rejects + quarantines a tree with a symlink', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-sym-'));
     const { source } = skillWorkspaceLayout(root, 'demo');
     mkdirSync(source, { recursive: true });

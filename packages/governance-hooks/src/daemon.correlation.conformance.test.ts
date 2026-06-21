@@ -31,7 +31,7 @@ function call(sock: string, hello: object, payload: object): Promise<object> {
 }
 
 describe('PdpDaemon — session-keyed PreToolUse->PostToolUse correlation (across per-call connections)', () => {
-  let h: ReturnType<typeof seedGov>; let daemon: PdpDaemon; const sock = join(tmpdir(), `sf-corr-${process.pid}.sock`);
+  let h: ReturnType<typeof seedGov>; let daemon: PdpDaemon; const sock = process.platform === 'win32' ? `\\\\.\\pipe\\sf-corr-${process.pid}` : join(tmpdir(), `sf-corr-${process.pid}.sock`);
   beforeAll(async () => {
     h = seedGov();
     const g = loadGovernor(h.gov, h.audit, { stateDir: join(h.root, 'state') });

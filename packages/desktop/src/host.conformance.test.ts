@@ -15,7 +15,7 @@ function makeEnv() {
   writeFileSync(join(project, 'doc.txt'), 'hello');
   writeFileSync(join(gov, 'tools.json'), JSON.stringify([{ id: 'read_file', category: 'read', pathParams: ['path'], allowedAgents: ['agent.deckcrew'] }]));
   writeFileSync(join(gov, 'agents.json'), JSON.stringify([{ id: 'agent.deckcrew', domain: 'execution' }]));
-  return { base, gov, project, audit: join(base, 'audit.jsonl'), state: join(base, 'state'), sock: join(base, 's.sock') };
+  return { base, gov, project, audit: join(base, 'audit.jsonl'), state: join(base, 'state'), sock: process.platform === 'win32' ? `\\\\.\\pipe\\sf-host-${process.pid}-${Math.random().toString(36).slice(2)}` : join(base, 's.sock') };
 }
 
 /** Send newline-delimited JSON messages to the daemon and collect one response line per message. */
