@@ -17,6 +17,8 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'fs.write', category: 'write', pathParams: ['path'], allowedAgents: ['worker', 'pam'], riskTier: 'medium' },
     { id: 'fs.delete', category: 'write', pathParams: ['path'], allowedAgents: ['custodian'], riskTier: 'medium' },
     { id: 'git_commit', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },
+    { id: 'shell', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },        // Claude Code Bash -> shell (screened; ask)
+    { id: 'net', category: 'network', pathParams: [], allowedAgents: ['worker'], riskTier: 'medium' },     // WebFetch/WebSearch -> net (ask)
   ],
   agents: [
     { id: 'michael', domain: 'orchestration', riskTier: 'medium' },
@@ -31,6 +33,8 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'p-read', subject: '*', action: 'tool:fs.read', resource: '*', effect: 'allow' },
     { id: 'p-delete', subject: 'agent:custodian', action: 'tool:fs.delete', resource: '*', effect: 'allow' },
     { id: 'p-commit', subject: 'agent:worker', action: 'tool:git_commit', resource: '*', effect: 'ask' },
+    { id: 'p-shell', subject: 'agent:worker', action: 'tool:shell', resource: '*', effect: 'ask' },
+    { id: 'p-net', subject: 'agent:worker', action: 'tool:net', resource: '*', effect: 'ask' },
   ],
 };
 

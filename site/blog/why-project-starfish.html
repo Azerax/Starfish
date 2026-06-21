@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why we are building Project Starfish · Project Starfish</title>
+<meta name="description" content="Everyone ships skills. Nobody ships governance.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/why-project-starfish.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-06-04</div><h1>Why we are building Project Starfish</h1><div class="dek">Everyone ships skills. Nobody ships governance.</div><p>Every agent framework hands a model the keys: it can read, write, delete, spend, and reach the network on your behalf, usually with nothing standing between its intent and your system. That is fine until the day it is not, and the failure modes are now familiar: the agent that deletes a whole drive, the web page that says "ignore your instructions" and is obeyed, the secret that leaves through a tool call nobody reviewed, the skill pack you installed with no idea what it can actually do.</p>
+<p>Project Starfish starts from a single decision: <b>deny by default</b>. Before any agent can act, governance loads first and refuses everything it has not been explicitly told to allow. You, the operator, are the final authority.</p>
+<h2>The decisions we locked</h2>
+<p>We settled the constitution before writing the enforcement. One isolated Policy Decision Point brackets every transport on both the way in and the way out. No task, no tool: every action must trace to an assigned, vetted purpose. Proposer is never approver: an agent can never authorize its own high-risk request. Nothing depends on the agent's cooperation, because a control that an agent can opt out of is not a control.</p>
+<p>We also wrote the threat model before the code, twenty-plus exploits with countermeasures, so the architecture had to answer real attacks rather than a happy path. The throughline: fail closed, audit before you act, and keep one enforcement implementation that every path shares.</p>
+<p class="pull">Governance is the product. The skills are everyone else's.</p>
+<p>Next: standing up the governed core.</p><div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

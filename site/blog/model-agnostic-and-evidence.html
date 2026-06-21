@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model-agnostic, and proving the work · Project Starfish</title>
+<meta name="description" content="The runtime spine, model independence, and the Evidence Gate: no unbacked word.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/model-agnostic-and-evidence.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-06-15</div><h1>Model-agnostic, and proving the work</h1><div class="dek">The runtime spine, model independence, and the Evidence Gate: no unbacked word.</div><p>Governance should not care which model runs the work, so the runtime became model-agnostic. A provider registry and per-provider adapters (Anthropic, OpenAI, Google, OpenRouter, local) sit behind a deterministic, audited router. Your API key lives in the OS keychain and is never placed in a request object, a log, an audit entry, or a skill's reach.</p>
+<p>The spine came together end to end: route by risk and budget, send with the key isolated, parse the reply, gate every proposed tool through the PDP, execute only what is allowed, contain the output, record usage, repeat.</p>
+<h2>The principle that mattered most</h2>
+<p>Then a hard rule: if we are not validating that agents do what they say, governance is pointless. Everything must be evidence-based. The Evidence Gate extracts an agent's claims ("tests pass", "committed", "done") and blocks any claim not backed by a recorded deed in the audit ledger. An agent cannot say it ran the tests if there is no record of the tests running.</p>
+<p>Alongside it: operator-signed self-integrity, so the system verifies its own configuration the way it verifies skills and boots into safe mode if tampered; secret and .env governance with Toby as the sole gatekeeper; and external-source governance that admits but taints, so content from the web or an MCP server is treated as data, never as instructions, and cannot exfiltrate to an unapproved destination.</p><div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No more 'my agent deleted my drive' · Project Starfish</title>
+<meta name="description" content="Governed, reversible deletion and a Custodian bound by hard rules.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/governed-deletion.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-06-16</div><h1>No more 'my agent deleted my drive'</h1><div class="dek">Governed, reversible deletion and a Custodian bound by hard rules.</div><p>Deletion is where agent autonomy turns into regret. So deletion got its own gate. Every delete is impact-assessed first (a deterministic blast radius) and, when allowed, is a soft delete to a recoverable trash, never an unlink.</p>
+<p>On top of that sit hard rules that cannot be overridden, even with approval:</p>
+<ul>
+<li>No system files. Anything under the OS, drive, or home trees is denied.</li>
+<li>No skills by file. Skills are retired by Toby through the registry, never deleted off disk.</li>
+<li>No folders. Directories are never deletable; cleanup is file-level only.</li>
+</ul>
+<p>And a new crew member to do it accountably: the Custodian, the only agent permitted to run safe, file-level, reversible cleanup, bound by every one of those hard rules. Cleanup is a role with limits, not an exception to them.</p><div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burning the boat: from strangler to clean-room · Project Starfish</title>
+<meta name="description" content="We stopped salvaging the fork, rebuilt clean, and hardened the skin.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/burning-the-boat.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-06-14</div><h1>Burning the boat: from strangler to clean-room</h1><div class="dek">We stopped salvaging the fork, rebuilt clean, and hardened the skin.</div><p>We had planned to strangle an existing fork, pulling its code in as untrusted modules behind the core. We abandoned that. The fork carried non-commercial pixel art and trademarked naming, both blockers for a sellable, governance-first product. So the fork was archived and removed, and the canonical repo became fully clean-room.</p>
+<p>With the foundation clean, we hardened the skin. No symlinks anywhere: readers never follow them and any tree containing one is rejected and quarantined. Integrity is checked before, during, and after execution, so drift mid-run quarantines the capability. And prompt injection was promoted to its own highest risk tier, above critical: instruction-override content is rejected and can never be registered, even from a trusted publisher.</p>
+<p>This was also when the Fleet theme arrived: an IP-safe, original cast that turns the governance model into something you can see. The themed UI is the governance model visualized, bound to live state.</p>
+<p class="pull">A clean-room core is slower to start and far easier to trust.</p><div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

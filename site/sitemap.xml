@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://projectstarfish.ca/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+
+  <url><loc>https://projectstarfish.ca/blog/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/burning-the-boat.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/going-public.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/governed-deletion.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/governing-claude-code.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/model-agnostic-and-evidence.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/the-governed-core.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/toby-and-hank.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/why-project-starfish.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 </urlset>

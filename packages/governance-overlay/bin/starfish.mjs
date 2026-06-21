@@ -6,8 +6,8 @@
 // the UI. `govern` brings a skill/agent build under governance. Apache-2.0. Local-only.
 import { AuditLog, CapabilityLedger, loadGovernor } from '@starfish/governance-core';
 import { govern, seedInstall, seedOverlay, isInitialized, readLock } from '@starfish/governance-overlay';
-import { resolve, join, dirname } from 'node:path';
-import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { resolve, join, dirname, sep } from 'node:path';
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, chmodSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
@@ -92,7 +92,7 @@ async function runInit() {
   if (theme !== 'fleet' && theme !== 'ops') theme = 'fleet';
 
   mkdirSync(dir, { recursive: true });
-  if (flag('overlay')) { const r = seedOverlay(dir, { operator, theme, force: flag('force') }); console.log(`\n  \u2713 Overlay governance seeded at ${join(dir, '.starfish')} (project stays untouched).`); console.log('  Next:  starfish install --claude-code   then   starfish daemon'); return; }
+  if (flag('overlay')) { const r = seedOverlay(dir, { operator, theme, force: flag('force') }); registerGoverned(dir); console.log(`\n  \u2713 Overlay governance seeded at ${join(dir, '.starfish')} (project stays untouched).`); console.log('  Next:  starfish install --claude-code   then   starfish daemon'); return; }
   seedInstall(dir, { operator, theme, by: 'cli', force: flag('force') });
 
   console.log(`\n  ✓ Base root (visibility ceiling): ${dir}`);
@@ -131,6 +131,22 @@ function pdpEndpoint(projectRoot) {
   return join(overlayHome(projectRoot), 'pdp.sock');
 }
 const pidFile = (projectRoot) => join(overlayHome(projectRoot), 'daemon.pid');
+// #6 Governed-projects registry. A registered project must STAY governed: if its .starfish is gone, the
+// shim denies (tamper) instead of passing through. The agent can't edit these (managed dir is root-owned;
+// ~/.starfish is outside every project boundary, so in-band tool writes to it are denied).
+const userRegistry = () => join(homedir(), '.starfish', 'governed-projects.json');
+const managedRegistry = () => join(managedDir(), 'governed-projects.json');
+function readRegistry(p) { try { const a = JSON.parse(readFileSync(p, 'utf8')); return Array.isArray(a) ? a.map((x) => resolve(String(x))) : []; } catch { return []; } }
+function registeredRoots() { return [...new Set([...readRegistry(managedRegistry()), ...readRegistry(userRegistry())])]; }
+function isRegisteredGoverned(projectRoot) {
+  const pr = resolve(projectRoot);
+  return registeredRoots().some((r) => pr === r || pr.startsWith(r + sep));
+}
+function registerGoverned(projectRoot, p) {
+  const target = p || userRegistry();
+  const list = readRegistry(target); const pr = resolve(projectRoot);
+  if (!list.includes(pr)) { list.push(pr); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, JSON.stringify(list, null, 2)); }
+}
 const readStdin = () => new Promise((res) => { if (process.stdin.isTTY) return res(''); let d = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (c) => d += c); process.stdin.on('end', () => res(d)); });
 
 async function runDaemon() {
@@ -153,7 +169,39 @@ async function runDaemon() {
   console.log('  project : ' + projectRoot);
   console.log('  endpoint: ' + sock);
   console.log('  Every governed tool call is denied unless this daemon allows it. Ctrl-C to stop.');
-  const shutdown = () => { try { daemon.close(); } catch { /* noop */ } try { rmSync(pidFile(projectRoot)); } catch { /* noop */ } process.exit(0); };
+  // #7 Config-drift tripwire: baseline the governance-critical Claude Code settings (managed + user +
+  // project). If any change after launch, the daemon enters SAFE MODE — the PDP then denies EVERY tool
+  // call — until the operator runs `starfish attest`. Catches a settings edit that weakens governance
+  // even though it cannot add a managed hook.
+  const critFiles = () => {
+    const md = managedDir(); const out = [join(md, 'managed-settings.json')];
+    try { const dd = join(md, 'managed-settings.d'); if (existsSync(dd)) for (const x of readdirSync(dd)) if (x.endsWith('.json')) out.push(join(dd, x)); } catch { /* noop */ }
+    out.push(join(homedir(), '.claude', 'settings.json'));
+    out.push(join(projectRoot, '.claude', 'settings.json'));
+    out.push(join(projectRoot, '.claude', 'settings.local.json'));
+    return out;
+  };
+  const configHash = () => createHash('sha256').update(critFiles().sort().map((p) => p + ':' + (existsSync(p) ? readFileSync(p, 'utf8') : 'ABSENT')).join('\n')).digest('hex');
+  let baseline = configHash();
+  const attestReq = join(home, 'state', 'attest.request');
+  const guard = setInterval(() => {
+    try {
+      if (existsSync(attestReq)) {                                  // operator re-attest
+        baseline = configHash(); governor.pdp.setSafeMode(false);
+        governor.audit.append({ actor: 'operator', domain: 'governance', action: 'config-reattested', decision: 'allow', reason: 'operator re-attested settings baseline; safe mode cleared' });
+        try { rmSync(attestReq); } catch { /* noop */ }
+        console.log('  [attest] settings re-baselined; safe mode cleared.');
+        return;
+      }
+      if (configHash() !== baseline && !governor.pdp.isSafeMode()) {
+        governor.pdp.setSafeMode(true, 'Claude Code settings drift');
+        governor.audit.append({ actor: 'system', domain: 'governance', action: 'config-drift', decision: 'deny', reason: 'CC settings changed since baseline — SAFE MODE (deny all) until `starfish attest`' });
+        console.error('  [drift] settings changed since launch — SAFE MODE engaged (deny all). Run `starfish attest` to clear.');
+      }
+    } catch { /* keep watching */ }
+  }, 2000);
+  guard.unref?.();
+  const shutdown = () => { try { clearInterval(guard); } catch { /* noop */ } try { daemon.close(); } catch { /* noop */ } try { rmSync(pidFile(projectRoot)); } catch { /* noop */ } process.exit(0); };
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 }
 
@@ -202,8 +250,15 @@ async function runHook() {
   // Governance is opt-in PER PROJECT. Managed hooks fire machine-wide, so a project that has not been
   // brought under Starfish (no .starfish) passes through — we never brick ungoverned repos. Once a repo
   // is governed (.starfish present), enforcement is strict and fail-closed.
-  if (isPre && !isInitialized(overlayHome(projectRoot))) {
-    return emitDecision(true, { permissionDecision: 'allow', reason: 'project not under Starfish governance (no .starfish)' });
+  if (isPre) {
+    const governed = isInitialized(overlayHome(projectRoot));
+    const registered = isRegisteredGoverned(projectRoot);
+    if (registered && !governed) {
+      return emitDecision(true, { permissionDecision: 'deny', reason: 'registered governed project is missing .starfish (tamper) — fail-closed deny' });
+    }
+    if (!governed && !registered) {
+      return emitDecision(true, { permissionDecision: 'allow', reason: 'project not under Starfish governance (no .starfish)' });
+    }
   }
   try {
     const resp = await askDaemon(projectRoot, agentId, hp);
@@ -227,8 +282,33 @@ function managedDir() {
 // bypass mode, so Starfish is the SOLE authority. Hooks resolve the project root from cwd at runtime.
 const SELF_CLI = fileURLToPath(import.meta.url);                 // absolute path to THIS installed cli.mjs
 const NODE_ABS = process.execPath;                              // absolute node binary
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+const integrityPath = () => join(managedDir(), 'starfish-integrity.json');   // sidecar (NOT read by CC)
+const launcherPath = () => join(managedDir(), 'starfish-launch.cjs');         // root-owned verify-before-exec shim
+// The launcher is referenced by the (root-owned) managed hook command and lives in the (root-owned)
+// managed dir, so it is as tamper-resistant as the policy itself. It hashes cli.mjs against the integrity
+// baseline BEFORE running it: a swapped/edited cli is refused at run time (fail-closed deny), not just
+// flagged by `doctor`.
+const LAUNCHER_CJS = [
+  '#!/usr/bin/env node',
+  "const fs=require('fs'),path=require('path'),crypto=require('crypto'),cp=require('child_process');",
+  'const args=process.argv.slice(2);',
+  "const isPre=args.includes('PreToolUse');",
+  'function deny(reason){',
+  "  if(isPre){process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:reason},permissionDecision:'deny',reason:reason,decision:'block'}));process.stderr.write('[starfish] '+reason+String.fromCharCode(10));process.exit(2);}",
+  "  process.stdout.write('{}');process.exit(0);",
+  '}',
+  'try{',
+  "  const ig=JSON.parse(fs.readFileSync(path.join(__dirname,'starfish-integrity.json'),'utf8'));",
+  "  const h=crypto.createHash('sha256').update(fs.readFileSync(ig.cliPath)).digest('hex');",
+  "  if(h!==ig.cliSha256){deny('integrity check failed: cli.mjs changed since install');}",
+  "  const r=cp.spawnSync(ig.nodePath,[ig.cliPath].concat(args),{stdio:'inherit'});",
+  '  process.exit(r.status==null?0:r.status);',
+  "}catch(e){deny('integrity verifier error: '+((e&&e.message)||e));}",
+  '',
+].join(String.fromCharCode(10));
 function managedPolicy() {
-  const run = (ev) => `"${NODE_ABS}" "${SELF_CLI}" hook --event ${ev}`;   // absolute paths: PATH cannot be hijacked
+  const run = (ev) => `"${NODE_ABS}" "${launcherPath()}" hook --event ${ev}`;   // verify-before-exec launcher (root-owned), absolute paths
   const hk = (ev) => ({ matcher: '*', hooks: [{ type: 'command', command: run(ev), timeout: 10000 }] });
   const life = (ev) => ({ hooks: [{ type: 'command', command: run(ev), timeout: 10000 }] });
   return {
@@ -258,6 +338,11 @@ function installManaged() {
     mkdirSync(dropinDir, { recursive: true });
     if (existsSync(target)) copyFileSync(target, target + '.bak.' + Date.now());
     writeFileSync(target, JSON.stringify(policy, null, 2));
+    // #5 integrity baseline (sidecar, root-owned, not parsed by Claude Code)
+    try { writeFileSync(integrityPath(), JSON.stringify({ cliPath: SELF_CLI, cliSha256: sha256(readFileSync(SELF_CLI)), nodePath: NODE_ABS, installedAt: new Date().toISOString() }, null, 2)); } catch { /* noop */ }
+    try { writeFileSync(launcherPath(), LAUNCHER_CJS); } catch { /* noop */ }
+    // #8 restrictive perms on unix (root-owned, not group/world writable)
+    if (platform() !== 'win32') { try { chmodSync(dropinDir, 0o755); chmodSync(target, 0o644); chmodSync(integrityPath(), 0o644); chmodSync(launcherPath(), 0o755); } catch { /* noop */ } }
     console.log('  ✓ Strategy A managed lockdown installed -> ' + target);
     console.log('  Claude Code will now load ONLY Starfish hooks + managed permission rules; bypass mode is disabled.');
     console.log('  Per project you want governed:  starfish init --overlay --yes   then   starfish daemon');
@@ -306,10 +391,67 @@ function runUninstall() {
 }
 
 
+function runDoctor() {
+  const projectRoot = resolve(opt('root') || process.cwd());
+  const checks = [];
+  const add = (name, status, detail) => checks.push({ name, status, detail });
+
+  const dropin = join(managedDir(), 'managed-settings.d', 'starfish.json');
+  let policy = null; try { policy = JSON.parse(readFileSync(dropin, 'utf8')); } catch { /* absent */ }
+  if (!policy) {
+    add('managed lockdown deployed', 'FAIL', 'missing ' + dropin + ' — run: sudo starfish install --claude-code --managed');
+  } else {
+    add('managed lockdown deployed', 'PASS', dropin);
+    const need = { allowManagedHooksOnly: true, allowManagedPermissionRulesOnly: true, disableAllHooks: false, disableBypassPermissionsMode: 'disable', allowUnsandboxedCommands: false };
+    for (const [k, v] of Object.entries(need)) add('pin ' + k, JSON.stringify(policy[k]) === JSON.stringify(v) ? 'PASS' : 'FAIL', 'is ' + JSON.stringify(policy[k]) + ' (want ' + JSON.stringify(v) + ')');
+    const spc = policy.strictPluginOnlyCustomization;
+    add('strictPluginOnlyCustomization=hooks', Array.isArray(spc) && spc.includes('hooks') ? 'PASS' : 'WARN', JSON.stringify(spc));
+    const cmd = (((policy.hooks || {}).PreToolUse || [])[0] || {}).hooks ? policy.hooks.PreToolUse[0].hooks[0].command : '';
+    const absolute = /^"?(\/|[A-Za-z]:\\)/.test(cmd) || cmd.includes('/') && !cmd.startsWith('starfish ');
+    add('hook command is absolute (no PATH)', absolute ? 'PASS' : 'FAIL', cmd || '(none)');
+  }
+
+  add('verify-before-exec launcher', existsSync(launcherPath()) ? 'PASS' : 'WARN', existsSync(launcherPath()) ? launcherPath() : 'not deployed (managed install writes it)');
+  let integ = null; try { integ = JSON.parse(readFileSync(integrityPath(), 'utf8')); } catch { /* absent */ }
+  if (integ) {
+    let cur = ''; try { cur = sha256(readFileSync(integ.cliPath || SELF_CLI)); } catch { /* noop */ }
+    add('cli integrity (vs baseline)', cur && cur === integ.cliSha256 ? 'PASS' : 'FAIL', cur === integ.cliSha256 ? 'matches' : 'cli.mjs changed since install — investigate or reinstall');
+  } else add('cli integrity baseline', 'WARN', 'no starfish-integrity.json (run the managed install to record it)');
+
+  // managed file not group/world writable (unix)
+  if (platform() !== 'win32' && policy) {
+    try { const m = statSync(dropin).mode; add('managed file perms', (m & 0o022) ? 'WARN' : 'PASS', (m & 0o022) ? 'group/world-writable — chmod 644 + root-own' : 'not group/world writable'); } catch { /* noop */ }
+  }
+  // binary not user-writable in a shared/root location (best-effort)
+  try { const m = statSync(SELF_CLI).mode; add('cli binary perms', (m & 0o022) ? 'WARN' : 'PASS', SELF_CLI); } catch { /* noop */ }
+
+  add('project governed (.starfish)', isInitialized(overlayHome(projectRoot)) ? 'PASS' : 'WARN', projectRoot);
+  add('daemon running for project', existsSync(pidFile(projectRoot)) ? 'PASS' : 'WARN', existsSync(pidFile(projectRoot)) ? 'pid ' + (() => { try { return readFileSync(pidFile(projectRoot), 'utf8'); } catch { return '?'; } })() : 'start: starfish daemon');
+
+  const pad = (x, n) => (x + ' '.repeat(n)).slice(0, n);
+  console.log('\n  Starfish doctor — governance posture for ' + projectRoot + '\n');
+  for (const c of checks) console.log('  ' + pad(c.status, 5) + ' ' + pad(c.name, 38) + ' ' + (c.detail || ''));
+  const fails = checks.filter((c) => c.status === 'FAIL').length;
+  const warns = checks.filter((c) => c.status === 'WARN').length;
+  console.log('\n  ' + (fails ? '✗ ' + fails + ' FAIL' : '✓ no failures') + (warns ? ', ' + warns + ' warning(s)' : '') + '.');
+  if (fails) process.exit(1);
+}
+
+function runAttest() {
+  const projectRoot = resolve(opt('root') || process.cwd());
+  const home = overlayHome(projectRoot);
+  if (!isInitialized(home)) { console.error('Not governed: ' + projectRoot); process.exit(1); }
+  mkdirSync(join(home, 'state'), { recursive: true });
+  writeFileSync(join(home, 'state', 'attest.request'), new Date().toISOString());
+  console.log('  Re-attest requested. The running daemon will re-baseline the settings and clear safe mode.');
+}
+
 if (cmd === 'init') await runInit();
 else if (cmd === 'govern') await runGovern();
 else if (cmd === 'daemon') await runDaemon();
 else if (cmd === 'hook') await runHook();
 else if (cmd === 'install') runInstall();
 else if (cmd === 'uninstall') runUninstall();
+else if (cmd === 'attest') runAttest();
+else if (cmd === 'doctor') runDoctor();
 else usage();
