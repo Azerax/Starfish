@@ -193,7 +193,7 @@ function registerIpc(): void {
 
   ipcMain.handle('provider:list', () => {
     const sec = readJson<Record<string, unknown>>(secFile(), {});
-    return providerReg.list().map((p) => ({ id: p.id, name: p.name, kind: p.kind, model: p.model, baseUrl: p.baseUrl, requiresKey: p.requiresKey, hasKey: !!sec[p.id], dataEgress: p.kind === 'router' }));
+    return providerReg.list().map((p: typeof AVAILABLE_PROVIDERS[number]) => ({ id: p.id, name: p.name, kind: p.kind, model: p.model, baseUrl: p.baseUrl, requiresKey: p.requiresKey, hasKey: !!sec[p.id], dataEgress: p.kind === 'router' }));
   });
   ipcMain.handle('provider:active', () => {
     const a = providerReg.active();
@@ -219,7 +219,7 @@ function registerIpc(): void {
 
   // ---- host key resolver: decrypt the stored key on demand (mirrors provider:setKey). The key is
   // handed straight to the runner's network call and never returned to the renderer or audited. ----
-  const resolveProviderKey: KeyResolver = (id) => {
+  const resolveProviderKey: KeyResolver = (id: string) => {
     const sec = readJson<Record<string, { enc?: string; b64?: string }>>(secFile(), {});
     const e = sec[id]; if (!e) return undefined;
     try {

@@ -8,6 +8,29 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.10.1] - 2026-06-21
+
+### Added
+- **`[Starfish]` status line** for Claude Code: a persistent indicator showing governed state, allow/deny
+  counts, daemon and safe-mode status, and the active `writes` profile. Every decision reason Claude Code
+  surfaces is now prefixed `[Starfish]` so the source is unambiguous.
+- **`writes` confirmation profile (`ask` | `auto`), per project or session.** Under `auto`, in-boundary
+  file writes are auto-allowed and a versioned pre-image **backup** is kept in `.starfish/backups/`
+  (recoverable). The system-risk floor (out-of-boundary, secrets, `.starfish`, raw shell, catastrophic
+  commands, deletion hard-rules) is never lowerable. Set via `--writes` / `STARFISH_WRITES` / config.
+- **Self-elevating managed install.** `starfish install --claude-code --managed` now requests elevation
+  itself - a UAC prompt on Windows (runs in an elevated child, then returns to your terminal) or `sudo`
+  on macOS/Linux. `--no-elevate` opts out.
+
+### Changed
+- Platform-aware elevation guidance (Windows has no `sudo`; the CLI and `doctor` now say the right thing).
+
+### Fixed
+- Cross-platform test portability: named pipes on Windows for the socket tests; symlink tests skip where
+  the OS cannot create symlinks.
+- Desktop app now typechecks (implicit-`any` regressions, `tsconfig` path mapping) and a daemon strictness bug.
+- npm package metadata: corrected license (Apache-2.0), governance-focused description + keywords, modern README.
+
 ## [0.10.0] - 2026-06-21
 
 Governing Claude Code itself: Starfish can now run as a deny-by-default overlay on a real agent.
@@ -82,7 +105,8 @@ The trusted base, built before the CLI was packaged:
   **secret/.env governance** (Toby gatekept), and **external-source governance** (admit-but-taint).
 - Pivot from a fork-strangler approach to a **clean-room** core; IP-safe Fleet theme.
 
-[Unreleased]: https://github.com/Azerax/Starfish/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Azerax/Starfish/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/Azerax/Starfish/releases/tag/v0.10.1
 [0.10.0]: https://github.com/Azerax/Starfish/releases/tag/v0.10.0
 [0.9.3]: https://github.com/Azerax/Starfish/releases/tag/v0.9.3
 [0.9.0]: https://github.com/Azerax/Starfish/releases/tag/v0.9.0

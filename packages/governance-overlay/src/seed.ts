@@ -93,8 +93,8 @@ export interface OverlayResult { ok: boolean; alreadyInitialized: boolean; proje
  * (forbidden to the agent via the boundary `deny`), the project tree itself stays untouched (no
  * tools/agents/skills scatter — that is the desktop workspace model). Reuses the canonical seed.
  */
-export function seedOverlay(projectRoot: string, opts: { operator?: string; theme?: string; force?: boolean } = {}): OverlayResult {
-  const { operator = 'Operator', theme = 'fleet', force = false } = opts;
+export function seedOverlay(projectRoot: string, opts: { operator?: string; theme?: string; force?: boolean; writeProfile?: 'ask' | 'auto'; backups?: number } = {}): OverlayResult {
+  const { operator = 'Operator', theme = 'fleet', force = false, writeProfile = 'ask', backups = 3 } = opts;
   const home = join(projectRoot, '.starfish');
   if (isInitialized(home) && !force) return { ok: false, alreadyInitialized: true, projectRoot, governanceHome: home, reason: 'already initialized — one init per install' };
   const gov = join(home, 'governance');
@@ -104,7 +104,7 @@ export function seedOverlay(projectRoot: string, opts: { operator?: string; them
   writeFileSync(join(gov, 'tools.json'), JSON.stringify(tools, null, 2));
   writeFileSync(join(gov, 'agents.json'), JSON.stringify(agents, null, 2));
   writeFileSync(join(gov, 'policies.json'), JSON.stringify(policies, null, 2));
-  writeFileSync(join(home, 'starfish.config.json'), JSON.stringify({ mode: 'overlay', projectRoot, governanceHome: home, operator, theme, secretGatekeeper: 'toby', createdAt: new Date().toISOString() }, null, 2));
+  writeFileSync(join(home, 'starfish.config.json'), JSON.stringify({ mode: 'overlay', projectRoot, governanceHome: home, operator, theme, writeProfile, backups, secretGatekeeper: 'toby', createdAt: new Date().toISOString() }, null, 2));
   writeFileSync(lockPath(home), JSON.stringify({ by: 'cli', mode: 'overlay', at: new Date().toISOString(), projectRoot }, null, 2));
   return { ok: true, alreadyInitialized: false, projectRoot, governanceHome: home, reason: 'seeded' };
 }

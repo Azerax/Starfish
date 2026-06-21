@@ -1,9 +1,38 @@
 {
   "compilerOptions": {
-    "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler",
-    "strict": true, "esModuleInterop": true, "skipLibCheck": true,
-    "resolveJsonModule": true, "isolatedModules": true, "noEmit": true,
-    "types": ["node", "electron-vite/node"]
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": [
+      "node",
+      "electron-vite/node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@starfish/governance-core": [
+        "../../governance-core/src/index.ts"
+      ],
+      "@starfish/governance-hooks": [
+        "../../governance-hooks/src/index.ts"
+      ],
+      "@starfish/governance-overlay": [
+        "../../governance-overlay/src/index.ts"
+      ],
+      "@starfish/desktop": [
+        "../src/index.ts"
+      ]
+    }
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts", "vite.web.config.ts"]
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "electron.vite.config.ts",
+    "vite.web.config.ts"
+  ]
 }

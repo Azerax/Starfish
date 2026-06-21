@@ -1,6 +1,8 @@
 // @starfish/governance-hooks — the PreToolUse/PostToolUse/Stop seam (ring 2).
 // Forwards Claude Code hook payloads to the PDP and returns a permission decision.
 import type { Governor, ToolCall, BoundarySet } from '@starfish/governance-core';
+import { existsSync, copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { resolve, relative, join } from 'node:path';
 
 export interface HookPayload {
   hook_event_name: string;
@@ -11,7 +13,7 @@ export interface HookPayload {
   session_id?: string;
 }
 export interface HookResponse { permissionDecision?: 'allow' | 'deny' | 'ask'; reason?: string; }
-export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; }
+export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; writeProfile?: 'ask' | 'auto'; projectRoot?: string; backupDir?: string; backups?: number; }
 
 // ---- Claude Code tool taxonomy -> governed tool vocabulary (ring-2 seam) ----
 // CC fires native tools (Read/Edit/Bash/...). The PDP reasons over governed tools (fs.read/fs.write/
@@ -44,6 +46,21 @@ export function ccToGoverned(name: string, input: Record<string, unknown> = {}):
   if (name === 'Bash') return { tool: 'shell', input: { command: String(inp.command ?? '') } };
   if (CC_NET.has(name)) return { tool: 'net', input: { url: String(inp.url ?? inp.query ?? '') } };
   return { tool: name, input: inp };   // unknown -> passthrough -> default-deny
+}
+
+// Pre-image backup: before an auto-allowed in-boundary write, snapshot the current file so any overwrite
+// (or later delete) is recoverable. Backups live under .starfish/backups (inside the deny subtree, so the
+// agent cannot read or tamper with them). Keeps the most recent `keep` versions per file.
+function snapshotBackup(absPath: string, backupDir: string, projectRoot: string, keep: number): boolean {
+  try {
+    if (!existsSync(absPath)) return false;                          // new file -> nothing to back up yet
+    const rel = relative(projectRoot, absPath).replace(/[\\/]/g, '__') || 'file';
+    const dir = join(backupDir, rel); mkdirSync(dir, { recursive: true });
+    copyFileSync(absPath, join(dir, new Date().toISOString().replace(/[:.]/g, '-')));
+    const files = readdirSync(dir).sort();
+    while (files.length > Math.max(1, keep)) { const old = files.shift(); if (old) rmSync(join(dir, old)); }
+    return true;
+  } catch { return false; }
 }
 
 export function handleHook(payload: HookPayload, gov: Governor, ctx: HookContext): HookResponse {
@@ -88,6 +105,16 @@ export class HookSession {
       }
       const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: g.tool, input: g.input, capabilityId: this.ctx.capabilityId };
       const d = this.gov.pdp.decide('ingress', call, this.ctx.boundary);   // audit-before-act happens inside decide()
+      // Friction profile: the user owns risk for THEIR OWN files. An in-boundary file write that the PDP
+      // would merely ASK about is auto-allowed under writes=auto, with a pre-image backup. The PDP has
+      // already DENIED anything that risks the system (out-of-boundary, secrets, .starfish), so this only
+      // ever relaxes safe, in-project, recoverable writes - never the system-risk floor.
+      if (!d.allow && d.ask && g.tool === 'fs.write' && this.ctx.writeProfile === 'auto' && this.ctx.projectRoot && this.ctx.backupDir) {
+        const backed = snapshotBackup(resolve(String(g.input.path ?? '')), this.ctx.backupDir, this.ctx.projectRoot, this.ctx.backups ?? 3);
+        this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'tool', action: 'ingress:fs.write', decision: 'allow', reason: '[Starfish] in-boundary write auto-allowed (writes=auto' + (backed ? '; backed up' : '; new file') + ')' });
+        this.pending.push('fs.write');
+        return { permissionDecision: 'allow', reason: '[Starfish] in-boundary write auto-allowed (backed up)' };
+      }
       if (d.allow) this.pending.push(g.tool);
       return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason };
     }

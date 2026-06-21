@@ -11,7 +11,7 @@ import { HookSession, type HookPayload, type HookResponse } from './handler';
 export class PdpDaemon {
   private server: Server | null = null;
   private sessions = new Map<string, HookSession>();   // keyed by CC session id (+agent) so PreToolUse->PostToolUse correlate across the per-call connections
-  constructor(private governor: Governor, private boundaryFor: (agentId: string) => BoundarySet, private boundaryForCapability?: (capabilityId: string) => BoundarySet) {}
+  constructor(private governor: Governor, private boundaryFor: (agentId: string) => BoundarySet, private boundaryForCapability?: (capabilityId: string) => BoundarySet, private overlay?: { writeProfile?: 'ask' | 'auto'; projectRoot?: string; backupDir?: string; backups?: number }) {}
 
   listen(path: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -35,8 +35,8 @@ export class PdpDaemon {
                 let sh = this.sessions.get(sid);
                 if (!sh) {
                   const boundary = capabilityId && this.boundaryForCapability ? this.boundaryForCapability(capabilityId) : this.boundaryFor(agentId);
-                  sh = new HookSession(this.governor, { expectedAgentId: agentId, boundary, capabilityId });
-                  if (this.sessions.size > 1000) this.sessions.delete(this.sessions.keys().next().value);   // bound memory (evict oldest)
+                  sh = new HookSession(this.governor, { expectedAgentId: agentId, boundary, capabilityId, writeProfile: this.overlay?.writeProfile, projectRoot: this.overlay?.projectRoot, backupDir: this.overlay?.backupDir, backups: this.overlay?.backups });
+                  if (this.sessions.size > 1000) { const oldest = this.sessions.keys().next().value; if (oldest) this.sessions.delete(oldest); }   // bound memory (evict oldest)
                   this.sessions.set(sid, sh);
                 }
                 session = sh;

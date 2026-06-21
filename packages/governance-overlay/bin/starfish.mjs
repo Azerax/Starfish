@@ -9,7 +9,7 @@ import { govern, seedInstall, seedOverlay, isInitialized, readLock } from '@star
 import { resolve, join, dirname, sep } from 'node:path';
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, chmodSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { PdpDaemon } from '@starfish/governance-hooks';
 import { createHash } from 'node:crypto';
@@ -92,7 +92,7 @@ async function runInit() {
   if (theme !== 'fleet' && theme !== 'ops') theme = 'fleet';
 
   mkdirSync(dir, { recursive: true });
-  if (flag('overlay')) { const r = seedOverlay(dir, { operator, theme, force: flag('force') }); registerGoverned(dir); console.log(`\n  \u2713 Overlay governance seeded at ${join(dir, '.starfish')} (project stays untouched).`); console.log('  Next:  starfish install --claude-code   then   starfish daemon'); return; }
+  if (flag('overlay')) { const wp = opt('writes') === 'auto' ? 'auto' : 'ask'; const bk = parseInt(opt('backups') || '3', 10); const r = seedOverlay(dir, { operator, theme, force: flag('force'), writeProfile: wp, backups: Number.isFinite(bk) && bk > 0 ? bk : 3 }); registerGoverned(dir); console.log(`\n  \u2713 Overlay governance seeded at ${join(dir, '.starfish')} (project stays untouched).`); console.log('  Next:  starfish install --claude-code   then   starfish daemon'); return; }
   seedInstall(dir, { operator, theme, by: 'cli', force: flag('force') });
 
   console.log(`\n  ✓ Base root (visibility ceiling): ${dir}`);
@@ -131,6 +131,13 @@ function pdpEndpoint(projectRoot) {
   return join(overlayHome(projectRoot), 'pdp.sock');
 }
 const pidFile = (projectRoot) => join(overlayHome(projectRoot), 'daemon.pid');
+function readConfig(projectRoot) { try { return JSON.parse(readFileSync(join(overlayHome(projectRoot), 'starfish.config.json'), 'utf8')); } catch { return {}; } }
+function writeProfileFor(projectRoot) {
+  const flag = opt('writes'); if (flag === 'ask' || flag === 'auto') return flag;          // per-session flag wins
+  const env = process.env.STARFISH_WRITES; if (env === 'ask' || env === 'auto') return env; // then env
+  const cfg = readConfig(projectRoot).writeProfile; return cfg === 'auto' ? 'auto' : 'ask'; // then project default
+}
+function backupsFor(projectRoot) { const v = parseInt(opt('backups') || process.env.STARFISH_BACKUPS || readConfig(projectRoot).backups || '3', 10); return Number.isFinite(v) && v > 0 ? v : 3; }
 // #6 Governed-projects registry. A registered project must STAY governed: if its .starfish is gone, the
 // shim denies (tamper) instead of passing through. The agent can't edit these (managed dir is root-owned;
 // ~/.starfish is outside every project boundary, so in-band tool writes to it are denied).
@@ -161,13 +168,15 @@ async function runDaemon() {
   const governor = loadGovernor(join(home, 'governance'), join(home, 'audit.jsonl'), { stateDir: join(home, 'state') });
   // Boundary: the agent may read/write the PROJECT tree, but NEVER the .starfish governance home (deny).
   const boundaryFor = () => ({ visibility: [projectRoot], write: [projectRoot], deny: [home] });
-  const daemon = new PdpDaemon(governor, boundaryFor);
+  const wp = writeProfileFor(projectRoot); const bk = backupsFor(projectRoot);
+  const daemon = new PdpDaemon(governor, boundaryFor, undefined, { writeProfile: wp, projectRoot, backupDir: join(home, 'backups'), backups: bk });
   const sock = pdpEndpoint(projectRoot);
   await daemon.listen(sock);
   try { writeFileSync(pidFile(projectRoot), String(process.pid)); } catch { /* noop */ }
   console.log('  Starfish PDP daemon online (fail-closed).');
   console.log('  project : ' + projectRoot);
   console.log('  endpoint: ' + sock);
+  console.log('  writes : ' + wp + (wp === 'auto' ? ' (in-boundary writes auto-allowed, ' + bk + ' backups kept)' : ' (every write asks)') + ' - system-risk stays gated either way');
   console.log('  Every governed tool call is denied unless this daemon allows it. Ctrl-C to stop.');
   // #7 Config-drift tripwire: baseline the governance-critical Claude Code settings (managed + user +
   // project). If any change after launch, the daemon enters SAFE MODE — the PDP then denies EVERY tool
@@ -208,7 +217,8 @@ async function runDaemon() {
 function emitDecision(isPre, resp) {
   if (!isPre) { process.stdout.write('{}'); process.exit(0); }
   const pd = (resp && resp.permissionDecision) ? resp.permissionDecision : 'allow';
-  const reason = (resp && resp.reason) ? resp.reason : '';
+  let reason = (resp && resp.reason) ? resp.reason : '';
+  if (reason && !reason.startsWith('[Starfish]')) reason = '[Starfish] ' + reason;
   const out = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: pd, permissionDecisionReason: reason }, permissionDecision: pd, reason };
   if (pd === 'deny') out.decision = 'block'; else if (pd === 'allow') out.decision = 'approve';
   process.stdout.write(JSON.stringify(out));
@@ -321,6 +331,7 @@ function managedPolicy() {
     allowUnsandboxedCommands: false,
     env: { NODE_OPTIONS: '' },                               // neutralize --require/loader injection into the hook process
 
+    statusLine: { type: 'command', command: `"${NODE_ABS}" "${SELF_CLI}" statusline` },
     hooks: {
       PreToolUse: [hk('PreToolUse')],
       PostToolUse: [hk('PostToolUse')],
@@ -329,6 +340,24 @@ function managedPolicy() {
     },
   };
 }
+// Re-run the managed install with elevation. Windows: trigger a UAC prompt (Start-Process -Verb RunAs)
+// that runs an elevated child and -Wait for it (you cannot elevate the running process in place). Unix:
+// re-exec under sudo, which prompts in the same terminal. The child carries --elevated to avoid a loop.
+function elevateAndInstall() {
+  const childArgs = [SELF_CLI, 'install', '--claude-code', '--managed', '--elevated'];
+  if (platform() === 'win32') {
+    const ps = (x) => "'" + String(x).replace(/'/g, "''") + "'";
+    const argList = childArgs.map(ps).join(',');
+    const cmd = 'Start-Process -Verb RunAs -Wait -FilePath ' + ps(NODE_ABS) + ' -ArgumentList ' + argList;
+    console.error('  Requesting Administrator (a UAC prompt will appear)...');
+    const r = spawnSync('powershell', ['-NoProfile', '-Command', cmd], { stdio: 'inherit' });
+    return r.status === 0;
+  }
+  console.error('  Requesting elevation via sudo...');
+  const r = spawnSync('sudo', [NODE_ABS, ...childArgs], { stdio: 'inherit' });
+  return r.status === 0;
+}
+
 function installManaged() {
   const dir = managedDir();
   const dropinDir = join(dir, 'managed-settings.d');
@@ -347,10 +376,27 @@ function installManaged() {
     console.log('  Claude Code will now load ONLY Starfish hooks + managed permission rules; bypass mode is disabled.');
     console.log('  Per project you want governed:  starfish init --overlay --yes   then   starfish daemon');
   } catch (e) {
-    console.error('  Could not write managed settings (needs admin/root): ' + (e.message || e));
-    console.error('  Create this file yourself at:\n    ' + target + '\n  with these contents:\n');
-    console.error(JSON.stringify(policy, null, 2));
-    console.error('\n  (Linux/macOS: sudo mkdir -p "' + dropinDir + '" && sudo tee "' + target + '" >/dev/null)');
+    if (!flag('elevated') && !flag('no-elevate')) {
+      if (elevateAndInstall() && existsSync(join(managedDir(), 'managed-settings.d', 'starfish.json'))) {
+        console.log('  \u2713 Managed lockdown installed with elevation -> ' + join(managedDir(), 'managed-settings.d', 'starfish.json'));
+        console.log('  Verify: starfish doctor');
+        return;
+      }
+      console.error('  Elevation did not complete. Manual steps below.');
+    }
+    console.error('  Could not write managed settings (needs elevation): ' + (e.message || e));
+    if (platform() === 'win32') {
+      console.error('  Re-run in an ELEVATED shell (no sudo on Windows):');
+      console.error('    1) Start menu > PowerShell > right-click > Run as administrator, then:');
+      console.error('       starfish install --claude-code --managed');
+      console.error('    2) ...or elevate just this command from a normal PowerShell:');
+      console.error('       Start-Process powershell -Verb RunAs -ArgumentList \'-NoExit\',\'-Command\',\'starfish install --claude-code --managed\'');
+      console.error('    3) ...or, on Windows 11 24H2 with sudo enabled (Settings > System > For developers): sudo starfish install --claude-code --managed');
+    } else {
+      console.error('  Re-run with elevation:  sudo starfish install --claude-code --managed');
+      console.error('  ...or create it yourself: sudo mkdir -p "' + dropinDir + '" && sudo tee "' + target + '" >/dev/null  (paste the JSON below)');
+      console.error(JSON.stringify(policy, null, 2));
+    }
     process.exit(1);
   }
 }
@@ -370,8 +416,9 @@ function runInstall() {
     arr.push({ matcher: '*', hooks: [{ type: 'command', command: `starfish hook --event ${ev} --root "${projectRoot}"`, timeout: 10000 }] });
     cfg.hooks[ev] = arr;
   }
+  cfg.statusLine = { type: 'command', command: `starfish statusline --root "${projectRoot}"` };
   writeFileSync(p, JSON.stringify(cfg, null, 2));
-  console.log('  Installed Starfish hooks -> ' + p);
+  console.log('  Installed Starfish hooks + status line -> ' + p);
   console.log('  Events: ' + HOOK_EVENTS.join(', ') + ' (deny-by-default, fail-closed).');
   console.log('  Start the PDP:  starfish daemon --root "' + projectRoot + '"');
 }
@@ -399,7 +446,7 @@ function runDoctor() {
   const dropin = join(managedDir(), 'managed-settings.d', 'starfish.json');
   let policy = null; try { policy = JSON.parse(readFileSync(dropin, 'utf8')); } catch { /* absent */ }
   if (!policy) {
-    add('managed lockdown deployed', 'FAIL', 'missing ' + dropin + ' — run: sudo starfish install --claude-code --managed');
+    add('managed lockdown deployed', 'FAIL', 'missing ' + dropin + ' - run ' + (platform() === 'win32' ? 'an elevated (Run as administrator) `starfish install --claude-code --managed`' : '`sudo starfish install --claude-code --managed`'));
   } else {
     add('managed lockdown deployed', 'PASS', dropin);
     const need = { allowManagedHooksOnly: true, allowManagedPermissionRulesOnly: true, disableAllHooks: false, disableBypassPermissionsMode: 'disable', allowUnsandboxedCommands: false };
@@ -437,6 +484,32 @@ function runDoctor() {
   if (fails) process.exit(1);
 }
 
+function runStatusline() {
+  // Persistent indicator for the Claude Code status line. Read-only; computed from the audit + daemon.
+  const root = resolve(opt('root') || process.cwd());
+  const home = overlayHome(root);
+  if (!isInitialized(home)) { process.stdout.write('\u2b21 Starfish \u00b7 not governing here'); return; }
+  let allow = 0, deny = 0, drift = false;
+  try {
+    for (const ln of readFileSync(join(home, 'audit.jsonl'), 'utf8').split('\n')) {
+      if (!ln.trim()) continue;
+      let e; try { e = JSON.parse(ln); } catch { continue; }
+      const a = e.action || '';
+      if (a.indexOf('ingress:') === 0) { if (e.decision === 'allow') allow++; else if (e.decision === 'deny') deny++; }
+      else if (a === 'config-drift') drift = true;
+      else if (a === 'config-reattested') drift = false;
+    }
+  } catch { /* no/locked audit */ }
+  const daemonUp = existsSync(pidFile(root));
+  const wp = readConfig(root).writeProfile === 'auto' ? 'auto' : 'ask';
+  let s = '\u2b21 Starfish';
+  s += (drift ? ' \u26a0 SAFE MODE' : ' \u2713 governed');
+  s += ` \u00b7 ${allow}\u2713 ${deny}\u26d4`;
+  s += daemonUp ? ' \u00b7 daemon up' : ' \u00b7 daemon DOWN (deny-all)';
+  s += ' \u00b7 writes:' + wp;
+  process.stdout.write(s);
+}
+
 function runAttest() {
   const projectRoot = resolve(opt('root') || process.cwd());
   const home = overlayHome(projectRoot);
@@ -454,4 +527,5 @@ else if (cmd === 'install') runInstall();
 else if (cmd === 'uninstall') runUninstall();
 else if (cmd === 'attest') runAttest();
 else if (cmd === 'doctor') runDoctor();
+else if (cmd === 'statusline') runStatusline();
 else usage();
