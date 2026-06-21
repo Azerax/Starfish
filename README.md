@@ -8,20 +8,46 @@
 
 Project Starfish is two things built from one trusted core:
 
-1. **A portable governance overlay** — drop it onto *any* existing Claude / AI agent or skill build and
+1. **A portable governance overlay** - drop it onto *any* existing Claude / AI agent or skill build and
    it brings that build under governance: every tool call, agent action, and capability passes a single
    decision point that defaults to **deny**.
-2. **GCS Starfish** — a governed desktop app (Electron + React) that *visualizes* the model: a
+2. **GCS Starfish** - a governed desktop app (Electron + React) that *visualizes* the model: a
    bridge / mission-control UI where you see and approve what your agents are doing.
 
 It's an original, clean-room project. (Conceptually inspired by the open-source `munder-difflin`
-project, MIT — no upstream code or assets are used; see `NOTICE`.)
+project, MIT - no upstream code or assets are used; see `NOTICE`.)
 
 > ⚠️ **Status: research preview / active build.** The governance core is implemented and heavily
-> tested (**274 conformance/determinism tests green**); the desktop UI is being built on top of it.
+> tested (**307 conformance/determinism tests green**); the desktop UI is being built on top of it.
 > 🌐 [projectstarfish.ca](https://projectstarfish.ca)
 
 ---
+
+## Who it is for & what it governs
+
+For AI, platform, and security engineers who let agents read, write, run shells, and reach the network and
+need real **AI agent governance, guardrails, and an audit trail** rather than hope. Starfish targets
+**least privilege, prompt-injection defense, data-exfiltration prevention, policy enforcement, and
+compliance** for autonomous, agentic AI.
+
+It governs the **file system** (boundary-confined reads/writes), **shell/exec** (raw shell gated;
+catastrophic commands denied), **network / MCP / web** (admitted-but-tainted; no exfiltration), **skills /
+capabilities** (vetted + risk-rated, deny-by-default), **secrets / `.env`**, and **deletion** (impact-assessed,
+reversible, hard-ruled). It is model-agnostic (Claude, OpenAI, Gemini, OpenRouter, local) and can govern
+**Claude Code itself** via its hooks.
+
+## Govern Claude Code (deny-by-default overlay)
+
+```bash
+starfish init --overlay --yes       # seed governance under .starfish (project untouched)
+starfish install --claude-code      # wire the hooks
+starfish daemon                     # resident, fail-closed Policy Decision Point
+# tamper-resistant machine-wide lockdown (needs admin once):
+sudo starfish install --claude-code --managed
+starfish doctor                     # audit the lockdown
+```
+
+Verified against Claude Code 2.1.183. See [`docs/OVERLAY_USAGE.md`](docs/OVERLAY_USAGE.md).
 
 ## Install
 
@@ -51,7 +77,7 @@ See [`INSTALL.md`](INSTALL.md).
 
 ## Why
 
-LLM agents are powerful and easy to extend with "skills," but skills run with real authority — files,
+LLM agents are powerful and easy to extend with "skills," but skills run with real authority - files,
 shell, network, money. Most ecosystems bolt safety on afterward. Starfish inverts that: **governance
 loads first and is not optional**, and capabilities are guests inside it, not the other way around.
 
@@ -59,43 +85,43 @@ loads first and is not optional**, and capabilities are guests inside it, not th
 
 The supreme source of truth is [`GOVERNANCE.md`](GOVERNANCE.md):
 
-- **Governance precedes execution** — no action without authorization. Default: **DENY**.
-- **All work is a task** — nothing runs outside the governed task lifecycle. *No task, no tool.*
-- **Auditability** — every meaningful action is recorded to a hash-chained, append-only log.
-- **Bounded autonomy** — agents may automate work; they may never expand their own authority.
-- **Human authority** — a human is the final approver. **Proposer ≠ approver.**
-- **Evidence-based ("no unbacked word")** — an agent's claims ("tests pass," "I ran X") are checked
+- **Governance precedes execution** - no action without authorization. Default: **DENY**.
+- **All work is a task** - nothing runs outside the governed task lifecycle. *No task, no tool.*
+- **Auditability** - every meaningful action is recorded to a hash-chained, append-only log.
+- **Bounded autonomy** - agents may automate work; they may never expand their own authority.
+- **Human authority** - a human is the final approver. **Proposer ≠ approver.**
+- **Evidence-based ("no unbacked word")** - an agent's claims ("tests pass," "I ran X") are checked
   against the recorded deeds; unbacked or contradicted claims are blocked.
-- **Fail-closed** — missing or corrupt governance halts startup; nothing runs ungoverned.
+- **Fail-closed** - missing or corrupt governance halts startup; nothing runs ungoverned.
 
 ## Security & integrity model
 
-- **Vetting is the only door** — provenance, license, static signals (network / code-exec /
+- **Vetting is the only door** - provenance, license, static signals (network / code-exec /
   obfuscation / fs-write / credential), and a prompt-injection screen → a risk tier. **Low** auto-
   registers; **medium+** is quarantined pending consent.
-- **Prompt-injection = highest tier → hard reject** — overrides even a trusted publisher.
-- **Publisher signing (Ed25519)** — a skill signed over its manifest hash by a pinned key is
+- **Prompt-injection = highest tier → hard reject** - overrides even a trusted publisher.
+- **Publisher signing (Ed25519)** - a skill signed over its manifest hash by a pinned key is
   cryptographically trusted.
-- **Per-skill confinement** — each skill gets a unique workspace (`source` read-only, `workspace`
+- **Per-skill confinement** - each skill gets a unique workspace (`source` read-only, `workspace`
   read/write); other skills, the governance dir, and the audit log are invisible to it. No symlinks.
-- **Integrity, triple-checked** — per-file SHA-256 manifests; verify-before-invoke + before/during/
+- **Integrity, triple-checked** - per-file SHA-256 manifests; verify-before-invoke + before/during/
   after hashing; drift → auto-quarantine.
-- **Governed deletion** — every delete is impact-assessed and **soft** (recoverable). Hard rules:
+- **Governed deletion** - every delete is impact-assessed and **soft** (recoverable). Hard rules:
   **no system files, no skills, no folders.** A dedicated **Custodian** does safe file-level cleanup.
-- **Secret-scoped (`.env`/credentials)** — reading is deny-by-default; **Toby is the gatekeeper** for
+- **Secret-scoped (`.env`/credentials)** - reading is deny-by-default; **Toby is the gatekeeper** for
   add/modify/remove; content is screened for poisoning; secret values never egress.
-- **External sources (MCP / network / websites)** — deny-by-default until an agent verifies safety or
+- **External sources (MCP / network / websites)** - deny-by-default until an agent verifies safety or
   the operator overrides; admitted sources are **tainted** (content injection-screened before re-entry;
   tainted data can't egress to a foreign destination). Signed blocklist = remote kill.
-- **Model-agnostic** — Anthropic, OpenAI, Gemini, a local model, or a router; governance is the same
+- **Model-agnostic** - Anthropic, OpenAI, Gemini, a local model, or a router; governance is the same
   constant whichever model runs the work. API keys live in the OS keychain, never in code or `.env`.
-- **Operator-signed self-integrity** — the system verifies *itself* the way it verifies skills; tamper
+- **Operator-signed self-integrity** - the system verifies *itself* the way it verifies skills; tamper
   → safe mode. Optional external **anchoring** of the audit root (for institutions / auditors).
 
 Full adversarial analysis: [`docs/SKILL_ISOLATION_THREATS.md`](docs/SKILL_ISOLATION_THREATS.md).
 Design plans: `docs/SLASH_COMMAND_GOVERNANCE.md`, `docs/EXTERNAL_SOURCE_GOVERNANCE.md`.
 
-## Architecture — layered "rings"
+## Architecture - layered "rings"
 
 A package may import only strictly **lower** layers (CI-enforced). Governance imports nothing from
 transports or the app.
@@ -103,14 +129,14 @@ transports or the app.
 | Package | Ring | Role |
 |---|---|---|
 | `@starfish/governance-core` | 1 (TCB) | PDP choke point, boundary engine, hash-chained audit, registries, risk/policy, task lifecycle, Token Governor, vetting, runtime monitor, model router / dispatch / runner, agent loop, evidence gate, deletion + secrets + external-source gates, self-integrity, anchoring. No UI. |
-| `@starfish/governance-hooks` | 2 | PreToolUse/Stop hook shim + a local PDP daemon — the live enforcement seam. |
-| `@starfish/governance-overlay` | 2 | `starfish govern <pack>` — inventory → vet → consent → install. |
+| `@starfish/governance-hooks` | 2 | PreToolUse/Stop hook shim + a local PDP daemon - the live enforcement seam. |
+| `@starfish/governance-overlay` | 2 | `starfish govern <pack>` - inventory → vet → consent → install. |
 | `@starfish/desktop` | 3 | GCS Starfish: the governed Electron host + React UI. |
-| `project-starfish` (`packages/cli`) | — | the published, self-contained `starfish` CLI bundle. |
+| `project-starfish` (`packages/cli`) | - | the published, self-contained `starfish` CLI bundle. |
 
-The **crew** (IP-safe *Fleet* theme): an orchestrator, a planner, **Oh Brian** (intake & vetting — the
+The **crew** (IP-safe *Fleet* theme): an orchestrator, a planner, **Oh Brian** (intake & vetting - the
 only door), **Constable Gooey** (read-only runtime monitor), a memory/planner, and the **Quartermaster**
-(Custodian — safe cleanup). Internal ids are stable; the theme is a swappable skin.
+(Custodian - safe cleanup). Internal ids are stable; the theme is a swappable skin.
 
 ## Develop
 
@@ -126,10 +152,10 @@ shippable source, and an **SBOM + license check**.
 
 ```
 packages/
-  governance-core/      ring 1 — the trusted core (+ conformance/determinism tests)
-  governance-hooks/     ring 2 — hook shim + PDP daemon
-  governance-overlay/   ring 2 — `starfish govern`; default-skills catalog + vetting records
-  desktop/              ring 3 — governed host (src/) + Electron+React app (app/)
+  governance-core/      ring 1 - the trusted core (+ conformance/determinism tests)
+  governance-hooks/     ring 2 - hook shim + PDP daemon
+  governance-overlay/   ring 2 - `starfish govern`; default-skills catalog + vetting records
+  desktop/              ring 3 - governed host (src/) + Electron+React app (app/)
   cli/                  the published `project-starfish` CLI bundle
 docs/                   GOVERNANCE-adjacent docs, threat model, design plans, UI mockups
 site/                   projectstarfish.ca landing page
@@ -139,10 +165,10 @@ GOVERNANCE.md           constitutional source of truth
 
 ## License & attribution
 
-Apache-2.0 (see `LICENSE`) — free for personal **and** commercial use. The Project Starfish name/logo are trademarks (see `TRADEMARK.md`); enterprise/compliance/cloud modules are offered separately (see `COMMERCIAL.md`). The document-creation skills referenced from the default catalog are
-source-available (not OSS) — confirm their terms before redistribution. See `NOTICE` for attribution.
+Apache-2.0 (see `LICENSE`) - free for personal **and** commercial use. The Project Starfish name/logo are trademarks (see `TRADEMARK.md`); enterprise/compliance/cloud modules are offered separately (see `COMMERCIAL.md`). The document-creation skills referenced from the default catalog are
+source-available (not OSS) - confirm their terms before redistribution. See `NOTICE` for attribution.
 All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Latest: **v0.10.0** — govern Claude Code (deny-by-default overlay).
+See [CHANGELOG.md](CHANGELOG.md). Latest: **v0.10.0** - govern Claude Code (deny-by-default overlay).

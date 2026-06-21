@@ -1,74 +1,91 @@
 # Project Starfish
 
-> **A governance-first, deny-by-default overlay for AI agent & skill builds.**
+> **AI governance for agents: a deny-by-default policy layer for Claude Code and agent / skill builds.**
 > Everyone ships skills. Nobody ships governance. **Starfish is the governance.**
 
-`project-starfish` is the `starfish` CLI: drop it onto any Claude / AI agent or skill build and it
-brings that build under governance — every capability passes a single decision point that defaults to
-**deny**, and skills are guests inside governance rather than the other way around.
+[![npm](https://img.shields.io/npm/v/project-starfish.svg)](https://www.npmjs.com/package/project-starfish)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/Azerax/Starfish/blob/master/LICENSE)
 
-Self-contained, single-file bundle. No runtime dependencies. Local-only. MIT.
+`project-starfish` is the `starfish` CLI. It puts every AI agent action through a single **Policy Decision
+Point** that defaults to **deny**: each tool call is authorized on the way in, contained on the way out,
+and written to a tamper-evident **audit log**. No task, no tool. Proposer is never approver. Fail-closed:
+if governance is not running, governed tool calls are denied, not allowed.
 
-🌐 [projectstarfish.ca](https://projectstarfish.ca) · 📦 [GitHub](https://github.com/Azerax/Starfish)
+It is **model-agnostic** (Claude, OpenAI, Gemini, OpenRouter, local) and, as of v0.10.0, it can govern
+**Claude Code itself** through its hooks.
 
----
+Self-contained single-file bundle, no runtime dependencies, local-only. Apache-2.0 (free for personal and
+commercial use).
+
+[projectstarfish.ca](https://projectstarfish.ca) · [GitHub](https://github.com/Azerax/Starfish) · [Devlog](https://projectstarfish.ca/blog/)
+
+## Who it is for
+
+AI / platform / security engineers who let agents read, write, run shells, and reach the network, and who
+need **agent governance, guardrails, and an audit trail** instead of hope. Useful anywhere you care about
+**least privilege, prompt-injection defense, data-exfiltration prevention, policy enforcement, and
+compliance** for autonomous and agentic AI.
+
+## What it governs
+
+- **File system** - reads/writes confined to a boundary; writes outside it (or into the governance dir) are denied.
+- **Shell / exec** - raw shell asks for approval; catastrophic commands (`rm -rf /`, `curl | sh`, ...) are denied outright.
+- **Network / MCP / web** - external sources are admitted-but-tainted; tainted data cannot authorize a tool or exfiltrate.
+- **Skills / capabilities** - vetted and risk-rated before they can run; deny-by-default for anything unregistered.
+- **Secrets / `.env`** - read deny-by-default; add/remove gatekept.
+- **Deletion** - impact-assessed, soft (recoverable), with hard rules (no system files, no folders, no skill files).
 
 ## Install
 
 ```bash
-# from npm
-npm install -g project-starfish
-# …or run without installing
-npx project-starfish govern ./my-skill-pack
-
-# from GitHub (same CLI, built on install)
-npm install -g github:Azerax/Starfish
+npm install -g project-starfish          # from npm
+npm install -g github:Azerax/Starfish    # ...or from GitHub (built on install)
+npx project-starfish govern ./my-skill-pack   # ...or run without installing
 ```
 
 Requires Node.js >= 18.
 
-## Use
+## Govern Claude Code (deny-by-default overlay)
+
+```bash
+cd <your project>
+starfish init --overlay --yes       # seed governance under .starfish (project untouched)
+starfish install --claude-code      # wire the PreToolUse / PostToolUse hooks
+starfish daemon                     # start the resident, fail-closed Policy Decision Point
+# now build with Claude Code as normal - every tool call is adjudicated + audited
+```
+
+Tamper-resistant, machine-wide lockdown (recommended, needs admin once):
+
+```bash
+sudo starfish install --claude-code --managed   # Claude Code then refuses competing hooks/rules/bypass
+starfish doctor                                  # audit the lockdown: pins, integrity, perms, daemon
+```
+
+Verified against Claude Code 2.1.183.
+
+## Bring an existing skill pack under governance
 
 ```bash
 starfish govern <pack-dir> [--apply] [--approve id1,id2]
 ```
 
 `starfish govern` inventories a build, **vets every capability** (static review + provenance +
-prompt-injection screen -> a risk tier), and installs the gate:
+prompt-injection screen, producing a risk tier), and installs the gate: **Low** auto-registers; **Medium
+and up** are quarantined pending your explicit `--approve`.
 
-- **Low risk** -> auto-registered.
-- **Medium and up** -> quarantined, pending your explicit `--approve`.
-- **Prompt-injection** (a skill telling the model to ignore its instructions) -> rejected outright.
+## Commands
 
-Quarantined capabilities cannot run until you approve them. Nothing executes ungoverned.
+`init` · `govern` · `daemon` · `hook` · `install --claude-code [--managed]` · `uninstall` · `attest` · `doctor`
 
-## Why
+## Why deny-by-default
 
-LLM agents are powerful and easy to extend with "skills," but skills run with real authority — files,
-shell, network, money. Most ecosystems bolt safety on afterward. Starfish inverts that: **governance
-loads first and is not optional.**
+Allowlists and one-off permission prompts depend on the agent (and the human) catching every dangerous
+call. Starfish does not: nothing executes unless a policy explicitly allows it, every decision is recorded,
+and an agent can never approve its own high-risk request. The control does not rely on the agent's
+cooperation.
 
-What it brings under one governed decision point:
+---
 
-- **Deny by default** — no capability acts without authorization.
-- **Vetting is the only door** — provenance, license, static signals, and a prompt-injection screen.
-- **Per-skill confinement** — each skill runs in its own workspace; other skills, the governance dir,
-  and the audit log are invisible to it.
-- **Integrity, verified** — per-file SHA-256 manifests; tamper -> auto-quarantine.
-- **Evidence-based** — an agent's claims ("tests pass," "I ran X") are checked against the recorded
-  deeds; unbacked claims are blocked.
-- **Recoverable by design** — deletes are impact-assessed and soft (no system files, no skills, no
-  folders); secrets (`.env` / credentials) are gatekept and never silently exfiltrated.
-- **Tamper-evident audit** — a hash-chained, append-only log; optional external anchoring.
-- **Model-agnostic** — Anthropic, OpenAI, Gemini, a local model, or a router; governance is the same
-  constant whichever model runs the work.
-
-## What this package is
-
-This is the **governance CLI / overlay**. The desktop app (GCS Starfish — a bridge UI that visualizes
-the governance model) is distributed separately. See the [repo](https://github.com/Azerax/Starfish)
-for the full monorepo, the constitution (`GOVERNANCE.md`), and the threat model.
-
-## License
-
-MIT.
+Apache-2.0. "Project Starfish" and the Starfish mark are trademarks of the project; the license grants no
+trademark rights. Full changelog: [CHANGELOG.md](https://github.com/Azerax/Starfish/blob/master/CHANGELOG.md).
