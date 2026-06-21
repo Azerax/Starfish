@@ -142,3 +142,7 @@ GOVERNANCE.md           constitutional source of truth
 Apache-2.0 (see `LICENSE`) — free for personal **and** commercial use. The Project Starfish name/logo are trademarks (see `TRADEMARK.md`); enterprise/compliance/cloud modules are offered separately (see `COMMERCIAL.md`). The document-creation skills referenced from the default catalog are
 source-available (not OSS) — confirm their terms before redistribution. See `NOTICE` for attribution.
 All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Latest: **v0.10.0** — govern Claude Code (deny-by-default overlay).
