@@ -8,6 +8,46 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.11.1] - 2026-07-02
+
+### Fixed
+- Tool-schema conformance test now asserts the wire-safe tool names (`fs__write`/`fs__read`) that
+  0.11.0 already sends and verifies the parser unwires them back to the governed dotted names (the
+  runtime shipped correctly in 0.11.0; only the test lagged). Also restores the 0.11.0 changelog
+  entry that a stale file cache dropped from the tagged commit.
+
+## [0.11.0] - 2026-07-02
+
+### Fixed
+- **Provider tool-name 400** that blocked every model call: governed dotted tool names (`fs.read`,
+  `fs.write`) are rejected by Anthropic/OpenAI/Google. Names are now mapped on the wire
+  (`fs.read` <-> `fs__read`) and restored when parsing the model's tool calls, so the PDP still sees
+  the governed name.
+- **Approve -> re-ask loop** on file writes: the agent's tool call was flattened to `[tool_use]` in
+  the transcript, so the model re-issued it after approval. Tool calls and results are now threaded
+  clearly so runs complete instead of looping.
+- **Relative paths denied as out-of-boundary**: the agent is now given the absolute workspace root
+  and instructed to use absolute paths; the executor creates parent directories before writing.
+- **Console mojibake** from a UTF-8 em dash in a `console.log` on Windows terminals.
+- **False "Watcher discrepancy" alarm**: routine denials no longer trip the security-monitor ribbon;
+  only genuine anomalies (boundary escapes, hash mismatches, budget-hard, orphan tool-results) do.
+
+### Added
+- **My Ready Room**: a view of "total stop" issues (missing API key, un-opted egress, hard-budget
+  pause) with one-click resolve actions, a forced-but-dismissible popup, and a pulsing-red nav badge.
+- **Cost governance modes**: Platform-managed (default; the provider console cap is the ceiling,
+  no local budget) or an optional Starfish USD hard cap. Starfish never raises the provider's limit.
+- **Remember last workspace**: the app persists and reopens the workspace it was initialized against.
+- **Clear COMM approval UX**: in-flight orders show a "paused for your go/no-go" panel with inline
+  Approve/Deny; results render readably and always show the stop-reason.
+
+### Changed
+- Crew **"risk" relabeled to "clearance"** (an authority/scrutiny tier, not a threat rating).
+- Token Governor shows **platform-managed** instead of `$0.00 / $0.00` when no local cap is set.
+- Website SEO: new `/agentic-ai-security/` and `/what-is-ai-governance/` pages (FAQ schema),
+  open-source-forward home metadata, cross-links, sitemap, deferred fonts.
+- Added `scripts/dev-fresh.ps1` (launch dev against the real workspace; opt-in `-Reset`).
+
 ## [0.10.1] - 2026-06-21
 
 ### Added
@@ -71,42 +111,4 @@ Governing Claude Code itself: Starfish can now run as a deny-by-default overlay 
 ## [0.9.3] - 2026-06-20
 
 ### Changed
-- Relicensed core + CLI to **Apache-2.0** (free for personal and commercial use). Trademark reserved.
-
-### Added
-- `starfish init` first-run wizard: customizable **base root** (the visibility ceiling), fail-closed
-  governance seed with the scaffold tree (`tools/`, `agents/`, `skills/`, `shared/`), then launches the UI.
-- Desktop packaging (electron-builder) and the projectstarfish.ca landing site.
-
-### Fixed
-- npm publish blockers (NUL-padded `package.json`); README/license metadata.
-
-## [0.9.0] - 2026-06-15
-
-First public release.
-
-### Added
-- `starfish govern <pack>`: the portable governance overlay - inventory, vet, risk-rate, and register a
-  skill pack under deny-by-default governance.
-- Single self-contained bundled CLI, installable from **npm** (`project-starfish`) and **GitHub**.
-- Model-agnostic runtime spine (provider registry + adapters, deterministic audited router, dispatcher,
-  host runner, agent loop) with the API key kept in the OS keychain.
-
-## Foundation (pre-CLI, 2026-06-04 → 2026-06-15)
-
-The trusted base, built before the CLI was packaged:
-- Deny-by-default **PDP** as the single choke point; hash-chained, append-only **audit**; **boundary
-  engine** (canonicalization + symlink rejection); fail-closed boot.
-- Task lifecycle ("no task, no tool"), **Token Governor** (soft warn / hard pause), proposer ≠ approver.
-- **Toby** (capability intake/vetting - the only door into the registry) and **Hank** (read-only runtime
-  monitor reconciled against deterministic counters).
-- **Evidence Gate** ("no unbacked word"), operator-signed **self-integrity** (safe mode on tamper),
-  optional audit **anchoring**, **governed deletion + the Custodian** (soft, reversible, hard-rule-gated),
-  **secret/.env governance** (Toby gatekept), and **external-source governance** (admit-but-taint).
-- Pivot from a fork-strangler approach to a **clean-room** core; IP-safe Fleet theme.
-
-[Unreleased]: https://github.com/Azerax/Starfish/compare/v0.10.1...HEAD
-[0.10.1]: https://github.com/Azerax/Starfish/releases/tag/v0.10.1
-[0.10.0]: https://github.com/Azerax/Starfish/releases/tag/v0.10.0
-[0.9.3]: https://github.com/Azerax/Starfish/releases/tag/v0.9.3
-[0.9.0]: https://github.com/Azerax/Starfish/releases/tag/v0.9.0
+- Relicensed core + CL

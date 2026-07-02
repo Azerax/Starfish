@@ -13,8 +13,10 @@ describe('tool schemas reach the model', () => {
     const r = anthropicAdapter.buildRequest({ provider: ANTHROPIC, model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }], tools: STARFISH_TOOL_SCHEMAS });
     const body = r.body as { tools?: { name: string; input_schema: unknown }[] };
     expect(Array.isArray(body.tools)).toBe(true);
-    expect(body.tools!.map((t) => t.name)).toContain('fs.write');
-    expect(body.tools!.find((t) => t.name === 'fs.read')!.input_schema).toBeTruthy();
+    // Governed dotted names are mapped to wire-safe names (Anthropic/OpenAI/Google reject dots).
+    expect(body.tools!.map((t) => t.name)).toContain('fs__write');
+    expect(body.tools!.find((t) => t.name === 'fs__read')!.input_schema).toBeTruthy();
+    expect(body.tools!.every((t) => /^[A-Za-z0-9_-]{1,64}$/.test(t.name))).toBe(true);   // no dots on the wire
   });
   it('omits tools when none given (backward compatible)', () => {
     const r = anthropicAdapter.buildRequest({ provider: ANTHROPIC, model: 'm', messages: [{ role: 'user', content: 'x' }] });
@@ -34,7 +36,8 @@ function harness(resolveAsk?: (c: ToolCall, r: string) => Promise<boolean>) {
   const pdp = new PDP(new Registry<ToolDef>(join(dir, 'tools.json'), (t) => t.id), new Registry<AgentDef>(join(dir, 'agents.json'), (a) => a.id), audit, new RiskEngine(), new PolicyEngine([]));
   const tokens = new TokenGovernor(audit);
   const dispatcher = new Dispatcher({ providers: new ProviderRegistry([ANTHROPIC], 'anthropic'), router: new ModelRouter(undefined, audit), tokens, audit });
-  let i = 0; const script = [toolMsg('fs.write', { path: '/tmp/x' }), finalMsg('done')];
+  // the model replies with the WIRE name (fs__write); the loop's parser must unwire it back to fs.write
+  let i = 0; const script = [toolMsg('fs__write', { path: '/tmp/x' }), finalMsg('done')];
   const runner = new HostRunner({ tokens, keyResolver: () => 'sk', fetcher: async () => ({ status: 200, ok: true, text: async () => script[Math.min(i++, 1)] }), audit });
   const executed: ToolCall[] = [];
   const loop = new AgentLoop({ dispatcher, runner, pdp, boundaryFor: () => BS, execute: (c) => { executed.push(c); return { ok: true, content: 'ok' }; }, audit, maxSteps: 4, resolveAsk });
@@ -52,13 +55,4 @@ describe('resolveAsk: a PDP ask is parked for the operator', () => {
   it('denied -> the tool is withheld (no execution)', async () => {
     const { loop, executed } = harness(async () => false);
     const r = await loop.run(RUN);
-    expect(executed.length).toBe(0);
-    expect(r.stopReason).toBe('no-progress');
-  });
-  it('no resolveAsk -> ask is withheld (original behaviour)', async () => {
-    const { loop, executed } = harness(undefined);
-    const r = await loop.run(RUN);
-    expect(executed.length).toBe(0);
-    expect(r.stopReason).toBe('no-progress');
-  });
-});
+    expect(executed.length
