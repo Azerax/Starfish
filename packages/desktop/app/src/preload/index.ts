@@ -32,5 +32,8 @@ const bridge = {
   listTrash: () => ipcRenderer.invoke('delete:trash:list'),
   restoreTrash: (id: string) => ipcRenderer.invoke('delete:trash:restore', { id }),
   purgeTrash: (id: string, confirm: true) => ipcRenderer.invoke('delete:trash:purge', { id, confirm }),
+  getReadiness: () => ipcRenderer.invoke('gov:getReadiness'),
+  getCost: () => ipcRenderer.invoke('provider:getCost'),
+  setCost: (mode: string, budgetUsd?: number) => ipcRenderer.invoke('provider:setCost', { mode, budgetUsd }),
 };
 contextBridge.exposeInMainWorld('starfish', bridge);

@@ -8,11 +8,11 @@
 import { GovernanceError, type RiskTier } from './types';
 import type { AuditLog } from './audit';
 import { ModelRouter, type ModelRouteResult, type BudgetState } from './router';
-import { ProviderRegistry, AdapterRegistry, type Provider, type ChatTurn, type RuntimeRequest } from './provider';
+import { ProviderRegistry, AdapterRegistry, type Provider, type ChatTurn, type RuntimeRequest, type ToolSchema } from './provider';
 import type { TokenGovernor } from './tokens';
 
 export interface DispatchTask { id: string; riskTier?: RiskTier; taskType?: string; tags?: string[]; }
-export interface DispatchInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; }
+export interface DispatchInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; tools?: ToolSchema[]; }
 export interface DispatchPlan {
   taskId: string; agentId: string; budget: BudgetState;
   route: ModelRouteResult; provider: Provider; request: RuntimeRequest;
@@ -60,7 +60,7 @@ export class Dispatcher {
     }
 
     const adapter = this.adapters.for(provider.kind);
-    const request = adapter.buildRequest({ provider, model: route.model, system: input.system, messages: input.messages });
+    const request = adapter.buildRequest({ provider, model: route.model, system: input.system, messages: input.messages, tools: input.tools });
     this.audit?.append({ actor: agentId, domain: 'system', action: 'dispatch-planned', target: task.id, reason: `provider=${provider.id} model=${route.model} rule=${route.ruleId} budget=${budget}` });
     return { taskId: task.id, agentId, budget, route, provider, request };
   }

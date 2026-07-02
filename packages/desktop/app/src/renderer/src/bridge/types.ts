@@ -22,6 +22,10 @@ export interface DeletionImpactView { tier: 'low' | 'medium' | 'high' | 'critica
 export interface TrashEntryView { id: string; originalPath: string; trashedAt: string; name: string; }
 export interface DeleteResultView { ok: boolean; reason: string; impact: DeletionImpactView; trashedTo?: string; }
 
+export interface ReadinessBlocker { id: string; severity: 'stop' | 'warn'; title: string; detail: string; action?: { label: string; view: string }; }
+export interface ReadinessView { ok: boolean; blockers: ReadinessBlocker[]; }
+export interface CostView { mode: 'platform' | 'starfish'; budgetUsd: number; }
+
 export interface GovernanceBridge {
   governed: true;
   getBaseRoot(): Promise<{ root: string; locked: boolean; lockedBy?: string; suggested: string }>;
@@ -50,6 +54,9 @@ export interface GovernanceBridge {
   listTrash(): Promise<TrashEntryView[]>;
   restoreTrash(id: string): Promise<{ ok: boolean; restoredTo?: string; reason: string }>;
   purgeTrash(id: string, confirm: true): Promise<{ ok: boolean }>;
+  getReadiness(): Promise<ReadinessView>;
+  getCost(): Promise<CostView>;
+  setCost(mode: 'platform' | 'starfish', budgetUsd?: number): Promise<{ ok: boolean }>;
 }
 
 declare global { interface Window { starfish?: GovernanceBridge } }

@@ -28,7 +28,7 @@ export { ServiceRegistry, type ServiceInfo } from './services';
 export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind } from './broker';
 export { saveJson, loadJson } from './persistence';
 export { classifyNode, promoteCluster, type CanvasNode, type NodeRoute, type PromoteResult } from './planner';
-export { ProviderRegistry, AdapterRegistry, ANTHROPIC, OPENAI, GOOGLE, OPENROUTER, LOCAL, AVAILABLE_PROVIDERS, DEFAULT_ADAPTERS, anthropicAdapter, openaiAdapter, googleAdapter, localAdapter, routerAdapter, type Provider, type ProviderKind, type AgentRuntimeAdapter, type ChatTurn, type ChatRole, type RuntimeRequest, type BuildRequestInput, type AuthScheme } from './provider';
+export { ProviderRegistry, AdapterRegistry, ANTHROPIC, OPENAI, GOOGLE, OPENROUTER, LOCAL, AVAILABLE_PROVIDERS, DEFAULT_ADAPTERS, anthropicAdapter, openaiAdapter, googleAdapter, localAdapter, routerAdapter, type Provider, type ProviderKind, type AgentRuntimeAdapter, type ChatTurn, type ChatRole, type RuntimeRequest, type BuildRequestInput, type AuthScheme , STARFISH_TOOL_SCHEMAS, type ToolSchema } from './provider';
 export { ModelRouter, DEFAULT_ROUTING, type RoutingPolicy, type RouteRule, type RouteContext, type ModelRouteResult, type BudgetState } from './router';
 export { Dispatcher, type DispatchInput, type DispatchPlan, type DispatchTask, type DispatcherDeps } from './dispatch';
 export { HostRunner, parseUsage, type Fetcher, type KeyResolver, type RunResult, type RunnerDeps, type HttpResponse, type PriceTable } from './runner';

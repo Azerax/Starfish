@@ -7,7 +7,7 @@
 // executor (PEP) acts, and proposer != approver holds (an 'ask' tier is withheld, not auto-run).
 import type { ToolCall, BoundarySet } from './types';
 import type { AuditLog } from './audit';
-import type { ProviderKind, ChatTurn } from './provider';
+import type { ProviderKind, ChatTurn, ToolSchema } from './provider';
 import type { PDP } from './pdp';
 import type { Dispatcher, DispatchTask } from './dispatch';
 import type { HostRunner } from './runner';
@@ -33,14 +33,16 @@ export interface AgentLoopDeps {
   enforceClaims?: boolean;
   citations?: string[];                                           // known citation keys (e.g. CITATIONS.md)
   observe?: (call: ToolCall, result: ToolExecResult, ev: TurnEvidence) => void;  // teach evidence from tool OUTPUT (tests/commits)
+  resolveAsk?: (call: ToolCall, reason: string) => Promise<boolean>;   // on a PDP 'ask', park for operator approval (broker); true=approved
 }
-export interface AgentRunInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; }
+export interface AgentRunInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; tools?: ToolSchema[]; }
 export interface ToolRun { tool: string; allowed: boolean; contained?: boolean; }
 export type StopReason = 'completed' | 'max-steps' | 'budget-hard' | 'no-progress' | 'claim-unbacked';
 export interface AgentRunResult { output: string; steps: number; stopReason: StopReason; toolRuns: ToolRun[]; transcript: ChatTurn[]; unbackedClaims?: ClaimFinding[]; }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const safeJson = (t: string): unknown => { try { return JSON.parse(t); } catch { return undefined; } };
+const unwire = (n: string): string => n.replace(/__/g, '.');   // restore governed dotted tool names
 
 /** Normalize each provider's response shape into a provider-agnostic AgentTurn. */
 export const parseResponse: ResponseParser = (kind, body) => {
@@ -50,7 +52,7 @@ export const parseResponse: ResponseParser = (kind, body) => {
     let text = ''; const tc: ToolRequest[] = [];
     for (const part of content) if (isObj(part)) {
       if (part.type === 'text' && typeof part.text === 'string') text += part.text;
-      else if (part.type === 'tool_use') tc.push({ id: String(part.id ?? ''), name: String(part.name ?? ''), input: isObj(part.input) ? part.input : {} });
+      else if (part.type === 'tool_use') tc.push({ id: String(part.id ?? ''), name: unwire(String(part.name ?? '')), input: isObj(part.input) ? part.input : {} });
     }
     return { text, toolCalls: tc, stop: tc.length ? 'tool' : 'end' };
   }
@@ -60,7 +62,7 @@ export const parseResponse: ResponseParser = (kind, body) => {
     let text = ''; const tc: ToolRequest[] = [];
     for (const p of parts) if (isObj(p)) {
       if (typeof p.text === 'string') text += p.text;
-      else if (isObj(p.functionCall)) tc.push({ id: '', name: String(p.functionCall.name ?? ''), input: isObj(p.functionCall.args) ? p.functionCall.args : {} });
+      else if (isObj(p.functionCall)) tc.push({ id: '', name: unwire(String(p.functionCall.name ?? '')), input: isObj(p.functionCall.args) ? p.functionCall.args : {} });
     }
     return { text, toolCalls: tc, stop: tc.length ? 'tool' : 'end' };
   }
@@ -72,7 +74,7 @@ export const parseResponse: ResponseParser = (kind, body) => {
   const tc: ToolRequest[] = [];
   for (const t of raw) if (isObj(t) && isObj(t.function)) {
     const parsed = safeJson(String(t.function.arguments ?? '{}'));
-    tc.push({ id: String(t.id ?? ''), name: String(t.function.name ?? ''), input: isObj(parsed) ? parsed : {} });
+    tc.push({ id: String(t.id ?? ''), name: unwire(String(t.function.name ?? '')), input: isObj(parsed) ? parsed : {} });
   }
   return { text, toolCalls: tc, stop: tc.length ? 'tool' : 'end' };
 };
@@ -95,7 +97,7 @@ export class AgentLoop {
     for (let step = 1; step <= this.maxSteps; step++) {
       let plan;
       try {
-        plan = dispatcher.plan({ agentId: input.agentId, task: input.task, system: input.system, messages });
+        plan = dispatcher.plan({ agentId: input.agentId, task: input.task, system: input.system, messages, tools: input.tools });
       } catch (e) {
         audit?.append({ actor: input.agentId, domain: 'system', action: 'agent-stop', target: input.task.id, decision: 'deny', reason: `budget-hard: ${(e as Error).message}` });
         return { output: lastText, steps: step - 1, stopReason: 'budget-hard', toolRuns, transcript: messages };
@@ -120,14 +122,19 @@ export class AgentLoop {
         return { output: turn.text, steps: step, stopReason: 'completed', toolRuns, transcript: messages };
       }
 
-      messages.push({ role: 'assistant', content: turn.text || '[tool_use]' });
+      const callSummary = turn.toolCalls.map((t) => `called ${t.name}(${JSON.stringify(t.input).slice(0, 400)})`).join('; ');
+      messages.push({ role: 'assistant', content: (turn.text ? turn.text + '\n' : '') + callSummary });
       let progressed = false;
       for (const tc of turn.toolCalls) {
         const call: ToolCall = { agentId: input.agentId, tool: tc.name, input: tc.input, taskId: input.task.id };
         const bs = boundaryFor(call);
         const d = pdp.decide('ingress', call, bs);
-        if (!d.allow) {
-          const why = d.ask ? `awaiting human approval — ${d.reason}` : `denied — ${d.reason}`;
+        let allowed = d.allow;
+        if (!d.allow && d.ask && this.deps.resolveAsk) {
+          allowed = await this.deps.resolveAsk(call, d.reason);   // park on the broker; operator Approve/Deny on the Bridge
+        }
+        if (!allowed) {
+          const why = d.ask ? `awaiting/denied by operator — ${d.reason}` : `denied — ${d.reason}`;
           messages.push({ role: 'tool', content: `[tool ${tc.name}: ${why}]` });
           toolRuns.push({ tool: tc.name, allowed: false });
           continue;
@@ -139,7 +146,7 @@ export class AgentLoop {
         this.deps.observe?.(call, exec, ev);
         const eg = pdp.decide('egress', { agentId: input.agentId, tool: tc.name, input: { result: exec.content }, taskId: input.task.id }, bs);
         const contained = !eg.allow;
-        messages.push({ role: 'tool', content: contained ? `[contained: ${eg.reason}]` : exec.content });
+        messages.push({ role: 'tool', content: contained ? `[contained: ${eg.reason}]` : `result of ${tc.name}: ${exec.content} (done - do not repeat this call)` });
         toolRuns.push({ tool: tc.name, allowed: true, contained });
       }
 

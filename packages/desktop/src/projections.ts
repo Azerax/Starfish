@@ -74,7 +74,7 @@ export function budgetView(g: Governor): BudgetView[] {
 
 export function monitorView(g: Governor): MonitorView {
   const c = g.monitor.counters();
-  return { lastSweepTs: hhmmss(new Date().toISOString()), counters: { denials: c.denials, boundaryEscapes: c.boundaryEscapes, hashMismatches: c.hashMismatches, budgetHard: c.budgetHard, orphanPosts: c.orphanPosts, casualties: c.casualties }, findings: [], reconciled: c.concerning === 0 };
+  return { lastSweepTs: hhmmss(new Date().toISOString()), counters: { denials: c.denials, boundaryEscapes: c.boundaryEscapes, hashMismatches: c.hashMismatches, budgetHard: c.budgetHard, orphanPosts: c.orphanPosts, casualties: c.casualties }, findings: [], reconciled: (c.boundaryEscapes + c.hashMismatches + c.budgetHard + c.orphanPosts) === 0 };   // routine denials are healthy (deny-by-default); only real anomalies un-reconcile
 }
 
 export function bufferView(g: Governor): CapabilityView[] {

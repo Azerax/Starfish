@@ -3,21 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Project Starfish — A Governance-First, Deny-by-Default AI Ecosystem</title>
-<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish puts every AI agent action through one deny-by-default decision point — authorized in, contained out, fully audited. Apache-2.0, local-first.">
+<title>Project Starfish | Open-Source AI Agent Governance Framework</title>
+<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish is an open-source AI governance platform for agentic systems: deny-by-default, hash-chained audit, zero trust for every AI agent action. Apache-2.0, local-first.">
 <link rel="canonical" href="https://projectstarfish.ca/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#04060f">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://projectstarfish.ca/">
-<meta property="og:title" content="Project Starfish — Governance-First AI">
-<meta property="og:description" content="One deny-by-default decision point for every AI agent action. Apache-2.0, local-first.">
+<meta property="og:title" content="Project Starfish | Open-Source AI Agent Governance Framework">
+<meta property="og:description" content="Open-source AI governance for agentic systems: deny-by-default, hash-chained audit, zero trust for every AI agent action. Apache-2.0, local-first.">
 <meta property="og:image" content="https://projectstarfish.ca/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://projectstarfish.ca/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
   body{background:#04060f}
@@ -65,7 +66,8 @@
         <span style="width:7px;height:7px;border-radius:50%;background:#39e09b;box-shadow:0 0 5px rgba(57,224,155,.55)"></span>POLICY DECISION POINT · ONLINE
       </div>
       <h1 style="font-size:52px;line-height:1.04;letter-spacing:-.03em;color:#f4f7fd;font-weight:800;margin-bottom:22px">Everyone ships skills.<br><span style="color:#6f7d99">Nobody ships</span> <span style="color:#39e09b">governance.</span></h1>
-      <p style="font-size:18px;line-height:1.6;color:#9aa8c4;max-width:520px;margin-bottom:34px">Every agent action passes through one decision point — authorized on the way in, contained on the way out, written to a tamper-evident log. <span style="color:#cdd7ea;font-weight:500">No task, no tool.</span></p>
+      <h2 style="font-size:17px;line-height:1.55;color:#8a98b6;font-weight:500;max-width:560px;margin-bottom:18px">An open-source AI governance framework for agentic systems: deny-by-default policy enforcement, a hash-chained audit trail, and zero trust for every agent action.</h2>
+      <p style="font-size:18px;line-height:1.6;color:#9aa8c4;max-width:520px;margin-bottom:34px">Project Starfish is an open-source, deny-by-default governance layer. Every agent action passes through one decision point - authorized on the way in, contained on the way out, written to a tamper-evident log. <span style="color:#cdd7ea;font-weight:500">No task, no tool.</span></p>
 
       <!-- terminal command -->
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.18);border-radius:11px;overflow:hidden;max-width:520px;margin-bottom:26px">
@@ -73,7 +75,7 @@
           <span style="width:11px;height:11px;border-radius:50%;background:#ff5f57"></span>
           <span style="width:11px;height:11px;border-radius:50%;background:#febc2e"></span>
           <span style="width:11px;height:11px;border-radius:50%;background:#28c840"></span>
-          <span style="margin-left:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88">bash — install</span>
+          <span style="margin-left:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88">bash - install</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px;font-family:'JetBrains Mono',monospace;font-size:14px">
           <span style="color:#c6d0e4"><span style="color:#39e09b">$</span> npm i -g project-starfish<span style="display:inline-block;width:8px;height:16px;background:#39e09b;margin-left:6px;vertical-align:-2px;animation:blink 1.1s step-end infinite"></span></span>
@@ -119,7 +121,7 @@
   <section style="max-width:1180px;margin:0 auto;padding:40px 40px 64px">
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff7a73;letter-spacing:.08em;margin-bottom:14px">// THE_PROBLEM</div>
     <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">Agents act first. They ask never.</h2>
-    <p style="font-size:16.5px;color:#9aa8c4;max-width:680px;line-height:1.6;margin-bottom:38px">An AI agent with tools can read, write, delete, spend, and reach the network on your behalf — usually with nothing between its intent and your system. That's fine until it isn't.</p>
+    <p style="font-size:16.5px;color:#9aa8c4;max-width:680px;line-height:1.6;margin-bottom:38px">An AI agent with tools can read, write, delete, spend, and reach the network on your behalf - usually with nothing between its intent and your system. That's fine until it isn't.</p>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
       <div style="background:#080b18;border:1px solid rgba(255,95,87,.18);border-radius:12px;padding:22px" class="h9">
         <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff7a73;margin-bottom:14px">[ERR 01]</div>
@@ -129,7 +131,7 @@
       <div style="background:#080b18;border:1px solid rgba(255,95,87,.18);border-radius:12px;padding:22px" class="h9">
         <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff7a73;margin-bottom:14px">[ERR 02]</div>
         <h3 style="font-size:16px;color:#eaf0fb;font-weight:700;margin-bottom:8px">Prompt injection</h3>
-        <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">A web page or document says "ignore your instructions" — and the agent obeys.</p>
+        <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">A web page or document says "ignore your instructions" - and the agent obeys.</p>
       </div>
       <div style="background:#080b18;border:1px solid rgba(255,95,87,.18);border-radius:12px;padding:22px" class="h9">
         <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff7a73;margin-bottom:14px">[ERR 03]</div>
@@ -149,7 +151,7 @@
     <div style="max-width:1180px;margin:0 auto;padding:64px 40px">
       <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#39e09b;letter-spacing:.08em;margin-bottom:14px">// HOW_IT_WORKS</div>
       <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">One decision point. Every action. Both directions.</h2>
-      <p style="font-size:16.5px;color:#9aa8c4;max-width:720px;line-height:1.6;margin-bottom:44px">Starfish isn't a wrapper that asks nicely. It's an isolated Policy Decision Point that brackets every transport — file I/O, shell, network, MCP — on the way in <em style="color:#cdd7ea;font-style:italic">and</em> the way out. Nothing reaches your system except through it, and it defaults to deny.</p>
+      <p style="font-size:16.5px;color:#9aa8c4;max-width:720px;line-height:1.6;margin-bottom:44px">Starfish isn't a wrapper that asks nicely. It's an isolated Policy Decision Point that brackets every transport - file I/O, shell, network, MCP - on the way in <em style="color:#cdd7ea;font-style:italic">and</em> the way out. Nothing reaches your system except through it, and it defaults to deny. This is the control layer for <a href="/agentic-ai-security/" style="color:#39e09b;text-decoration:none">agentic AI security</a>.</p>
 
       <!-- pipeline -->
       <div style="display:flex;align-items:stretch;gap:0;flex-wrap:wrap">
@@ -191,7 +193,7 @@
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
           <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px">
             <h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#39e09b;margin-bottom:10px">transport shims</h3>
-            <p style="font-size:13px;color:#8a98b6;line-height:1.6">The agent never receives a raw handle. File I/O, shell, network and MCP calls are bracketed behind a proxy that hands the proposed call to the PDP first — there is no code path to a transport that bypasses it.</p>
+            <p style="font-size:13px;color:#8a98b6;line-height:1.6">The agent never receives a raw handle. File I/O, shell, network and MCP calls are bracketed behind a proxy that hands the proposed call to the PDP first - there is no code path to a transport that bypasses it.</p>
           </div>
           <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px">
             <h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#39e09b;margin-bottom:10px">tamper-evidence</h3>
@@ -199,7 +201,7 @@
           </div>
           <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px">
             <h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#39e09b;margin-bottom:10px">fail-closed boot</h3>
-            <p style="font-size:13px;color:#8a98b6;line-height:1.6">The PDP and its signed manifest load <em style="color:#cdd7ea;font-style:normal">before</em> any transport is wired. If the manifest doesn't verify, Starfish boots into safe mode and denies everything — there is no degraded “open” state.</p>
+            <p style="font-size:13px;color:#8a98b6;line-height:1.6">The PDP and its signed manifest load <em style="color:#cdd7ea;font-style:normal">before</em> any transport is wired. If the manifest doesn't verify, Starfish boots into safe mode and denies everything - there is no degraded “open” state.</p>
           </div>
         </div>
       </div>
@@ -213,7 +215,7 @@
     <p style="font-size:16.5px;color:#9aa8c4;margin-bottom:38px">Eight controls that don't depend on the agent's cooperation.</p>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">01 / PDP</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Deny-by-default PDP</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">A single choke point. If no policy explicitly allows it, it doesn't happen.</p></div>
-      <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">02 / LOG</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Hash-chained audit</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Append-only, tamper-evident record of every decision — allow and deny.</p></div>
+      <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">02 / LOG</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Hash-chained audit</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Append-only, tamper-evident record of every decision - allow and deny.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">03 / BND</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Boundary engine</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Per-agent visibility and write scopes; escapes (incl. symlinks) are denied and flagged.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">04 / TOK</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Token Governor</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Soft-warn, hard-pause budgets so a runaway agent can't run up a bill.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">05 / VET</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Vetting intake</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Every skill/tool is risk-rated before it enters the registry. The only door in.</p></div>
@@ -228,23 +230,23 @@
     <div style="max-width:1180px;margin:0 auto;padding:64px 40px">
       <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#febc2e;letter-spacing:.08em;margin-bottom:14px">// THREAT_MODEL · WHAT_STARFISH_IS_NOT</div>
       <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">We'd rather tell you the edges.</h2>
-      <p style="font-size:16.5px;color:#9aa8c4;max-width:720px;line-height:1.6;margin-bottom:38px">Governance contains blast radius — it is not a force field. Knowing exactly where the boundary sits is the point. Pair Starfish with the controls below it in the stack.</p>
+      <p style="font-size:16.5px;color:#9aa8c4;max-width:720px;line-height:1.6;margin-bottom:38px">Governance contains blast radius - it is not a force field. Knowing exactly where the boundary sits is the point. Pair Starfish with the controls below it in the stack.</p>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-left:2px solid #febc2e;border-radius:0 11px 11px 0;padding:20px 22px">
           <h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Not a model sandbox</h3>
-          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">Starfish governs what the agent <em style="color:#cdd7ea;font-style:normal">does</em> — its tool calls — not how the model reasons. A jailbroken model still can't act outside policy, but the prompt itself isn't "sanitized."</p>
+          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">Starfish governs what the agent <em style="color:#cdd7ea;font-style:normal">does</em> - its tool calls - not how the model reasons. A jailbroken model still can't act outside policy, but the prompt itself isn't "sanitized."</p>
         </div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-left:2px solid #febc2e;border-radius:0 11px 11px 0;padding:20px 22px">
           <h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Not OS-level isolation</h3>
-          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">It runs in your environment. For genuinely hostile code, keep it inside a container or VM — Starfish decides intent, the OS enforces the floor.</p>
+          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">It runs in your environment. For genuinely hostile code, keep it inside a container or VM - Starfish decides intent, the OS enforces the floor.</p>
         </div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-left:2px solid #febc2e;border-radius:0 11px 11px 0;padding:20px 22px">
           <h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Not immunity to prompt injection</h3>
-          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">Injection still happens. What changes: the injected action hits a deny-by-default boundary, external data is tainted on egress, and the attempt is on the record — contained, not invisible.</p>
+          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">Injection still happens. What changes: the injected action hits a deny-by-default boundary, external data is tainted on egress, and the attempt is on the record - contained, not invisible.</p>
         </div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-left:2px solid #febc2e;border-radius:0 11px 11px 0;padding:20px 22px">
           <h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Not a guard against the operator</h3>
-          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">The one legitimately ungoverned action is a human launching the system. Starfish constrains agents, not the person who holds the keys — that's a deliberate trust boundary, not a gap.</p>
+          <p style="font-size:13.5px;color:#8a98b6;line-height:1.55">The one legitimately ungoverned action is a human launching the system. Starfish constrains agents, not the person who holds the keys - that's a deliberate trust boundary, not a gap.</p>
         </div>
       </div>
       <div style="margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#cdd7ea;border:1px dashed rgba(120,140,180,.25);border-radius:10px;padding:16px 20px">
@@ -258,14 +260,14 @@
     <div style="max-width:1180px;margin:0 auto;padding:64px 40px">
       <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7fa0ff;letter-spacing:.08em;margin-bottom:14px">// THE_CREW</div>
       <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">Roles with separated duties.</h2>
-      <p style="font-size:16.5px;color:#9aa8c4;max-width:680px;line-height:1.6;margin-bottom:38px">Starfish ships a small governed crew. Each has a narrow mandate — and no one is above the rules, including the captain.</p>
+      <p style="font-size:16.5px;color:#9aa8c4;max-width:680px;line-height:1.6;margin-bottom:38px">Starfish ships a small governed crew. Each has a narrow mandate - and no one is above the rules, including the captain.</p>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
-        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7fa0ff;border:1px solid rgba(80,130,255,.3);border-radius:5px;padding:3px 8px">ORCHESTRATOR</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Captain Mykel</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Delegates and sequences. Holds no special tool powers — privilege is a role, not a bypass.</p></div>
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7fa0ff;border:1px solid rgba(80,130,255,.3);border-radius:5px;padding:3px 8px">ORCHESTRATOR</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Captain Mykel</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Delegates and sequences. Holds no special tool powers - privilege is a role, not a bypass.</p></div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7fa0ff;border:1px solid rgba(80,130,255,.3);border-radius:5px;padding:3px 8px">PLANNER</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">First Officer</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Breaks missions into tasks and drafts plans for approval.</p></div>
-        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#39e09b;border:1px solid rgba(57,224,155,.3);border-radius:5px;padding:3px 8px">INTAKE</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Oh Brian</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">The only door into the registry. Vets and risk-rates every new capability — and gatekeeps secrets.</p></div>
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#39e09b;border:1px solid rgba(57,224,155,.3);border-radius:5px;padding:3px 8px">INTAKE</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Oh Brian</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">The only door into the registry. Vets and risk-rates every new capability - and gatekeeps secrets.</p></div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#febc2e;border:1px solid rgba(254,188,46,.3);border-radius:5px;padding:3px 8px">SECURITY</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Constable Gooey</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Read-only sweeps, reconciled against deterministic counters. Reports; never blocks.</p></div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7fa0ff;border:1px solid rgba(80,130,255,.3);border-radius:5px;padding:3px 8px">MEMORY</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">D8A</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Evidence → claims → governed knowledge, provenance first.</p></div>
-        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#febc2e;border:1px solid rgba(254,188,46,.3);border-radius:5px;padding:3px 8px">CUSTODIAN</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Quartermaster</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">The only agent allowed cleanup — soft, file-level, reversible. Hard rules block system files.</p></div>
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#febc2e;border:1px solid rgba(254,188,46,.3);border-radius:5px;padding:3px 8px">CUSTODIAN</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Quartermaster</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">The only agent allowed cleanup - soft, file-level, reversible. Hard rules block system files.</p></div>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#9aa8c4;border:1px solid rgba(120,140,180,.3);border-radius:5px;padding:3px 8px">EXECUTION</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">Deck Crew</h3><p style="font-size:12.5px;color:#8a98b6;line-height:1.5">Does the work inside a write-scoped worktree; high-risk acts go to you for go/no-go.</p></div>
         <div style="background:linear-gradient(180deg,rgba(57,224,155,.08),rgba(57,224,155,.02));border:1px solid rgba(57,224,155,.35);border-radius:11px;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#39e09b;border:1px solid rgba(57,224,155,.4);border-radius:5px;padding:3px 8px">OPERATOR</span></div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:5px">You</h3><p style="font-size:12.5px;color:#a8e8cb;line-height:1.5">Final authority. The one legitimate ungoverned action is a human launching the system.</p></div>
       </div>
@@ -278,7 +280,7 @@
       <div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#39e09b;letter-spacing:.08em;margin-bottom:14px">// MODEL_AGNOSTIC</div>
         <h2 style="font-size:32px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:14px">Bring your own model. Governance stays the same.</h2>
-        <p style="font-size:15.5px;color:#9aa8c4;line-height:1.65">Claude, OpenAI, Gemini, OpenRouter, or a local model — the rules don't change. Your API key is sealed in the OS keychain and is never placed in a request object, a log, an audit entry, or a skill's reach.</p>
+        <p style="font-size:15.5px;color:#9aa8c4;line-height:1.65">Claude, OpenAI, Gemini, OpenRouter, or a local model - the rules don't change. Your API key is sealed in the OS keychain and is never placed in a request object, a log, an audit entry, or a skill's reach.</p>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#cdd7ea;border:1px solid rgba(120,140,180,.2);border-radius:8px;padding:11px 16px">Anthropic</span>
@@ -299,7 +301,7 @@
         <p style="font-size:16px;color:#9aa8c4;line-height:1.65;margin-bottom:24px">Free for personal <em style="color:#cdd7ea;font-style:italic">and</em> commercial use under Apache-2.0. Install the CLI, initialize a governed root, then bring any existing skill pack under governance.</p>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.16);border-radius:12px;padding:22px;margin-bottom:18px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88;margin-bottom:6px"># what you get</div>
-          <p style="font-size:14px;color:#cdd7ea;line-height:1.6">A fail-closed governance core, a vetting intake, a hash-chained audit log, and an optional desktop mission-control app — <span style="color:#39e09b">GCS Starfish</span>.</p>
+          <p style="font-size:14px;color:#cdd7ea;line-height:1.6">A fail-closed governance core, a vetting intake, a hash-chained audit log, and an optional desktop mission-control app - <span style="color:#39e09b">GCS Starfish</span>.</p>
         </div>
         <div style="display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:13px">
           <a target="_blank" rel="noopener noreferrer" href="https://www.npmjs.com/package/project-starfish" style="color:#39e09b;text-decoration:none" class="h8">npm package →</a>
@@ -338,8 +340,10 @@
       <a target="_blank" rel="noopener noreferrer" href="https://www.npmjs.com/package/project-starfish" style="color:#9aa8c4;text-decoration:none" class="h0">npm</a>
       <a target="_blank" rel="noopener noreferrer" href="https://github.com/Azerax/Starfish/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" style="color:#9aa8c4;text-decoration:none" class="h0">License</a>
       <a href="#how" style="color:#9aa8c4;text-decoration:none" class="h0">How it works</a>
+      <a href="/agentic-ai-security/" style="color:#9aa8c4;text-decoration:none" class="h0">Agentic AI security</a>
+      <a href="/what-is-ai-governance/" style="color:#9aa8c4;text-decoration:none" class="h0">What is AI governance</a>
     </div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88;flex-basis:100%">© 2026 Project Starfish · Apache-2.0. A governance-first, deny-by-default AI ecosystem.</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88;flex-basis:100%">© 2026 Project Starfish · Apache-2.0 open source. A governance-first, deny-by-default AI governance framework for agentic systems.</div>
   </footer>
 
 </div>

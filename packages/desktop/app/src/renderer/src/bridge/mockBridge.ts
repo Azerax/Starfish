@@ -88,4 +88,7 @@ export const mockBridge: GovernanceBridge = {
   listTrash: async () => [{ id: 't1', originalPath: '/proj/old.log', trashedAt: new Date().toISOString(), name: 'old.log' }],
   restoreTrash: async () => ({ ok: true, restoredTo: '/proj/old.log', reason: 'restored' }),
   purgeTrash: async () => ({ ok: true }),
+  getReadiness: async () => ({ ok: false, blockers: [{ id: 'provider-key', severity: 'stop' as const, title: 'No API key for Anthropic (Claude)', detail: 'Anthropic needs an API key before any order can run. It is sealed in your OS keychain and never leaves your machine.', action: { label: 'Enter API key', view: 'settings' } }] }),
+  getCost: async () => ({ mode: 'platform' as const, budgetUsd: 0 }),
+  setCost: async () => ({ ok: true }),
 };

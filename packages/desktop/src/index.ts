@@ -11,3 +11,4 @@ export type {
   UiIntent, ActionRequest, ActionResult, GovernanceActionApi, GovernanceBridge,
 } from './ui-contract';
 export * from './projections';
+export * from './peps';

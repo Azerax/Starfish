@@ -164,4 +164,17 @@ function runBoot(){
       gov.textContent='● governed'; gov.style.color='var(--ok)';
       pct.textContent='100% — all governance subsystems nominal · awaiting command';
       targetSpeed=10; setTimeout(()=>{targetSpeed=1.4;},700);
-      setTimeout(()=>cta.classList.add('show'), 600);   // require a c
+      setTimeout(()=>cta.classList.add('show'), 600);   // require a click to continue
+    }
+  };
+  step();
+}
+runBoot();
+
+// user-initiated entry to the Bridge (governance is already up; this is the Layer-7 launch action)
+function enterBridge(){ try { window.splashApi && window.splashApi.enter && window.splashApi.enter(); } catch(e){} }
+cta.addEventListener('click', enterBridge);
+addEventListener('keydown', (e)=>{ if (cta.classList.contains('show') && (e.key==='Enter' || e.key===' ')) enterBridge(); });
+</script>
+</body>
+</html>

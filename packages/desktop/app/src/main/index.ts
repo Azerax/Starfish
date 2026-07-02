@@ -6,11 +6,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
-  crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView } from '@starfish/desktop';
+  crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor } from '@starfish/desktop';
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults, seedInstall } from '@starfish/governance-overlay';
-import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, type KeyResolver, type DeletionConfig, type BoundarySet } from '@starfish/governance-core';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, AgentLoop, STARFISH_TOOL_SCHEMAS, type KeyResolver, type DeletionConfig, type BoundarySet, type ToolCall } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
@@ -27,7 +27,10 @@ function resolveBaseRoot(): string {
   if (i >= 0 && a[i + 1] && !a[i + 1].startsWith('--')) return a[i + 1];
   const eq = a.find((x) => x.startsWith('--starfish-dir='));
   if (eq) return eq.split('=').slice(1).join('=');
-  return process.env.STARFISH_PROJECT_ROOT ?? join(process.cwd(), '.starfish');
+  if (process.env.STARFISH_PROJECT_ROOT) return process.env.STARFISH_PROJECT_ROOT;
+  const last = readLastWorkspace();
+  if (last && isInitialized(last)) return last;   // reopen the workspace you last used
+  return join(process.cwd(), '.starfish');
 }
 let splash: BrowserWindow | null = null;
 let win: BrowserWindow | null = null;
@@ -47,7 +50,7 @@ async function bootGovernance(): Promise<void> {
       projectRoot: root,
       listenPath: process.platform === 'win32' ? '\\\\.\\pipe\\starfish-pdp' : join(root, 'pdp.sock'),
     });
-    console.log('[governance] booted — fail-closed checks passed');
+    console.log('[governance] booted - fail-closed checks passed');
     // Human-in-the-loop seam: a quarantined capability is a real 'needs operator' item — surface each.
     broker = new DecisionBroker(host.governor.audit, join(root, 'state', 'decisions.json'));
     for (const c of host.governor.capabilities.snapshot()) {
@@ -63,6 +66,12 @@ async function bootGovernance(): Promise<void> {
 function lockFile(dir: string): string { return join(dir, '.starfish-init.lock'); }
 function isInitialized(dir: string): boolean { return existsSync(lockFile(dir)); }
 function readLock(dir: string): { by?: string; at?: string; baseRoot?: string } { try { return JSON.parse(readFileSync(lockFile(dir), 'utf8')); } catch { return {}; } }
+
+// ---- last-workspace pointer (app-level, in userData): so a launch reopens the workspace you last used
+// instead of asking every time. This is the single source of truth for "which workspace am I". ----
+function lastWorkspaceFile(): string { return join(app.getPath('userData'), 'last-workspace.json'); }
+function readLastWorkspace(): string | undefined { try { return (JSON.parse(readFileSync(lastWorkspaceFile(), 'utf8')) as { root?: string }).root; } catch { return undefined; } }
+function writeLastWorkspace(dir: string): void { try { mkdirSync(dirname(lastWorkspaceFile()), { recursive: true }); writeFileSync(lastWorkspaceFile(), JSON.stringify({ root: dir, at: new Date().toISOString() }, null, 2)); } catch { /* best-effort */ } }
 
 // Seeding + the base-root scaffold now live in seedInstall() (@starfish/governance-overlay) —
 // one source shared by the CLI, this wizard, and `npm run init:gov`.
@@ -150,9 +159,9 @@ function registerIpc(): void {
 
   // ---- LIVE action path: operator intents adjudicated against the broker / token governor. Nothing
   // mutates governance state except through here, and proposer != approver is enforced in the broker. ----
-  ipcMain.handle('gov:requestAction', (_e, req: ActionRequest): ActionResult => {
+  ipcMain.handle('gov:requestAction', async (_e, req: ActionRequest): Promise<ActionResult> => {
     const g = G();
-    const intent = (req?.intent ?? {}) as { kind?: string; decisionId?: string; agentId?: string };
+    const intent = (req?.intent ?? {}) as { kind?: string; decisionId?: string; agentId?: string; text?: string; skill?: string };
     const by = req?.actor || 'operator';
     if (!g || !broker) return { decision: { allow: false, ask: true, reason: 'governance not booted' }, applied: false };
 
@@ -166,8 +175,24 @@ function registerIpc(): void {
       g.tokens.resume(intent.agentId, by);
       return { decision: { allow: true, ask: false, reason: `resumed ${intent.agentId}` }, applied: true };
     }
-    // Unknown / not-yet-wired intents (e.g. dispatch orders — Phase 3) stay fail-closed.
-    return { decision: { allow: false, ask: true, reason: 'not yet wired (requires Phase 3 dispatch)' }, applied: false };
+    // COMM order / PADD skill -> a governed agent run. Asks during the run land in the broker and appear
+    // in 'Needs your go/no-go'; approve/deny there resolves them and the run continues.
+    if (intent.kind === 'mission' || intent.kind === 'order' || intent.kind === 'invoke') {
+      const brief = intent.kind === 'invoke'
+        ? `Run the registered skill "${intent.skill ?? ''}" within the project, using the governed tools.`
+        : String(intent.text ?? '');
+      if (!brief.trim()) return { decision: { allow: false, ask: false, reason: 'empty order' }, applied: false };
+      try {
+        const r = await runAgent(brief);
+        const body = r.output && r.output.trim() ? r.output.trim() : '(model returned no text)';
+        // Always surface the stopReason so the operator can see WHY a run ended (completed / no-progress /
+        // budget-hard / claim-unbacked / max-steps), not just the text. UI renders this in full.
+        return { decision: { allow: r.stopReason === 'completed', ask: false, reason: `[${r.stopReason}] ${body}`.slice(0, 4000) }, applied: true };
+      } catch (e) {
+        return { decision: { allow: false, ask: false, reason: 'agent error: ' + ((e as Error).message || String(e)) }, applied: false };
+      }
+    }
+    return { decision: { allow: false, ask: true, reason: 'unknown intent' }, applied: false };
   });
   ipcMain.on('splash:enter', () => { win?.show(); splash?.close(); splash = null; });
 
@@ -181,7 +206,7 @@ function registerIpc(): void {
   ipcMain.handle('setup:setBaseRoot', async (_e, { dir, operator, theme }: { dir: string; operator?: string; theme?: string }) => {
     const target = (dir || '').trim() || join(homedir(), 'Starfish');
     if (isInitialized(target)) { const l = readLock(target); return { ok: false, root: target, reason: `already initialized by ${l.by ?? 'another setup'} on ${l.at ?? 'a prior run'} — one init per install` }; }
-    try { mkdirSync(target, { recursive: true }); seedInstall(target, { operator: operator || 'Operator', theme: theme || 'fleet', by: 'ui' }); await rebootAt(target); return { ok: true, root: target, reason: 'seeded + booted' }; }
+    try { mkdirSync(target, { recursive: true }); seedInstall(target, { operator: operator || 'Operator', theme: theme || 'fleet', by: 'ui' }); await rebootAt(target); writeLastWorkspace(target); return { ok: true, root: target, reason: 'seeded + booted' }; }
     catch (e) { return { ok: false, root: target, reason: (e as Error).message }; }
   });
 
@@ -217,6 +242,41 @@ function registerIpc(): void {
     return { ok: true, stored };
   });
 
+  // ---- cost governance mode: platform-managed (the provider's own console cap is the ceiling; Starfish
+  // sets NO local budget) vs starfish (an operator USD cap enforced by the TokenGovernor). Default platform.
+  const applyCostMode = () => {
+    if (!host) return;
+    const pj = readJson<{ costMode?: 'platform' | 'starfish'; budgetUsd?: number }>(provFile(), {});
+    const mode = pj.costMode ?? 'platform';
+    if (mode === 'starfish' && pj.budgetUsd && pj.budgetUsd > 0) host.governor.tokens.setBudget('worker', { hardUsd: pj.budgetUsd, softUsd: pj.budgetUsd * 0.8 });
+    else host.governor.tokens.setBudget('worker', {});   // platform-managed: no local cap, provider enforces
+  };
+  ipcMain.handle('provider:getCost', () => {
+    const pj = readJson<{ costMode?: 'platform' | 'starfish'; budgetUsd?: number }>(provFile(), {});
+    return { mode: pj.costMode ?? 'platform', budgetUsd: pj.budgetUsd ?? 0 };
+  });
+  ipcMain.handle('provider:setCost', (_e, { mode, budgetUsd }: { mode: 'platform' | 'starfish'; budgetUsd?: number }) => {
+    const pj = readJson<Record<string, unknown>>(provFile(), {});
+    pj.costMode = mode; pj.budgetUsd = mode === 'starfish' ? (budgetUsd ?? 0) : 0;
+    writeJsonSafe(provFile(), pj); applyCostMode();
+    host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'cost:set-mode', target: mode, decision: 'allow', reason: mode === 'starfish' ? `starfish cap $${budgetUsd ?? 0}` : 'platform-managed (provider console enforces the cap)' });
+    return { ok: true };
+  });
+
+  // ---- readiness: the 'total stop' issues that block real work. Surfaced in the Ready Room + a forced
+  // (but dismissible) popup. Deny-by-default philosophy: if the operator can't act, say so loudly. ----
+  ipcMain.handle('gov:getReadiness', () => {
+    const blockers: { id: string; severity: 'stop' | 'warn'; title: string; detail: string; action?: { label: string; view: string } }[] = [];
+    const a = providerReg.active();
+    const sec = readJson<Record<string, unknown>>(secFile(), {});
+    if (a.requiresKey && !sec[a.id]) blockers.push({ id: 'provider-key', severity: 'stop', title: `No API key for ${a.name}`, detail: `${a.name} needs an API key before any order can run. It is sealed in your OS keychain and never leaves your machine or reaches any skill, log, or the audit trail.`, action: { label: 'Enter API key', view: 'settings' } });
+    if (a.kind === 'router' && process.env.STARFISH_ALLOW_EGRESS !== '1') blockers.push({ id: 'router-egress', severity: 'stop', title: `Data egress not enabled for ${a.name}`, detail: `${a.name} is a hosted router that forwards your prompts to a third party. Runs stay blocked until egress is explicitly opted in.`, action: { label: 'Review provider', view: 'settings' } });
+    const g = G();
+    if (g && g.tokens.isPaused('worker')) blockers.push({ id: 'budget-hard', severity: 'stop', title: 'Budget hard-limit reached', detail: 'The worker hit its Starfish budget cap and is paused. Raise the cap, switch to platform-managed cost, or resume from here.', action: { label: 'Cost settings', view: 'settings' } });
+    return { ok: blockers.length === 0, blockers };
+  });
+
+
   // ---- host key resolver: decrypt the stored key on demand (mirrors provider:setKey). The key is
   // handed straight to the runner's network call and never returned to the renderer or audited. ----
   const resolveProviderKey: KeyResolver = (id: string) => {
@@ -239,7 +299,28 @@ function registerIpc(): void {
     const runner = new HostRunner({ tokens: host.governor.tokens, keyResolver: resolveProviderKey, allowEgress: process.env.STARFISH_ALLOW_EGRESS === '1', audit: host.governor.audit });
     return { dispatcher, runner };
   };
-  void buildRuntime;   // exposed for the agent-run loop; referenced to satisfy lint until then
+  // The governed agent run: COMM/PADD -> Task -> AgentLoop (Anthropic via buildRuntime) -> PEPs execute,
+  // PDP gates each tool, 'ask' parks on the broker for operator approval. Awaited so the caller gets the output.
+  async function runAgent(brief: string) {
+    if (!host) throw new Error('governance not booted');
+    const g = host.governor;
+    const { dispatcher, runner } = buildRuntime();
+    const task = g.tasks.create({ type: 'mission', subject: brief.slice(0, 80), proposer: 'operator', assignee: 'worker', origin: 'internal' });
+    const agentBoundary: BoundarySet = { visibility: [root], write: [root], deny: forbidList() };   // project tree, governance/audit/state denied
+    const execute = makeExecutor({ projectRoot: root, boundary: agentBoundary, audit: g.audit, backupDir: join(root, 'state', 'backups'), backups: 3 });
+    const loop = new AgentLoop({
+      dispatcher, runner, pdp: g.pdp, audit: g.audit, maxSteps: 8, enforceClaims: true,
+      boundaryFor: () => agentBoundary,
+      execute,
+      resolveAsk: async (call: ToolCall, reason: string) => {
+        if (!broker) return false;
+        const v = await broker.await({ actor: call.agentId, kind: 'tool', tool: call.tool, target: String(call.input.path ?? call.input.command ?? ''), riskTier: 'high', reason, refId: call.taskId });
+        return v === 'approve';
+      },
+    });
+    const system = `You are a governed agent in Project Starfish (deny-by-default). The project root is ${root}. For any file tool, use ABSOLUTE paths under this root (for example ${join(root, 'notes.md')}); paths outside it are denied. Every tool call is adjudicated and some need operator approval. Be concise and do exactly what is asked.`;
+    return loop.run({ agentId: 'worker', task: { id: task.id, riskTier: 'medium' }, system, messages: [{ role: 'user', content: brief }], tools: STARFISH_TOOL_SCHEMAS });
+  }
 
   // ---- governed deletion: the app's ONLY delete path. Soft (recoverable trash), hard-rule-gated,
   // Custodian-only. Hard rules (no system files / no skills / no folders) are enforced in the core gate. ----
@@ -296,7 +377,9 @@ app.whenReady().then(async () => {
   createSplash();
   registerIpc();
   await bootGovernance();
+  if (isInitialized(root)) writeLastWorkspace(root);   // remember this workspace for next launch
   try { const pj = JSON.parse(readFileSync(join(root, 'state', 'providers.json'), 'utf8')); if (pj.activeId) providerReg.setActive(pj.activeId); } catch { /* default anthropic */ }
+  try { const cj = JSON.parse(readFileSync(join(root, 'state', 'providers.json'), 'utf8')); if (cj.costMode === 'starfish' && cj.budgetUsd > 0 && host) host.governor.tokens.setBudget('worker', { hardUsd: cj.budgetUsd, softUsd: cj.budgetUsd * 0.8 }); } catch { /* platform-managed default */ }
   restoreRegistryIfEmpty();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

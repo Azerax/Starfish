@@ -1,7 +1,7 @@
 {
   "name": "@starfish/desktop-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Project Starfish \u2014 governed desktop (ring 3) Electron shell.",
   "type": "module",
   "main": "out/main/index.js",

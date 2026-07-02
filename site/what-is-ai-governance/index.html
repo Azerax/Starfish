@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Is AI Governance? A Technical Guide for Agentic Systems | Project Starfish</title>
+<meta name="description" content="AI governance defines what AI agents can and can't do. Learn the difference between traditional AI policy frameworks and runtime agent governance, and how Project Starfish implements it.">
+<link rel="canonical" href="https://projectstarfish.ca/what-is-ai-governance/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://projectstarfish.ca/what-is-ai-governance/">
+<meta property="og:title" content="What Is AI Governance? A Technical Guide for Agentic Systems">
+<meta property="og:description" content="The difference between traditional AI policy frameworks and runtime agent governance, and how Project Starfish implements deny-by-default control.">
+<meta property="og:image" content="https://projectstarfish.ca/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://projectstarfish.ca/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"What is AI governance?","acceptedAnswer":{"@type":"Answer","text":"AI governance is the set of policies, controls, and audit mechanisms that determine what AI systems are and aren't allowed to do. For agentic AI systems, this includes runtime policy enforcement, boundary controls, and tamper-evident audit trails."}},
+{"@type":"Question","name":"What is a deny-by-default AI governance framework?","acceptedAnswer":{"@type":"Answer","text":"A deny-by-default AI governance framework means all agent actions are blocked unless explicitly authorized by a policy decision point. This is the opposite of the default behavior in most agent frameworks, where agents can take any action they are technically capable of."}}
+]}
+</script>
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/agentic-ai-security/">Agentic AI security</a><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article>
+  <div class="eyebrow">Guide</div>
+  <h1>What Is AI Governance? (And Why It Matters for Agentic Systems)</h1>
+  <p class="lede">AI governance is the set of policies, controls, and audit mechanisms that determine what AI systems are and aren't allowed to do. As AI agents gain the ability to take autonomous actions, AI governance becomes critical infrastructure, not a compliance checkbox.</p>
+
+  <h2>The traditional definition of AI governance</h2>
+  <p>Most existing AI governance work describes the governance of AI <em>development</em>:</p>
+  <ul>
+    <li>Policy frameworks such as the NIST AI RMF, the EU AI Act, and the OECD principles.</li>
+    <li>Risk assessment and model documentation.</li>
+    <li>Ethics review and bias testing.</li>
+  </ul>
+  <p>This matters, but it governs how models are built and approved. It says little about what an autonomous agent is allowed to <em>do</em> at runtime.</p>
+
+  <h2>Why agentic AI needs a new kind of governance</h2>
+  <p>Traditional frameworks assume a human reviews AI output before any action is taken. Agentic AI removes that step: agents call APIs, write files, run code, and send messages on their own. That requires <strong>runtime governance</strong>, decided per action, not just a pre-deployment review.</p>
+
+  <h2>The core components of AI agent governance</h2>
+  <h3>Policy Decision Point (PDP): what actions are allowed?</h3>
+  <p>A single authority evaluates every proposed action against policy before it runs, defaulting to deny.</p>
+  <h3>Boundary enforcement: can the agent stay within scope?</h3>
+  <p>Each agent is confined to an explicit visibility and write scope; anything outside it is refused.</p>
+  <h3>Audit trail: what did the agent actually do?</h3>
+  <p>An append-only, tamper-evident log records every allowed and denied action.</p>
+  <h3>Fail-closed behavior: what happens when governance is unavailable?</h3>
+  <p>If the governance layer cannot run, the agents stop. The system fails safe.</p>
+
+  <h2>How Project Starfish implements AI governance</h2>
+  <p><a href="/">Project Starfish</a> is a deny-by-default implementation of exactly these components: an isolated PDP, a hash-chained audit trail, a boundary engine and Token Governor, and a fail-closed boot. It is the runtime control layer for <a href="/agentic-ai-security/">agentic AI security</a>.</p>
+
+  <h2>AI governance frameworks: open source vs. commercial</h2>
+  <p>Commercial AI governance platforms typically run as a hosted service and keep your audit data on their infrastructure. Open-source AI governance, like Project Starfish, is self-hosted, Apache-2.0, and has no vendor dependency. For security-critical use cases, self-hosted control is often a requirement rather than a preference.</p>
+
+  <p style="margin-top:22px"><a class="cta-btn" href="/">Explore the framework - Apache-2.0, local-first</a></p>
+
+  <div class="backrow"><a href="/">&larr; Project Starfish home</a></div>
+</article>
+</div>
+<div class="foot"><div class="wrap">Project Starfish &middot; open-source, deny-by-default AI governance &middot; Apache-2.0.</div></div>
+</body></html>

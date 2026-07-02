@@ -86,7 +86,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
                   <div className="st">
                     <span className={`tag ${status}`}><i className="led" /> {status}</span>
                     {c.currentTaskId && <span className="muted">{c.currentTaskId}</span>}
-                    <span className={`risk-${c.riskTier}`}>risk: {c.riskTier}</span>
+                    <span className={`risk-${c.riskTier}`} title="Authority tier: how much governance scrutiny this crew role gets">clearance: {c.riskTier}</span>
                   </div>
                 </div>
                 {status === 'paused' && <span className="act resume" onClick={(e) => { e.stopPropagation(); void resume(c.id); }}>Resume</span>}
@@ -123,9 +123,15 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
         <h3>Token Governor <span className="src">live · budgets</span></h3>
         {budgets.map((b) => (
           <div key={b.scope} className="budget">
-            <div className="kv"><span>{b.scope} (USD)</span><b>${b.usdUsed.toFixed(2)} / ${b.usdLimit.toFixed(2)}</b></div>
-            <div className="meter"><i style={{ width: `${Math.min(100, (b.usdUsed / b.usdLimit) * 100)}%`, background: b.status === 'hard' ? 'var(--deny)' : 'linear-gradient(90deg,var(--ok),var(--warn))' }} /></div>
-            {b.status === 'hard' && <div className="warn">hard cap — paused (resume on the crew card)</div>}
+            {b.usdLimit > 0 ? (
+              <>
+                <div className="kv"><span>{b.scope} (USD)</span><b>${b.usdUsed.toFixed(2)} / ${b.usdLimit.toFixed(2)}</b></div>
+                <div className="meter"><i style={{ width: `${Math.min(100, (b.usdUsed / b.usdLimit) * 100)}%`, background: b.status === 'hard' ? 'var(--deny)' : 'linear-gradient(90deg,var(--ok),var(--warn))' }} /></div>
+                {b.status === 'hard' && <div className="warn">hard cap - paused (resume on the crew card)</div>}
+              </>
+            ) : (
+              <div className="kv"><span>{b.scope} (USD)</span><b>${b.usdUsed.toFixed(2)} · <span style={{ color: 'var(--ok)' }}>platform-managed</span></b></div>
+            )}
           </div>
         ))}
         {monitor && (
@@ -173,7 +179,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
             <div className="s"><div className="n">{monitor.counters.casualties}</div><div className="l">Casualties</div></div>
           </div>
           <div className={`ribbon ${monitor.reconciled ? 'ok' : 'bad'}`}>
-            {monitor.reconciled ? '✓ Watcher reconciled against deterministic counters.' : '⚠ Watcher discrepancy — investigate.'} Last sweep {monitor.lastSweepTs}.
+            {monitor.reconciled ? '✓ Watcher reconciled against deterministic counters.' : '⚠ Anomalies detected (boundary / hash / budget / orphan) - investigate.'} Last sweep {monitor.lastSweepTs}.
           </div>
         </section>
       )}
@@ -190,7 +196,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
                 <div className="role">{detail?.role ?? drawerCrew.role}{detail?.domain ? ` · ${detail.domain}` : ''}</div>
                 <div className="st">
                   <span className={`tag ${statusOf(drawerCrew)}`}><i className="led" /> {statusOf(drawerCrew)}</span>
-                  <span className={`risk-${drawerCrew.riskTier}`}>risk: {drawerCrew.riskTier}</span>
+                  <span className={`risk-${drawerCrew.riskTier}`} title="Authority tier: how much governance scrutiny this crew role gets">clearance: {drawerCrew.riskTier}</span>
                   {drawerCrew.currentTaskId && <span className="muted">{drawerCrew.currentTaskId}</span>}
                 </div>
               </div>

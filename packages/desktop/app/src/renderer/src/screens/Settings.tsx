@@ -9,11 +9,15 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [sel, setSel] = useState('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
+  const [costMode, setCostMode] = useState<'platform' | 'starfish'>('platform');
+  const [budgetUsd, setBudgetUsd] = useState('');
 
   async function load() {
     const ps = await bridge.getProviders();
     const a = await bridge.getActiveProvider();
     setProviders(ps); setActiveId(a.id); setSel(a.id);
+    const c = await bridge.getCost();
+    setCostMode(c.mode); setBudgetUsd(c.budgetUsd ? String(c.budgetUsd) : '');
   }
   useEffect(() => { void load(); }, []);
 
@@ -27,6 +31,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       note += ` Key sealed via ${r.stored === 'keychain' ? 'OS keychain' : 'local fallback (dev)'}.`;
       setApiKey('');
     }
+    await bridge.setCost(costMode, costMode === 'starfish' ? (Number(budgetUsd) || 0) : 0);
+    note += costMode === 'platform' ? ' Cost: platform-managed (your provider console cap is the ceiling).' : ` Cost: Starfish cap $${Number(budgetUsd) || 0}.`;
     setMsg(note);
     await load();
   }
@@ -59,6 +65,25 @@ export function Settings({ onBack }: { onBack: () => void }) {
             )}
             {cur?.dataEgress && <div className="wnote" style={{ borderColor: 'var(--deny)' }}>⚠ <b>Data-egress:</b> a hosted router forwards prompts/context to a third party.</div>}
             {msg && <div className="whint">{msg}</div>}
+          </div>
+          <div className="pane">
+            <h2>Cost control</h2>
+            <p className="wsub">Starfish never raises your provider's own spend limit. Choose who enforces cost: your API platform (recommended - set a hard cap in the provider console) or an additional Starfish budget that pauses the worker locally.</p>
+            <div className="themes">
+              <div className={`themecard${costMode === 'platform' ? ' sel' : ''}`} onClick={() => setCostMode('platform')}>
+                <div className="nm">Platform-managed{costMode === 'platform' ? ' · active' : ''}</div>
+                <div className="meta">Your provider console cap is the ceiling. Starfish sets no local budget.</div>
+              </div>
+              <div className={`themecard${costMode === 'starfish' ? ' sel' : ''}`} onClick={() => setCostMode('starfish')}>
+                <div className="nm">Starfish budget cap{costMode === 'starfish' ? ' · active' : ''}</div>
+                <div className="meta">A local USD hard limit; the worker pauses when reached.</div>
+              </div>
+            </div>
+            {costMode === 'starfish' && (
+              <div className="field"><label className="lbl">Hard cap (USD)</label>
+                <input type="number" min="0" step="1" placeholder="e.g. 10" value={budgetUsd} onChange={(e) => setBudgetUsd(e.target.value)} />
+              </div>
+            )}
           </div>
         </div>
         <div className="wfoot">
