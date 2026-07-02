@@ -55,4 +55,13 @@ describe('resolveAsk: a PDP ask is parked for the operator', () => {
   it('denied -> the tool is withheld (no execution)', async () => {
     const { loop, executed } = harness(async () => false);
     const r = await loop.run(RUN);
-    expect(executed.length
+    expect(executed.length).toBe(0);
+    expect(r.stopReason).toBe('no-progress');
+  });
+  it('no resolveAsk -> ask is withheld (original behaviour)', async () => {
+    const { loop, executed } = harness(undefined);
+    const r = await loop.run(RUN);
+    expect(executed.length).toBe(0);
+    expect(r.stopReason).toBe('no-progress');
+  });
+});
