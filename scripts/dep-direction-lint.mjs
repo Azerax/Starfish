@@ -8,12 +8,14 @@ import { join } from 'node:path';
 const LAYERS = {
   '@starfish/governance-core': 0,
   '@starfish/governance-hooks': 1,
-  '@starfish/governance-overlay': 2,
-  '@starfish/desktop': 3,
+  '@starfish/sdk': 2,
+  '@starfish/governance-overlay': 3,
+  '@starfish/desktop': 4,
 };
 const NAME_BY_DIR = {
   'governance-core': '@starfish/governance-core',
   'governance-hooks': '@starfish/governance-hooks',
+  'sdk': '@starfish/sdk',
   'governance-overlay': '@starfish/governance-overlay',
   'desktop': '@starfish/desktop',
 };

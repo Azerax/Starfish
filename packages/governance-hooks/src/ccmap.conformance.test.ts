@@ -43,7 +43,7 @@ describe('ccToGoverned — Claude Code tool names map to the governed vocabulary
 describe('handleHook — native CC tools through the PDP (within project boundary)', () => {
   const { root, governor } = gov();
   const ctx = { expectedAgentId: 'worker', boundary: { visibility: [root], write: [root], deny: [join(root, '.starfish')] } };
-  const pre = (tool_name: string, tool_input: object) => handleHook({ hook_event_name: 'PreToolUse', tool_name, tool_input }, governor, ctx);
+  const pre = (tool_name: string, tool_input: Record<string, unknown>) => handleHook({ hook_event_name: 'PreToolUse', tool_name, tool_input }, governor, ctx);
 
   it('Read in project -> allow', () => expect(pre('Read', { file_path: join(root, 'a.ts') }).permissionDecision).toBe('allow'));
   it('Edit in project -> ask (medium write, human approval)', () => expect(pre('Edit', { file_path: join(root, 'a.ts') }).permissionDecision).toBe('ask'));

@@ -23,7 +23,7 @@ function setup() {
   const boundary = { visibility: [root], write: [root], deny: [join(root, '.starfish')] };
   return { root, gov, boundary, backupDir: join(root, '.starfish', 'backups') };
 }
-const pre = (sess: HookSession, tool: string, input: object) => sess.handle({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: input });
+const pre = (sess: HookSession, tool: string, input: Record<string, unknown>) => sess.handle({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: input });
 
 describe('write profile: user owns in-boundary risk; system-risk floor is fixed', () => {
   it('writes=ask (default): in-boundary Write -> ask', () => {
