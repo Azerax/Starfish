@@ -39,3 +39,19 @@ describe('sidecar security (risks 1, 2, 14)', () => {
     } finally { await sc.close(); }
   });
 });
+
+describe('sidecar read endpoints (dashboard surface)', () => {
+  it('serves audit, budgets, and monitor', async () => {
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'good', actor: 'worker' }] });
+    const h = { 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer good' } as Record<string, string>;
+    try {
+      expect((await fetch(sc.url + '/v1/audit', { headers: h })).status).toBe(200);
+      expect((await fetch(sc.url + '/v1/budgets', { headers: h })).status).toBe(200);
+      const mon = await (await fetch(sc.url + '/v1/monitor', { headers: h })).json();
+      expect(mon).toHaveProperty('counters');
+      expect(mon).toHaveProperty('safeMode');
+    } finally { await sc.close(); }
+  });
+});

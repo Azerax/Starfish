@@ -56,7 +56,16 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
           return send(200, { id: rec.id });
         }
         if (method === 'GET' && url === '/v1/pending') {
-          return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor })));
+          return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier })));
+        }
+        if (method === 'GET' && url === '/v1/audit') {
+          return send(200, gov.governor.audit.recent(50));
+        }
+        if (method === 'GET' && url === '/v1/budgets') {
+          return send(200, gov.governor.tokens.snapshot());
+        }
+        if (method === 'GET' && url === '/v1/monitor') {
+          return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.governor.safeMode });
         }
         if (method === 'POST' && url.startsWith('/v1/decisions/')) {
           const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));

@@ -11,6 +11,7 @@ const LAYERS = {
   '@starfish/sdk': 2,
   '@starfish/governance-overlay': 3,
   '@starfish/desktop': 4,
+  '@starfish/ui': 5,
 };
 const NAME_BY_DIR = {
   'governance-core': '@starfish/governance-core',
@@ -18,6 +19,7 @@ const NAME_BY_DIR = {
   'sdk': '@starfish/sdk',
   'governance-overlay': '@starfish/governance-overlay',
   'desktop': '@starfish/desktop',
+  'ui': '@starfish/ui',
 };
 const SKIP = new Set(['node_modules', 'dist', 'out', '.git']);
 
