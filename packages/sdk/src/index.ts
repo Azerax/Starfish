@@ -85,5 +85,7 @@ export { runScenarioPack, type ScenarioEnv, type ScenarioResult } from './confor
 export type { RunnerDecision, RunnerPending } from './conformance/runner';
 export { startSidecar, WIRE_VERSION, type Sidecar, type SidecarIdentity, type SidecarOptions } from './serve';
 export { makeSidecarRunner, type SidecarClientOptions } from './client';
+export { makeTaxonomy, DEFAULT_TAXONOMY, type ToolTaxonomy, type TaxonomyRule } from './taxonomy';
+export { makeOverlayRunner, withGovernance, type HostCall, type HostExecResult } from './overlayRunner';
 export { makeFsExecutor } from './executor';
 export type { ModeRunner } from './conformance/runner';

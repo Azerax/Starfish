@@ -23,7 +23,7 @@ const flag = (name) => argv.includes(`--${name}`);
 const opt = (name, def) => { const a = argv.find((x) => x.startsWith(`--${name}=`)); if (a) return a.split('=').slice(1).join('='); const i = argv.indexOf(`--${name}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : def; };
 
 function usage() {
-  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]\n  starfish serve  [--root <governed-root>] [--port N]   (loopback governance API for embedding)');
+  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]\n  starfish serve  [--root <governed-root>] [--port N]   (loopback governance API for embedding)\n  starfish embed  [init|remove] [--dir <target>] [--sdk] [--dashboard]   (provision Starfish External into a repo)');
   process.exit(2);
 }
 
@@ -521,23 +521,45 @@ function runAttest() {
 }
 
 async function runServe() {
-  const projectRoot = resolve(opt('root') || process.cwd());
-  const home = overlayHome(projectRoot);
-  if (!isInitialized(home)) { console.error('Not governed yet. Run:  starfish init --overlay --dir "' + projectRoot + '" --yes'); process.exit(1); }
-  const tokFile = join(home, 'sidecar-tokens.json');
+  const root = resolve(opt('root') || join(process.cwd(), '.starfish'));
+  if (!isInitialized(root)) { console.error('Not a governed root: ' + root + '  (run:  starfish embed init --dir <project>)'); process.exit(1); }
+  const tokFile = join(root, 'sidecar-tokens.json');
   let toks;
   try { toks = JSON.parse(readFileSync(tokFile, 'utf8')); }
   catch { toks = { worker: randomBytes(24).toString('hex'), operator: randomBytes(24).toString('hex') }; writeFileSync(tokFile, JSON.stringify(toks, null, 2)); try { chmodSync(tokFile, 0o600); } catch { /* best-effort */ } }
-  const gov = createGovernance({ root: home, keyResolver: () => process.env.ANTHROPIC_API_KEY, allowCloudFs: flag('allow-cloud-fs') });
+  const gov = createGovernance({ root, keyResolver: () => process.env.ANTHROPIC_API_KEY, allowCloudFs: flag('allow-cloud-fs') });
   const port = parseInt(opt('port', '0'), 10) || 0;
   const sc = await startSidecar({ governance: gov, identities: [{ token: toks.worker, actor: 'worker' }, { token: toks.operator, actor: 'operator' }], port });
   console.log('  Starfish sidecar online (loopback, fail-closed).');
-  console.log('  governed root : ' + home);
+  console.log('  governed root : ' + root);
   console.log('  url           : ' + sc.url);
   console.log('  tokens        : ' + tokFile + '  (worker = skills gate; operator = approvals)');
   console.log('  endpoints     : GET /v1/health, POST /v1/decide, GET /v1/pending, POST /v1/decisions/{id}');
   console.log('  Host skills gate via /v1/decide; operator approves via /v1/decisions/{id}. Ctrl-C to stop.');
   process.stdin.resume();
+}
+
+async function runEmbed() {
+  const sub = (argv[1] === 'remove') ? 'remove' : 'init';
+  const projectRoot = resolve(opt('dir') || process.cwd());
+  const home = overlayHome(projectRoot);
+  if (sub === 'remove') {
+    try { rmSync(join(home, 'embed.json')); console.log('  Starfish External deprovisioned (embed.json removed; governance + audit kept).'); }
+    catch { console.error('  no embed config at ' + home); process.exit(1); }
+    return;
+  }
+  if (!isInitialized(home)) {
+    seedOverlay(projectRoot, { operator: opt('operator', 'Operator'), theme: opt('theme', 'fleet'), writeProfile: opt('writes') === 'auto' ? 'auto' : 'ask', backups: parseInt(opt('backups', '3'), 10) || 3 });
+    registerGoverned(projectRoot);
+    console.log('  \u2713 governance seeded at ' + home + ' (project untouched).');
+  } else { console.log('  (already governed at ' + home + ')'); }
+  const cfg = { root: home, wire: 1, mode: 'sidecar', dashboard: flag('dashboard'), sdk: flag('sdk'), createdAt: new Date().toISOString() };
+  writeFileSync(join(home, 'embed.json'), JSON.stringify(cfg, null, 2));
+  console.log('  \u2713 Starfish External provisioned (optional, installed from Starfish).');
+  console.log('  run governance :  starfish serve --root "' + home + '"');
+  console.log('  gate a call    :  POST /v1/decide    approve :  POST /v1/decisions/{id}');
+  if (flag('sdk')) console.log('  in-process     :  npm i @starfish/sdk   then createGovernance({ root })');
+  if (flag('dashboard')) console.log('  dashboard      :  npm i @starfish/ui   then <GovernancePanel bridge={httpBridge(...)} />');
 }
 
 if (cmd === 'init') await runInit();
@@ -550,4 +572,5 @@ else if (cmd === 'attest') runAttest();
 else if (cmd === 'doctor') runDoctor();
 else if (cmd === 'statusline') runStatusline();
 else if (cmd === 'serve') await runServe();
+else if (cmd === 'embed') await runEmbed();
 else usage();
