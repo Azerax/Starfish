@@ -21,7 +21,8 @@ param(
   [switch]$DryRun,
   [switch]$SkipPublish,
   [switch]$SkipTests,
-  [switch]$BackfillTags
+  [switch]$BackfillTags,
+  [switch]$Provenance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,7 +92,8 @@ Run "npm run build:cli"
 if (-not $SkipPublish) {
   Step "Publish $($cliPkg.name)@$Version to npm"
   if (Confirm "Publish to npm now?") {
-    Run "npm publish -w $($cliPkg.name) --access public"
+    $prov = if ($Provenance) { " --provenance" } else { "" }
+    Run "npm publish -w $($cliPkg.name) --access public$prov"
   } else { Warn "skipped npm publish" }
 } else { Warn "skipping publish (-SkipPublish)" }
 
