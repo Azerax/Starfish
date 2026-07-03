@@ -8,6 +8,24 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.12.0] - 2026-07-03
+
+Starfish External: embeddable, deny-by-default governance for other stacks.
+
+### Added
+- `@starfish/sdk` (headless engine: createGovernance/governCall/runGovernedSkill, schema stamp,
+  cloud-FS + root guards, pluggable taxonomy + withGovernance middleware).
+- `starfish serve` loopback HTTP governance API (token auth, wire handshake, server-assigned identity,
+  fail-closed) and `starfish embed [init|remove]` (provision into a target repo).
+- `@starfish/ui` (httpBridge + GovernancePanel/PendingList; engine kept out of the browser bundle).
+- Cross-mode conformance pack (in-process / sidecar / overlay), `skills/starfish-verify`, and a
+  runnable zero-change demo.
+
+### Security
+- Audit hash-chain verified on boot; tamper -> safe mode (deny-all), fail-closed.
+- Secrets redacted from audit reason/target. `starfish doctor --embed`. Frozen public API + semver guard.
+  `release.ps1 -Provenance`.
+
 ## [0.11.1] - 2026-07-02
 
 ### Fixed
