@@ -83,5 +83,7 @@ export { assertLocalRoot, assertSafeRoot } from './fsroot';
 export { makeInProcessRunner } from './conformance/inprocess';
 export { runScenarioPack, type ScenarioEnv, type ScenarioResult } from './conformance/scenarios';
 export type { RunnerDecision, RunnerPending } from './conformance/runner';
+export { startSidecar, WIRE_VERSION, type Sidecar, type SidecarIdentity, type SidecarOptions } from './serve';
+export { makeSidecarRunner, type SidecarClientOptions } from './client';
 export { makeFsExecutor } from './executor';
 export type { ModeRunner } from './conformance/runner';

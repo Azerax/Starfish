@@ -15,14 +15,12 @@ describe('governed-root schema stamp (risk 80)', () => {
   });
   it('fails closed when the root schema is newer than supported', () => {
     const r = root();
-    mkdirSync(join(r, '.starfish'), { recursive: true });
-    writeFileSync(join(r, '.starfish', 'schema.json'), JSON.stringify({ version: ROOT_SCHEMA_VERSION + 999 }));
+    writeFileSync(join(r, 'schema.json'), JSON.stringify({ version: ROOT_SCHEMA_VERSION + 999 }));
     expect(() => ensureRootSchema(r)).toThrow(/fail-closed/);
   });
   it('migrates (re-stamps) an older root', () => {
     const r = root();
-    mkdirSync(join(r, '.starfish'), { recursive: true });
-    writeFileSync(join(r, '.starfish', 'schema.json'), JSON.stringify({ version: 0 }));
+    writeFileSync(join(r, 'schema.json'), JSON.stringify({ version: 0 }));
     ensureRootSchema(r);
     expect(readRootSchema(r)).toBe(ROOT_SCHEMA_VERSION);
   });

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 export const ROOT_SCHEMA_VERSION = 1;
-const schemaFile = (root: string): string => join(root, '.starfish', 'schema.json');
+const schemaFile = (root: string): string => join(root, 'schema.json');
 
 export function readRootSchema(root: string): number | undefined {
   try { return (JSON.parse(readFileSync(schemaFile(root), 'utf8')) as { version?: number }).version; }

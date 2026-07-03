@@ -12,7 +12,8 @@ import { homedir, platform } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { PdpDaemon } from '@starfish/governance-hooks';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { createGovernance, startSidecar } from '@starfish/sdk';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 
@@ -22,7 +23,7 @@ const flag = (name) => argv.includes(`--${name}`);
 const opt = (name, def) => { const a = argv.find((x) => x.startsWith(`--${name}=`)); if (a) return a.split('=').slice(1).join('='); const i = argv.indexOf(`--${name}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : def; };
 
 function usage() {
-  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]');
+  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]\n  starfish serve  [--root <governed-root>] [--port N]   (loopback governance API for embedding)');
   process.exit(2);
 }
 
@@ -519,6 +520,26 @@ function runAttest() {
   console.log('  Re-attest requested. The running daemon will re-baseline the settings and clear safe mode.');
 }
 
+async function runServe() {
+  const projectRoot = resolve(opt('root') || process.cwd());
+  const home = overlayHome(projectRoot);
+  if (!isInitialized(home)) { console.error('Not governed yet. Run:  starfish init --overlay --dir "' + projectRoot + '" --yes'); process.exit(1); }
+  const tokFile = join(home, 'sidecar-tokens.json');
+  let toks;
+  try { toks = JSON.parse(readFileSync(tokFile, 'utf8')); }
+  catch { toks = { worker: randomBytes(24).toString('hex'), operator: randomBytes(24).toString('hex') }; writeFileSync(tokFile, JSON.stringify(toks, null, 2)); try { chmodSync(tokFile, 0o600); } catch { /* best-effort */ } }
+  const gov = createGovernance({ root: home, keyResolver: () => process.env.ANTHROPIC_API_KEY, allowCloudFs: flag('allow-cloud-fs') });
+  const port = parseInt(opt('port', '0'), 10) || 0;
+  const sc = await startSidecar({ governance: gov, identities: [{ token: toks.worker, actor: 'worker' }, { token: toks.operator, actor: 'operator' }], port });
+  console.log('  Starfish sidecar online (loopback, fail-closed).');
+  console.log('  governed root : ' + home);
+  console.log('  url           : ' + sc.url);
+  console.log('  tokens        : ' + tokFile + '  (worker = skills gate; operator = approvals)');
+  console.log('  endpoints     : GET /v1/health, POST /v1/decide, GET /v1/pending, POST /v1/decisions/{id}');
+  console.log('  Host skills gate via /v1/decide; operator approves via /v1/decisions/{id}. Ctrl-C to stop.');
+  process.stdin.resume();
+}
+
 if (cmd === 'init') await runInit();
 else if (cmd === 'govern') await runGovern();
 else if (cmd === 'daemon') await runDaemon();
@@ -528,4 +549,5 @@ else if (cmd === 'uninstall') runUninstall();
 else if (cmd === 'attest') runAttest();
 else if (cmd === 'doctor') runDoctor();
 else if (cmd === 'statusline') runStatusline();
+else if (cmd === 'serve') await runServe();
 else usage();
