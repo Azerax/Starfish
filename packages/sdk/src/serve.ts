@@ -26,6 +26,7 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
     return opts.identities.find((i) => tokenEq(i.token, tok)) ?? null;
   };
 
+  const resolved = new Map<string, 'approve' | 'deny'>();
   const server = createServer((req, res) => {
     void (async () => {
       const send = (code: number, obj: unknown): void => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -35,10 +36,8 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
         const url = req.url ?? '';
         const method = req.method ?? 'GET';
 
-        // health is an unauthenticated probe so clients can discover the wire version first
         if (method === 'GET' && url === '/v1/health') return send(200, { ok: true, wire: WIRE_VERSION });
 
-        // wire-version handshake on every real call (fail-closed on mismatch)
         const wire = Number(req.headers['x-starfish-wire']);
         if (wire !== WIRE_VERSION) return send(426, { error: `wire mismatch: server ${WIRE_VERSION}, client ${req.headers['x-starfish-wire'] ?? 'none'}` });
 
@@ -47,32 +46,31 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
 
         const body = await readJson(req);
         if (method === 'POST' && url === '/v1/decide') {
-          const d = gov.governCall(body.call as never, body.boundary as never);
-          return send(200, d);
+          return send(200, gov.governCall(body.call as never, body.boundary as never));
         }
         if (method === 'POST' && url === '/v1/decisions') {
-          const dec = { ...(body.decision as Record<string, unknown>), actor: id.actor };   // actor from token, not body
+          const dec = { ...(body.decision as Record<string, unknown>), actor: id.actor };
           const rec = gov.broker.file(dec as Parameters<typeof gov.broker.file>[0]);
           return send(200, { id: rec.id });
         }
         if (method === 'GET' && url === '/v1/pending') {
           return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier })));
         }
-        if (method === 'GET' && url === '/v1/audit') {
-          return send(200, gov.governor.audit.recent(50));
-        }
-        if (method === 'GET' && url === '/v1/audit/verify') {
-          return send(200, { ok: gov.verifyAudit() });
-        }
-        if (method === 'GET' && url === '/v1/budgets') {
-          return send(200, gov.governor.tokens.snapshot());
-        }
-        if (method === 'GET' && url === '/v1/monitor') {
-          return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
+        if (method === 'GET' && url === '/v1/audit') return send(200, gov.governor.audit.recent(50));
+        if (method === 'GET' && url === '/v1/audit/verify') return send(200, { ok: gov.verifyAudit() });
+        if (method === 'GET' && url === '/v1/budgets') return send(200, gov.governor.tokens.snapshot());
+        if (method === 'GET' && url === '/v1/monitor') return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
+        if (method === 'GET' && url.startsWith('/v1/decisions/')) {
+          const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));
+          if (gov.broker.list().some((p) => p.id === decId)) return send(200, { status: 'pending' });
+          const v = resolved.get(decId);
+          return send(200, { status: v === 'approve' ? 'approved' : v === 'deny' ? 'denied' : 'unknown' });
         }
         if (method === 'POST' && url.startsWith('/v1/decisions/')) {
           const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));
-          const r = gov.broker.resolve(decId, body.verdict === 'deny' ? 'deny' : 'approve', id.actor);   // by = token identity
+          const verdict = body.verdict === 'deny' ? 'deny' : 'approve';
+          const r = gov.broker.resolve(decId, verdict, id.actor);
+          if (r.ok) resolved.set(decId, verdict);
           return send(r.ok ? 200 : 409, { ok: r.ok, reason: r.reason });
         }
         return send(404, { error: 'not found' });

@@ -20,7 +20,7 @@ describe('cross-mode conformance pack: sidecar over HTTP (risks 72, 1, 3, 7, 14)
         readCall: tcall('fs.read', { path: join(root, 'x.txt') }),
         sampleDecision: { actor: 'worker', kind: 'tool', tool: 'fs.write', target: 't', riskTier: 'high', reason: 'r', refId: 'sc1' },
       });
-      for (const r of results) expect(r.pass, `${r.name}: ${r.detail}`).toBe(true);
+      for (const r of results) expect(r.pass, r.name + ': ' + r.detail).toBe(true);
     } finally { await sc.close(); }
   });
 });
@@ -40,8 +40,25 @@ describe('sidecar security (risks 1, 2, 14)', () => {
   });
 });
 
+describe('sidecar decision status (host skill can learn the outcome)', () => {
+  it('pending -> approved is observable via GET /v1/decisions/{id}', async () => {
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'w', actor: 'worker' }, { token: 'o', actor: 'operator' }] });
+    try {
+      const rec = gov.broker.file({ actor: 'worker', kind: 'tool', tool: 'fs.write', target: 't', riskTier: 'high', reason: 'r', refId: 'st1' });
+      const h = (t: string): Record<string, string> => ({ 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer ' + t });
+      const s1 = await (await fetch(sc.url + '/v1/decisions/' + rec.id, { headers: h('w') })).json();
+      expect(s1.status).toBe('pending');
+      await fetch(sc.url + '/v1/decisions/' + rec.id, { method: 'POST', headers: { ...h('o'), 'content-type': 'application/json' }, body: JSON.stringify({ verdict: 'approve' }) });
+      const s2 = await (await fetch(sc.url + '/v1/decisions/' + rec.id, { headers: h('w') })).json();
+      expect(s2.status).toBe('approved');
+    } finally { await sc.close(); }
+  });
+});
+
 describe('sidecar read endpoints (dashboard surface)', () => {
-  it('serves audit, budgets, and monitor', async () => {
+  it('serves audit, budgets, monitor, and audit/verify', async () => {
     const root = makeGovernedRoot([P_READ]);
     const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
     const sc = await startSidecar({ governance: gov, identities: [{ token: 'good', actor: 'worker' }] });
@@ -49,7 +66,7 @@ describe('sidecar read endpoints (dashboard surface)', () => {
     try {
       expect((await fetch(sc.url + '/v1/audit', { headers: h })).status).toBe(200);
       expect((await fetch(sc.url + '/v1/budgets', { headers: h })).status).toBe(200);
-      expect((await (await fetch(sc.url + '/v1/audit/verify', { headers: h })).json())).toHaveProperty('ok', true);
+      expect(await (await fetch(sc.url + '/v1/audit/verify', { headers: h })).json()).toHaveProperty('ok', true);
       const mon = await (await fetch(sc.url + '/v1/monitor', { headers: h })).json();
       expect(mon).toHaveProperty('counters');
       expect(mon).toHaveProperty('safeMode');
