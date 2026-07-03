@@ -61,11 +61,14 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
         if (method === 'GET' && url === '/v1/audit') {
           return send(200, gov.governor.audit.recent(50));
         }
+        if (method === 'GET' && url === '/v1/audit/verify') {
+          return send(200, { ok: gov.verifyAudit() });
+        }
         if (method === 'GET' && url === '/v1/budgets') {
           return send(200, gov.governor.tokens.snapshot());
         }
         if (method === 'GET' && url === '/v1/monitor') {
-          return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.governor.safeMode });
+          return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
         }
         if (method === 'POST' && url.startsWith('/v1/decisions/')) {
           const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));

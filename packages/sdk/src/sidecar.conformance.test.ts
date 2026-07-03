@@ -49,6 +49,7 @@ describe('sidecar read endpoints (dashboard surface)', () => {
     try {
       expect((await fetch(sc.url + '/v1/audit', { headers: h })).status).toBe(200);
       expect((await fetch(sc.url + '/v1/budgets', { headers: h })).status).toBe(200);
+      expect((await (await fetch(sc.url + '/v1/audit/verify', { headers: h })).json())).toHaveProperty('ok', true);
       const mon = await (await fetch(sc.url + '/v1/monitor', { headers: h })).json();
       expect(mon).toHaveProperty('counters');
       expect(mon).toHaveProperty('safeMode');

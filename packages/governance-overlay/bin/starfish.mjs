@@ -439,7 +439,28 @@ function runUninstall() {
 }
 
 
+function runEmbedDoctor() {
+  const root = resolve(opt('root') || join(process.cwd(), '.starfish'));
+  const rows = [];
+  const add = (n, st, d = '') => rows.push([n, st, d]);
+  add('governed root', isInitialized(root) ? 'PASS' : 'FAIL', root);
+  try { const v = JSON.parse(readFileSync(join(root, 'schema.json'), 'utf8')).version; add('schema stamp', v ? 'PASS' : 'WARN', 'v' + v); } catch { add('schema stamp', 'WARN', 'no schema.json (stamped on first serve)'); }
+  try {
+    const g = createGovernance({ root, allowCloudFs: true });
+    add('audit chain intact', g.verifyAudit() ? 'PASS' : 'FAIL', g.verifyAudit() ? 'hash-chain verified' : 'TAMPER - chain broken');
+    add('deny-by-default active', g.safeMode() ? 'FAIL' : 'PASS', g.safeMode() ? 'in SAFE MODE (integrity failure)' : 'gate live');
+  } catch (e) { add('governance boot', 'FAIL', (e && e.message) || String(e)); }
+  try { const m = statSync(join(root, 'sidecar-tokens.json')).mode; add('token file perms', (m & 0o077) ? 'WARN' : 'PASS', (m & 0o077) ? 'group/world-accessible - chmod 600' : '0600'); } catch { add('token file', 'WARN', 'none yet (created on first serve)'); }
+  try { const pol = JSON.parse(readFileSync(join(root, 'governance', 'policies.json'), 'utf8')); const blanket = pol.find((p) => p.subject === '*' && p.resource === '*' && p.effect === 'allow' && /write|exec|shell|delete/.test(p.action || '')); add('no blanket write/exec allow', blanket ? 'FAIL' : 'PASS', blanket ? 'blanket allow: ' + blanket.id : 'deny-by-default holds'); } catch { add('policies', 'WARN', 'no policies.json'); }
+  let bad = 0;
+  console.log('  Starfish External - embedded deployment doctor: ' + root);
+  for (const [n, st, d] of rows) { if (st === 'FAIL') bad++; console.log('  ' + st.padEnd(5) + ' ' + n + (d ? '  ' + d : '')); }
+  console.log(bad ? ('  x ' + bad + ' FAIL') : '  ok - embedded deployment healthy');
+  process.exit(bad ? 1 : 0);
+}
+
 function runDoctor() {
+  if (flag('embed')) { runEmbedDoctor(); return; }
   const projectRoot = resolve(opt('root') || process.cwd());
   const checks = [];
   const add = (name, status, detail) => checks.push({ name, status, detail });

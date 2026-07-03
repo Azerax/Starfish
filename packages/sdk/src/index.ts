@@ -31,6 +31,8 @@ export interface RunSkillInput {
 export interface Governance {
   governor: Governor;           // this instance is the single audit writer for `root`
   broker: DecisionBroker;
+  verifyAudit(): boolean;       // hash-chain intact?
+  safeMode(): boolean;          // deny-all integrity mode
   governCall(call: ToolCall, boundary: BoundarySet): GovernDecision;
   runGovernedSkill(input: RunSkillInput): Promise<AgentRunResult>;
 }
@@ -46,6 +48,7 @@ export function createGovernance(opts: GovernanceOptions): Governance {
   const governor = loadGovernor(join(opts.root, 'governance'), join(opts.root, 'audit.jsonl'), { stateDir }); // fail-closed on bad config
   restoreGovernor(governor, stateDir);
   const broker = new DecisionBroker(governor.audit, join(stateDir, 'decisions.json'));
+  if (!governor.audit.verify()) governor.pdp.setSafeMode(true, 'audit chain integrity check failed (tamper-evident)');   // risk 8: fail closed on tamper
 
   function governCall(call: ToolCall, boundary: BoundarySet): GovernDecision {
     try {
@@ -75,7 +78,7 @@ export function createGovernance(opts: GovernanceOptions): Governance {
     return loop.run({ agentId: input.agentId, task: { id: task.id, riskTier: 'medium' }, system, messages: [{ role: 'user', content: input.brief }], tools: STARFISH_TOOL_SCHEMAS });
   }
 
-  return { governor, broker, governCall, runGovernedSkill };
+  return { governor, broker, governCall, runGovernedSkill, verifyAudit: () => governor.audit.verify(), safeMode: () => governor.pdp.isSafeMode() };
 }
 
 export { ROOT_SCHEMA_VERSION, readRootSchema, ensureRootSchema } from './schema';
