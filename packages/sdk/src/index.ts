@@ -11,7 +11,7 @@ import {
 } from '@starfish/governance-core';
 import { makeFsExecutor } from './executor';
 import { ensureRootSchema } from './schema';
-import { assertLocalRoot } from './fsroot';
+import { assertLocalRoot, assertSafeRoot } from './fsroot';
 
 export interface GovernanceOptions {
   root: string;                 // governed root (contains governance/, audit.jsonl, state/)
@@ -40,6 +40,7 @@ const callHash = (c: ToolCall): string =>
 
 export function createGovernance(opts: GovernanceOptions): Governance {
   assertLocalRoot(opts.root, opts.allowCloudFs);                        // risk 46
+  assertSafeRoot(opts.root);                                            // risk 15
   ensureRootSchema(opts.root);                                          // risk 80
   const stateDir = join(opts.root, 'state');
   const governor = loadGovernor(join(opts.root, 'governance'), join(opts.root, 'audit.jsonl'), { stateDir }); // fail-closed on bad config
@@ -78,6 +79,9 @@ export function createGovernance(opts: GovernanceOptions): Governance {
 }
 
 export { ROOT_SCHEMA_VERSION, readRootSchema, ensureRootSchema } from './schema';
-export { assertLocalRoot } from './fsroot';
+export { assertLocalRoot, assertSafeRoot } from './fsroot';
+export { makeInProcessRunner } from './conformance/inprocess';
+export { runScenarioPack, type ScenarioEnv, type ScenarioResult } from './conformance/scenarios';
+export type { RunnerDecision, RunnerPending } from './conformance/runner';
 export { makeFsExecutor } from './executor';
 export type { ModeRunner } from './conformance/runner';

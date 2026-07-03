@@ -1,10 +1,12 @@
 // The seam every integration mode implements so one scenario pack proves all modes identically.
-// Wave 0 ships the in-process runner (see inprocess.conformance.test.ts); the sidecar and overlay
-// runners arrive in Waves 2 and 4.
+// Wave 1 ships the in-process runner; the sidecar and overlay runners arrive in Waves 2 and 4.
+export interface RunnerDecision { allow: boolean; ask: boolean; reason: string }
+export interface RunnerPending { id: string; tool: string; actor: string }
 export interface ModeRunner {
   name: 'in-process' | 'sidecar' | 'overlay';
-  decide(call: unknown, boundary: unknown): Promise<{ allow: boolean; ask: boolean; reason: string }>;
-  pending(): Promise<Array<{ id: string; tool: string; actor: string }>>;
+  decide(call: unknown, boundary: unknown): Promise<RunnerDecision>;
+  file(dec: unknown): Promise<{ id: string }>;
+  pending(): Promise<RunnerPending[]>;
   resolve(id: string, verdict: 'approve' | 'deny', by: string): Promise<{ ok: boolean; reason: string }>;
-  down(): Promise<void>;   // force the transport unavailable, for the fail-closed scenario
+  down(): Promise<void>;   // force the mode unavailable, for the fail-closed scenario
 }
