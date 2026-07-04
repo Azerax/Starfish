@@ -5,7 +5,7 @@ export const RING = 1 as const;
 export * from './types';
 export { AuditLog } from './audit';
 export { Registry } from './registry';
-export { containCheck, boundaryForAgent, boundaryForSkill, skillWorkspaceLayout, type AgentBoundarySpec, type SkillBoundarySpec } from './boundary';
+export { containCheck, caseFold, sameOrUnder, boundaryForAgent, boundaryForSkill, skillWorkspaceLayout, type AgentBoundarySpec, type SkillBoundarySpec } from './boundary';
 export { RiskEngine } from './risk';
 export { PolicyEngine, loadPolicies, type Effect, type PolicyRule } from './policy';
 export { TEMPLATES, validateParams, runTemplate } from './templates';

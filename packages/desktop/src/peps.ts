@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, copyFileSync, rmSync } from 'node:fs';
 import { resolve, relative, join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { containCheck, type BoundarySet, type ToolCall, type AuditLog } from '@starfish/governance-core';
+import { containCheck, isSecretPath, type BoundarySet, type ToolCall, type AuditLog } from '@starfish/governance-core';
 
 export interface PepOptions {
   projectRoot: string;
@@ -41,6 +41,7 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
       switch (call.tool) {
         case 'fs.read': {
           if (!p) return { ok: false, content: '[fs.read: missing path]' };
+          if (isSecretPath(p)) { audit('fs.read', p, 'deny', 'secret path'); return { ok: false, content: '[denied: secret path]' }; }
           const c = containCheck(p, 'read', opts.boundary);
           if (!c.allowed) { audit('fs.read', p, 'deny', c.reason); return { ok: false, content: `[denied read: ${c.reason}]` }; }
           const data = readFileSync(resolve(p), 'utf8'); audit('fs.read', p, 'allow', 'read');
@@ -55,6 +56,7 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
         }
         case 'fs.write': {
           if (!p) return { ok: false, content: '[fs.write: missing path]' };
+          if (isSecretPath(p)) { audit('fs.write', p, 'deny', 'secret path'); return { ok: false, content: '[denied: secret path]' }; }
           const c = containCheck(p, 'write', opts.boundary);
           if (!c.allowed) { audit('fs.write', p, 'deny', c.reason); return { ok: false, content: `[denied write: ${c.reason}]` }; }
           const abs = resolve(p);

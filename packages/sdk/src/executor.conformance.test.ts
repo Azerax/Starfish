@@ -32,6 +32,13 @@ describe('headless fs executor (PEP)', () => {
     const w = await exec(call('fs.write', { path: resolve(dir, '..', 'evil.txt'), content: 'no' }));
     expect(w.ok).toBe(false); expect(w.content).toMatch(/denied/);
   });
+  it('denies reads and writes of secret paths (A4)', async () => {
+    const { dir, exec } = setup();
+    const w = await exec(call('fs.write', { path: join(dir, '.env'), content: 'K=v' }));
+    expect(w.ok).toBe(false); expect(w.content).toMatch(/secret/);
+    const r = await exec(call('fs.read', { path: join(dir, '.env') }));
+    expect(r.ok).toBe(false); expect(r.content).toMatch(/secret/);
+  });
   it('has no executor for an unknown tool', async () => {
     const { exec } = setup();
     const r = await exec(call('mystery', {}));

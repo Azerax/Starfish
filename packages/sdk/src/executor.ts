@@ -1,7 +1,7 @@
 // Headless PEP: boundary-checked fs tools, built only on governance-core (no @starfish/desktop dep).
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { resolve, isAbsolute, dirname } from 'node:path';
-import { containCheck, type BoundarySet, type ToolCall, type ToolExecResult } from '@starfish/governance-core';
+import { containCheck, isSecretPath, type BoundarySet, type ToolCall, type ToolExecResult } from '@starfish/governance-core';
 
 export function makeFsExecutor(opts: { projectRoot: string; boundary: BoundarySet }) {
   const toAbs = (p: string): string => (isAbsolute(p) ? resolve(p) : resolve(opts.projectRoot, p));
@@ -10,6 +10,7 @@ export function makeFsExecutor(opts: { projectRoot: string; boundary: BoundarySe
     const p = String(input.path ?? '');
     switch (call.tool) {
       case 'fs.read': {
+        if (isSecretPath(p)) return { ok: false, content: '[denied: secret path]' };   // A4: PEP re-checks secrets
         const c = containCheck(toAbs(p), 'read', opts.boundary);
         if (!c.allowed) return { ok: false, content: `[denied read: ${c.reason}]` };
         return { ok: true, content: readFileSync(toAbs(p), 'utf8') };
@@ -20,6 +21,7 @@ export function makeFsExecutor(opts: { projectRoot: string; boundary: BoundarySe
         return { ok: true, content: readdirSync(toAbs(p)).join('\n') };
       }
       case 'fs.write': {
+        if (isSecretPath(p)) return { ok: false, content: '[denied: secret path]' };   // A4: PEP re-checks secrets
         const c = containCheck(toAbs(p), 'write', opts.boundary);
         if (!c.allowed) return { ok: false, content: `[denied write: ${c.reason}]` };
         mkdirSync(dirname(toAbs(p)), { recursive: true });

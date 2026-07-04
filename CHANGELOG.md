@@ -8,6 +8,16 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.13.0] - 2026-07-03
+
+Hardening I (from the code audit): normalization + defense-in-depth.
+
+### Security
+- Boundary containment is case- and Unicode-normalized (case-fold on Windows/macOS, NFC), closing a
+  case-varied boundary/denied-subtree bypass (audit A1). New `caseFold`/`sameOrUnder` helpers + tests.
+- PEP executors (`@starfish/sdk` and desktop) now re-check secret paths and deny secret reads/writes at
+  execution time rather than trusting the PDP alone (audit A4).
+
 ## [0.12.0] - 2026-07-03
 
 Starfish External: embeddable, deny-by-default governance for other stacks.
