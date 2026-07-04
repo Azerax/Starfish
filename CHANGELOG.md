@@ -8,6 +8,23 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.22.0] - 2026-07-03
+
+1.0 candidate: freeze, docs, compliance. (External security review + counsel-reviewed legal terms remain
+owner tasks — see "Deferred" in the release notes.)
+
+### Added
+- `docs/SEMVER_AND_WIRE_COMMITMENTS.md`: the 1.0 public-API + wire-protocol freeze/deprecation policy; the
+  `api-surface` and `wire-freeze` suites are named as the semver gate.
+- `docs/COMPLIANCE_CONTROL_MAP.md`: mapping of Starfish's built controls to SOC 2 / ISO 27001 / EU AI Act.
+- `docs/legal/TRADEMARK.md` and `docs/legal/COMMERCIAL.md` — DRAFT "Governed by Starfish" mark + no-warranty
+  / commercial terms (clearly marked pending counsel review).
+- `startMultiSidecar` added to the frozen public surface (1.0 commitment).
+
+### Changed
+- `docs/GA_CHECKLIST.md`: checked off the now-built items (CI provenance publish workflow, per-release SBOM,
+  frozen surface + documented wire bump policy, deprecation policy, audit rotation, audit redaction).
+
 ## [0.21.0] - 2026-07-03
 
 Provider/model expansion + cost governance.

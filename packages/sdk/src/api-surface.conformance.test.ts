@@ -8,7 +8,7 @@ const FROZEN = [
   'ROOT_SCHEMA_VERSION', 'readRootSchema', 'ensureRootSchema',
   'assertLocalRoot', 'assertSafeRoot', 'makeFsExecutor',
   'makeInProcessRunner', 'runScenarioPack',
-  'startSidecar', 'WIRE_VERSION', 'makeSidecarRunner',
+  'startSidecar', 'startMultiSidecar', 'WIRE_VERSION', 'makeSidecarRunner',
   'makeTaxonomy', 'DEFAULT_TAXONOMY', 'makeOverlayRunner', 'withGovernance',
 ];
 

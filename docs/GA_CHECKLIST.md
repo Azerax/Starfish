@@ -11,19 +11,19 @@ Gates before calling the embeddable surface generally available. Ties to docs/EM
 - [x] `starfish doctor --embed`: schema, audit chain, safe mode, token perms, no blanket allow.
 
 ## Supply chain (release-time)
-- [ ] Publish `@starfish/sdk` + `@starfish/ui` from CI only, with npm provenance.
-- [ ] SBOM attached per release (scripts/sbom.mjs).
+- [x] Publish `@starfish/sdk` + `@starfish/ui` from CI only, with npm provenance.
+- [x] SBOM attached per release (scripts/sbom.mjs).
 - [ ] release.ps1 gates on install + test + build; every published tag == a green `starfish-verify` run.
 - [ ] Never amend a pushed commit (learned: caused a non-fast-forward + tag conflict).
 
 ## Public API + compatibility (risk 23)
-- [ ] Freeze the exported surface of `@starfish/sdk` / `@starfish/ui`; semver from first publish.
-- [ ] Wire-protocol version documented; bump policy defined.
-- [ ] Deprecation policy + changelog discipline.
+- [x] Freeze the exported surface of `@starfish/sdk` / `@starfish/ui`; semver from first publish.
+- [x] Wire-protocol version documented; bump policy defined.
+- [x] Deprecation policy + changelog discipline.
 
 ## Data lifecycle (risks 29, 37, 38, 40)
-- [ ] Audit rotation with chained roots + retention policy.
-- [ ] Audit reason redaction (secret-scan) before write.
+- [x] Audit rotation with chained roots + retention policy.
+- [x] Audit reason redaction (secret-scan) before write.
 - [ ] Backup dir secret-scan / encryption; purge policy.
 
 ## Legal / brand (risks 68-71)

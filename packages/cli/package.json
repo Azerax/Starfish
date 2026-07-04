@@ -1,6 +1,6 @@
 {
   "name": "project-starfish",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Governance for AI agents: a deny-by-default policy layer for Claude Code and agent/skill builds. Every tool call is authorized, contained, and audited. Apache-2.0.",
   "keywords": [
     "ai-governance",
