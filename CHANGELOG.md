@@ -8,6 +8,23 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.18.0] - 2026-07-03
+
+Live dashboard: SSE streaming.
+
+### Added
+- `GET /v1/stream` (Server-Sent Events) on the sidecar: live `hello`/`audit`/`pending`/`budgets`/`monitor`
+  events. Payloads are **redacted** (audit events projected without `detail`; reason/target already
+  secret-redacted) and **scoped** (a non-operator identity only sees its own actor's events + system events
+  and only its own pending decisions).
+- `@starfish/ui` `httpBridge.subscribe()` — SSE consumed over `fetch` so the bearer token stays in the
+  Authorization header (never a query string); auto-reconnect with exponential backoff; returns an
+  unsubscribe. `GovernancePanel` now updates live from the stream, with the poll kept only as a backstop.
+
+### Changed
+- `startSidecar` tracks live sockets and force-closes them on `close()` so an open SSE stream can't hang
+  shutdown.
+
 ## [0.17.0] - 2026-07-03
 
 Supply chain + release automation.

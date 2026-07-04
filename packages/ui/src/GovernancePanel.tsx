@@ -29,6 +29,15 @@ export function GovernancePanel({ bridge, theme = 'calm', operatorActor = 'opera
     void load(); const id = setInterval(() => void load(), pollMs);
     return () => { live = false; clearInterval(id); };
   }, [bridge, pollMs]);
+  // Live push (SSE): apply pending/monitor events the moment they arrive; the poll above stays only as a
+  // fail-soft backstop if the stream drops.
+  useEffect(() => {
+    const unsub = bridge.subscribe((ev) => {
+      if (ev.type === 'pending' && Array.isArray(ev.data)) setItems(ev.data as PendingItem[]);
+      else if (ev.type === 'monitor' && ev.data && typeof ev.data === 'object') setMon(ev.data as MonitorView);
+    }, operatorActor);
+    return unsub;
+  }, [bridge, operatorActor]);
   const onResolve = async (id: string, verdict: 'approve' | 'deny'): Promise<void> => { await bridge.resolve(id, verdict, operatorActor); setItems((cur) => cur.filter((x) => x.id !== id)); };
   const def = THEMES.find((t) => t.id === theme) ?? THEMES[0];
   const Chosen = def.Component;

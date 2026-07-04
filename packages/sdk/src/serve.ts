@@ -2,6 +2,7 @@
 // by construction: 127.0.0.1 only, Host-header check, bearer-token auth, wire-version handshake,
 // body-size cap, server-assigned actor identity + strict input allowlist so proposer != approver holds.
 import { createServer, type Server, type IncomingMessage } from 'node:http';
+import type { Socket } from 'node:net';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import type { Governance } from './index';
 
@@ -41,6 +42,7 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
   };
 
   const resolved = new Map<string, 'approve' | 'deny'>();
+  const sockets = new Set<Socket>();
   const server = createServer((req, res) => {
     void (async () => {
       const send = (code: number, obj: unknown): void => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -58,6 +60,35 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
 
         const id = identify(req);
         if (!id) return send(401, { error: 'invalid or missing token' });
+
+        // Live push channel (SSE). Redacted + scoped: audit events are projected (no `detail`), and a
+        // non-operator identity only sees its own actor's events + system events / its own pending.
+        if (method === 'GET' && url === '/v1/stream') {
+          res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+          const isOp = id.actor === 'operator';
+          const scoped = (e: { actor?: string; domain?: string }): boolean => isOp || e.actor === id.actor || e.domain === 'system';
+          const slim = (e: Record<string, unknown>) => ({ seq: e.seq, ts: e.ts, actor: e.actor, domain: e.domain, action: e.action, target: e.target, decision: e.decision, reason: e.reason, riskTier: e.riskTier });
+          const emit = (event: string, data: unknown): void => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* peer gone */ } };
+          const pendingSnapshot = () => gov.broker.list().filter((p) => isOp || p.actor === id.actor).map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier }));
+          let cursor = gov.governor.audit.head().seq + 1;   // only events AFTER subscribe
+          emit('hello', { wire: WIRE_VERSION, since: cursor });
+          const tick = (): void => {
+            try {
+              const evs = gov.governor.audit.recent(500, cursor).filter((e) => scoped(e as unknown as { actor?: string; domain?: string }));
+              for (const e of evs) emit('audit', slim(e as unknown as Record<string, unknown>));
+              const head = gov.governor.audit.head().seq + 1; if (head > cursor) cursor = head;
+              emit('pending', pendingSnapshot());
+              emit('budgets', gov.governor.tokens.snapshot());
+              emit('monitor', { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
+            } catch { /* fail soft */ }
+          };
+          const dataIv = setInterval(tick, 1000);
+          const kaIv = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* noop */ } }, 15000);
+          const stop = (): void => { clearInterval(dataIv); clearInterval(kaIv); try { res.end(); } catch { /* noop */ } };
+          req.on('close', stop); req.on('error', stop);
+          tick();
+          return;
+        }
 
         const { body, tooLarge } = await readJson(req);
         if (tooLarge) return send(413, { error: 'request body too large' });
@@ -104,8 +135,15 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
     })();
   });
 
+  // Track live sockets so close() can forcibly end long-lived SSE streams (otherwise server.close()
+  // waits forever for the open /v1/stream connection to end).
+  server.on('connection', (s) => { sockets.add(s); s.on('close', () => sockets.delete(s)); });
+
   await new Promise<void>((resolve) => server.listen(opts.port ?? 0, host, () => resolve()));
   const addr = server.address();
   boundPort = typeof addr === 'object' && addr ? addr.port : 0;
-  return { server, port: boundPort, url: `http://${host}:${boundPort}`, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return {
+    server, port: boundPort, url: `http://${host}:${boundPort}`,
+    close: () => new Promise<void>((r) => { for (const s of sockets) { try { s.destroy(); } catch { /* noop */ } } server.close(() => r()); }),
+  };
 }
