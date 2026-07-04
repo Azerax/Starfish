@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Project Starfish | Open-Source AI Agent Governance Framework</title>
-<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish is an open-source AI governance platform for agentic systems: deny-by-default, hash-chained audit, zero trust for every AI agent action. Apache-2.0, local-first.">
+<meta name="description" content="Everyone ships skills. Nobody ships governance. Project Starfish is an open-source AI governance platform for agentic systems: deny-by-default, hash-chained audit, zero trust for every AI agent action. Embed it in your own stack via SDK or a loopback sidecar. Apache-2.0, local-first.">
 <link rel="canonical" href="https://projectstarfish.ca/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#04060f">
@@ -48,12 +48,13 @@
     <div style="display:flex;align-items:center;gap:11px">
       <div style="width:26px;height:26px;border:1.5px solid #39e09b;border-radius:6px;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;color:#39e09b;font-size:13px;font-weight:700">✳</div>
       <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.02em;color:#eaf0fb;font-weight:500">project-starfish</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#39e09b;border:1px solid rgba(57,224,155,.3);border-radius:4px;padding:2px 7px;margin-left:4px">v0.9.3 · deny-by-default</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#39e09b;border:1px solid rgba(57,224,155,.3);border-radius:4px;padding:2px 7px;margin-left:4px">v0.22 · 1.0-candidate</span>
     </div>
     <div style="display:flex;align-items:center;gap:30px;font-family:'JetBrains Mono',monospace;font-size:12.5px">
       <a href="#how" style="color:#9aa8c4;text-decoration:none" class="h0">how_it_works</a>
       <a href="#principles" style="color:#9aa8c4;text-decoration:none" class="h0">principles</a>
       <a href="#crew" style="color:#9aa8c4;text-decoration:none" class="h0">the_crew</a>
+      <a href="#embed" style="color:#9aa8c4;text-decoration:none" class="h0">embed</a>
 <a href="/blog/" style="color:#9aa8c4;text-decoration:none">devlog</a>
       <a href="#install" style="display:flex;align-items:center;gap:7px;color:#04060f;background:#39e09b;text-decoration:none;padding:8px 15px;border-radius:7px;font-weight:600" class="h1">★ GitHub</a>
     </div>
@@ -93,6 +94,7 @@
         <span style="color:#9aa8c4;border:1px solid rgba(120,140,180,.18);border-radius:6px;padding:5px 11px">Local-first</span>
         <span style="color:#9aa8c4;border:1px solid rgba(120,140,180,.18);border-radius:6px;padding:5px 11px">Deny-by-default</span>
         <span style="color:#9aa8c4;border:1px solid rgba(120,140,180,.18);border-radius:6px;padding:5px 11px">Model-agnostic</span>
+        <span style="color:#7fa0ff;border:1px solid rgba(80,130,255,.3);border-radius:6px;padding:5px 11px">Embeddable</span>
       </div>
     </div>
 
@@ -212,7 +214,7 @@
   <section id="principles" style="max-width:1180px;margin:0 auto;padding:64px 40px">
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#39e09b;letter-spacing:.08em;margin-bottom:14px">// WHATS_INSIDE</div>
     <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">Governance as machinery, not vibes.</h2>
-    <p style="font-size:16.5px;color:#9aa8c4;margin-bottom:38px">Eight controls that don't depend on the agent's cooperation.</p>
+    <p style="font-size:16.5px;color:#9aa8c4;margin-bottom:38px">Nine controls that don't depend on the agent's cooperation.</p>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">01 / PDP</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Deny-by-default PDP</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">A single choke point. If no policy explicitly allows it, it doesn't happen.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">02 / LOG</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Hash-chained audit</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Append-only, tamper-evident record of every decision - allow and deny.</p></div>
@@ -222,6 +224,7 @@
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">06 / EVD</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Evidence Gate</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">No unbacked word: a claim ("tests pass") is blocked unless the deed is on the record.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">07 / INT</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Self-integrity</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Operator-signed manifest; tampered config boots into safe mode and denies all.</p></div>
       <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">08 / ANC</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Optional anchoring</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Batch audit roots to a notary/ledger for institutions that need it. Off by default.</p></div>
+      <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:20px" class="h10"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#39e09b;margin-bottom:12px">09 / EGR</div><h3 style="font-size:15px;color:#eaf0fb;font-weight:700;margin-bottom:7px">Egress containment</h3><p style="font-size:13px;color:#8a98b6;line-height:1.5">Outbound calls to internal, loopback, or cloud-metadata hosts are denied by default; catastrophic shell is blocked outright.</p></div>
     </div>
   </section>
 
@@ -292,6 +295,20 @@
     </div>
   </section>
 
+  <!-- STARFISH EXTERNAL -->
+  <section id="embed" style="border-top:1px solid rgba(120,140,180,.1);background:linear-gradient(180deg,rgba(80,130,255,.02),transparent)">
+    <div style="max-width:1180px;margin:0 auto;padding:64px 40px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7fa0ff;letter-spacing:.08em;margin-bottom:14px">// STARFISH_EXTERNAL</div>
+      <h2 style="font-size:38px;letter-spacing:-.02em;color:#f4f7fd;font-weight:800;margin-bottom:10px">Embed the same governance in your own stack.</h2>
+      <p style="font-size:16.5px;color:#9aa8c4;max-width:740px;line-height:1.6;margin-bottom:38px">Starfish External is the same deny-by-default engine as an <em style="color:#cdd7ea;font-style:normal">embeddable surface</em> - not a separate platform. Put governance in front of a custom Claude install, your own skills, or any agent runtime: in-process, or over a loopback sidecar that gates tool calls for any language. Then drop in a themeable approval dashboard.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7fa0ff;margin-bottom:10px">@starfish/sdk</h3><p style="font-size:13px;color:#8a98b6;line-height:1.6">Headless, in-process governance for a Node host: <span style="color:#cdd7ea">createGovernance</span> / <span style="color:#cdd7ea">governCall</span> / <span style="color:#cdd7ea">runGovernedSkill</span>. Fail-closed; the API key never leaves the keychain.</p></div>
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7fa0ff;margin-bottom:10px">starfish serve</h3><p style="font-size:13px;color:#8a98b6;line-height:1.6">A 127.0.0.1 sidecar that gates tool calls over HTTP for any language: token auth, wire handshake, server-assigned identity so <span style="color:#cdd7ea">proposer ≠ approver</span> holds. Multi-root / multi-tenant, with per-root operator sets.</p></div>
+        <div style="background:#080b18;border:1px solid rgba(120,140,180,.14);border-radius:11px;padding:22px"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7fa0ff;margin-bottom:10px">@starfish/ui</h3><p style="font-size:13px;color:#8a98b6;line-height:1.6">A themeable <span style="color:#cdd7ea">GovernancePanel</span> that subscribes to a live SSE stream of decisions, budgets and approvals - redacted and scoped. The engine never enters the browser bundle.</p></div>
+      </div>
+    </div>
+  </section>
+
   <!-- GET STARTED -->
   <section id="install" style="border-top:1px solid rgba(120,140,180,.1);background:linear-gradient(180deg,rgba(57,224,155,.03),transparent)">
     <div style="max-width:1180px;margin:0 auto;padding:64px 40px;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start">
@@ -301,7 +318,7 @@
         <p style="font-size:16px;color:#9aa8c4;line-height:1.65;margin-bottom:24px">Free for personal <em style="color:#cdd7ea;font-style:italic">and</em> commercial use under Apache-2.0. Install the CLI, initialize a governed root, then bring any existing skill pack under governance.</p>
         <div style="background:#080b18;border:1px solid rgba(120,140,180,.16);border-radius:12px;padding:22px;margin-bottom:18px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e6c88;margin-bottom:6px"># what you get</div>
-          <p style="font-size:14px;color:#cdd7ea;line-height:1.6">A fail-closed governance core, a vetting intake, a hash-chained audit log, and an optional desktop mission-control app - <span style="color:#39e09b">GCS Starfish</span>.</p>
+          <p style="font-size:14px;color:#cdd7ea;line-height:1.6">A fail-closed governance core, a vetting intake, a hash-chained audit log, an optional desktop mission-control app - <span style="color:#39e09b">GCS Starfish</span> - and an embeddable SDK + sidecar for your own stack.</p>
         </div>
         <div style="display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:13px">
           <a target="_blank" rel="noopener noreferrer" href="https://www.npmjs.com/package/project-starfish" style="color:#39e09b;text-decoration:none" class="h8">npm package →</a>
@@ -323,6 +340,10 @@
           <div style="height:14px"></div>
           <div style="color:#5e6c88"># bring an existing skill pack under governance</div>
           <div style="color:#c6d0e4"><span style="color:#39e09b">$</span> starfish govern ./my-skill-pack</div>
+          <div style="height:14px"></div>
+          <div style="color:#5e6c88"># or embed governance into another stack</div>
+          <div style="color:#c6d0e4"><span style="color:#39e09b">$</span> starfish serve --root ./.starfish   <span style="color:#5e6c88"># loopback sidecar</span></div>
+          <div style="color:#c6d0e4"><span style="color:#39e09b">$</span> starfish policy explain agent:worker tool:fs.write ./repo</div>
           <div style="color:#39e09b;margin-top:10px">✓ governed root ready · deny-by-default active<span style="display:inline-block;width:8px;height:15px;background:#39e09b;margin-left:5px;vertical-align:-2px;animation:blink 1.1s step-end infinite"></span></div>
         </div>
       </div>
