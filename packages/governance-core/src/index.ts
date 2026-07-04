@@ -7,7 +7,7 @@ export { AuditLog } from './audit';
 export { Registry } from './registry';
 export { containCheck, caseFold, sameOrUnder, boundaryForAgent, boundaryForSkill, skillWorkspaceLayout, type AgentBoundarySpec, type SkillBoundarySpec } from './boundary';
 export { RiskEngine } from './risk';
-export { PolicyEngine, loadPolicies, type Effect, type PolicyRule } from './policy';
+export { PolicyEngine, loadPolicies, savePolicies, explainPolicy, simulatePolicyChange, type Effect, type PolicyRule, type PolicyExplanation, type PolicySample, type PolicyDelta, type PolicySimulation } from './policy';
 export { TEMPLATES, validateParams, runTemplate } from './templates';
 export { TaskLedger, type Task, type TaskStatus, type TaskType, type Origin } from './tasks';
 export { TokenGovernor, type Budget, type BudgetStatus } from './tokens';

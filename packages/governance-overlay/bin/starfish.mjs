@@ -4,7 +4,7 @@
 //   starfish govern <pack-dir> [--apply] [--approve=id1,id2]
 // `init` walks first-run setup (customizable install dir), seeds fail-closed governance, then launches
 // the UI. `govern` brings a skill/agent build under governance. Apache-2.0. Local-only.
-import { AuditLog, CapabilityLedger, loadGovernor } from '@starfish/governance-core';
+import { AuditLog, CapabilityLedger, loadGovernor, loadPolicies, savePolicies, explainPolicy, simulatePolicyChange } from '@starfish/governance-core';
 import { govern, seedInstall, seedOverlay, isInitialized, readLock } from '@starfish/governance-overlay';
 import { resolve, join, dirname, sep } from 'node:path';
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, chmodSync } from 'node:fs';
@@ -583,6 +583,58 @@ async function runEmbed() {
   if (flag('dashboard')) console.log('  dashboard      :  npm i @starfish/ui   then <GovernancePanel bridge={httpBridge(...)} />');
 }
 
+
+function policyDir() {
+  const R = resolve(opt('root') || process.cwd());
+  if (existsSync(join(R, 'governance', 'policies.json'))) return join(R, 'governance');
+  const h = overlayHome(R);
+  return join(h, 'governance');
+}
+function runPolicy() {
+  const sub = argv[1];
+  const gdir = policyDir();
+  const file = join(gdir, 'policies.json');
+  const rules = loadPolicies(file);
+  if (sub === 'list') {
+    if (!rules.length) { console.log('  (no policy rules — governed actions are deny-by-default)'); return; }
+    console.log('  ' + rules.length + ' policy rule(s) in ' + file + ':');
+    rules.forEach((r, i) => console.log(`  #${i}  ${r.id}  [${r.subject} | ${r.action} | ${r.resource}] -> ${r.effect}`));
+    return;
+  }
+  if (sub === 'explain') {
+    const [subject, action, resource] = [argv[2], argv[3], argv[4]];
+    if (!subject || !action || !resource) { console.error('  usage: starfish policy explain <subject> <action> <resource>'); process.exit(1); }
+    const e = explainPolicy(rules, subject, action, resource);
+    console.log('  decision: ' + e.decision);
+    console.log('  why     : ' + e.reason);
+    return;
+  }
+  if (sub === 'add') {
+    const rule = { id: opt('id') || ('rule-' + Date.now().toString(36)), subject: opt('subject', '*'), action: opt('action'), resource: opt('resource', '*'), effect: opt('effect', 'ask') };
+    if (!rule.action) { console.error('  usage: starfish policy add --action <tool:...> [--subject *] [--resource *] [--effect allow|deny|ask] [--id <id>]'); process.exit(1); }
+    if (!['allow', 'deny', 'ask'].includes(rule.effect)) { console.error('  --effect must be allow|deny|ask'); process.exit(1); }
+    const proposed = [...rules, rule];
+    savePolicies(file, proposed);
+    console.log('  ✓ added rule ' + rule.id + ' -> ' + rule.effect + ' (appended; deny-by-default floor unchanged).');
+    console.log('  ' + file);
+    return;
+  }
+  if (sub === 'simulate') {
+    const [subject, action, resource] = [argv[2], argv[3], argv[4]];
+    if (!action) { console.error('  usage: starfish policy simulate <subject> <action> <resource> [--effect ...] [--subject/--action/--resource for the proposed rule]'); process.exit(1); }
+    const newRule = { id: opt('id') || 'proposed', subject: opt('subject', subject || '*'), action: opt('action', action), resource: opt('resource', resource || '*'), effect: opt('effect', 'allow') };
+    const samples = [{ subject: subject || '*', action, resource: resource || '*' }];
+    const sim = simulatePolicyChange(rules, [...rules, newRule], samples);
+    for (const d of sim.deltas) console.log(`  [${d.sample.subject} | ${d.sample.action} | ${d.sample.resource}]  ${d.before} -> ${d.after}${d.loosened ? '  (LOOSENED)' : d.changed ? '  (tightened)' : ''}`);
+    console.log(`  summary: ${sim.loosened} loosened, ${sim.tightened} tightened, ${sim.unchanged} unchanged`);
+    console.log('  ' + sim.note);
+    console.log('  (dry-run only — nothing written; use `policy add` to apply.)');
+    return;
+  }
+  console.error('  usage: starfish policy <list|explain|add|simulate> [--root <path>]');
+  process.exit(1);
+}
+
 if (cmd === 'init') await runInit();
 else if (cmd === 'govern') await runGovern();
 else if (cmd === 'daemon') await runDaemon();
@@ -594,4 +646,5 @@ else if (cmd === 'doctor') runDoctor();
 else if (cmd === 'statusline') runStatusline();
 else if (cmd === 'serve') await runServe();
 else if (cmd === 'embed') await runEmbed();
+else if (cmd === 'policy') runPolicy();
 else usage();

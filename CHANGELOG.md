@@ -8,6 +8,22 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.20.0] - 2026-07-03
+
+Policy authoring + governance UX.
+
+### Added
+- `starfish policy <list|explain|add|simulate>`: inspect and edit the ordered policy rules.
+  `explain <subject> <action> <resource>` gives the human-readable first-match reason (or default-deny);
+  `simulate` is a dry-run that shows the before/after decision for a proposed rule and flags any widening as
+  `LOOSENED`; `add` appends a rule (deny-by-default floor untouched).
+- Core helpers `explainPolicy`, `simulatePolicyChange`, `PolicyEngine.explain`, `savePolicies`.
+
+### Security
+- Every explanation and simulation states that the hard safety floors (out-of-boundary, secret paths,
+  raw/catastrophic shell, internal-egress) are enforced separately and cannot be overridden by policy — so a
+  policy edit can never silently weaken the deny-by-default floor.
+
 ## [0.19.0] - 2026-07-03
 
 Multi-root / multi-tenant sidecar.
