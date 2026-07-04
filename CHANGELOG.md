@@ -8,6 +8,18 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.15.0] - 2026-07-03
+
+Egress + shell containment.
+
+### Security
+- `net` egress destination guard (`isBlockedHost`): outbound governed net calls to loopback / RFC1918 /
+  link-local / cloud-metadata (169.254.169.254) / `.internal` hosts are denied by default (allowlist to
+  opt in), wired into the Claude Code hook seam. Closes the arbitrary-URL exfiltration channel (audit A8).
+- Hardened catastrophic-shell denylist: catches flag reorder / long-form (`rm -fr /`, `rm --recursive
+  --force /`), pipes to more interpreters (python/perl/ruby/node), `chmod 777` on system paths,
+  `find / -delete`, `truncate ... /dev/`. Backed by a bypass-corpus test (audit A7).
+
 ## [0.14.0] - 2026-07-03
 
 Hardening II: sidecar input validation + local trust.

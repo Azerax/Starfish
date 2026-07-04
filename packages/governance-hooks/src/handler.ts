@@ -1,6 +1,7 @@
 // @starfish/governance-hooks — the PreToolUse/PostToolUse/Stop seam (ring 2).
 // Forwards Claude Code hook payloads to the PDP and returns a permission decision.
 import type { Governor, ToolCall, BoundarySet } from '@starfish/governance-core';
+import { isBlockedHost } from '@starfish/governance-core';
 import { existsSync, copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 
@@ -25,15 +26,18 @@ const CC_WRITE = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Noteboo
 const CC_NET = new Set(['WebFetch', 'WebSearch']);
 // Commands so destructive they are denied outright before reaching the (asking) shell policy.
 const CATASTROPHIC: RegExp[] = [
-  String.raw`\brm\s+-rf?\s+[~/]`,
-  String.raw`\brm\s+-[a-z]*f[a-z]*\s+--no-preserve-root`,
-  String.raw`\bmkfs\b`,
+  // rm with a recursive/force flag (any order/long-form) targeting root, home, glob, or a system tree
+  String.raw`\brm\b(?=.*(?:\s-\w*[rf]\w*|--recursive|--force))(?=.*\s(?:/(?:\s|$)|~(?:\s|$)|\*(?:\s|$)|\$HOME|/(?:etc|usr|var|bin|sbin|boot|dev|lib|sys|root|home)\b))`,
+  String.raw`\brm\b[^\n]*--no-preserve-root`,
+  String.raw`\bmkfs`,
   String.raw`\bdd\b[^\n]*\bof=/dev/`,
   String.raw`:\s*\(\s*\)\s*\{[^}]*\}\s*;`,
-  String.raw`\b(curl|wget)\b[^\n]*\|\s*(sh|bash|zsh)\b`,
-  String.raw`\bchmod\s+-R\s+0?777\s+/`,
+  String.raw`\b(?:curl|wget|fetch)\b[^\n]*\|\s*(?:sh|bash|zsh|dash|python3?|perl|ruby|node)\b`,
+  String.raw`\bchmod\b[^\n]*(?:-R\s+)?0?777\b[^\n]*\s(?:/|~)`,
   String.raw`>\s*/dev/sd[a-z]`,
-].map((p) => new RegExp(p));
+  String.raw`\bfind\s+/\S*\s[^\n]*-delete\b`,
+  String.raw`\btruncate\b[^\n]*-s\s*0[^\n]*/dev/`,
+].map((p) => new RegExp(p, 'i'));
 export function isCatastrophicShell(cmd: string): boolean { return CATASTROPHIC.some((re) => re.test(cmd)); }
 
 export interface GovernedCall { tool: string; input: Record<string, unknown> }
@@ -77,6 +81,10 @@ export function handleHook(payload: HookPayload, gov: Governor, ctx: HookContext
       try { gov.audit.append({ actor: ctx.expectedAgentId, domain: 'governance', action: 'ingress:shell', decision: 'deny', reason: 'catastrophic shell command blocked' }); } catch { /* fail closed below */ }
       return { permissionDecision: 'deny', reason: 'catastrophic shell command blocked' };
     }
+    if (g.tool === 'net' && isBlockedHost(String(g.input.url ?? ''))) {
+      try { gov.audit.append({ actor: ctx.expectedAgentId, domain: 'governance', action: 'ingress:net', decision: 'deny', reason: 'blocked internal/loopback destination' }); } catch { /* fail closed */ }
+      return { permissionDecision: 'deny', reason: 'blocked internal/loopback destination' };
+    }
     const call: ToolCall = { agentId: ctx.expectedAgentId, tool: g.tool, input: g.input, capabilityId: ctx.capabilityId };
     const d = gov.pdp.decide('ingress', call, ctx.boundary);
     return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason };
@@ -102,6 +110,10 @@ export class HookSession {
       if (g.tool === 'shell' && isCatastrophicShell(String(g.input.command ?? ''))) {
         try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:shell', decision: 'deny', reason: 'catastrophic shell command blocked' }); } catch { /* noop */ }
         return { permissionDecision: 'deny', reason: 'catastrophic shell command blocked' };
+      }
+      if (g.tool === 'net' && isBlockedHost(String(g.input.url ?? ''))) {
+        try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:net', decision: 'deny', reason: 'blocked internal/loopback destination' }); } catch { /* noop */ }
+        return { permissionDecision: 'deny', reason: 'blocked internal/loopback destination' };
       }
       const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: g.tool, input: g.input, capabilityId: this.ctx.capabilityId };
       const d = this.gov.pdp.decide('ingress', call, this.ctx.boundary);   // audit-before-act happens inside decide()

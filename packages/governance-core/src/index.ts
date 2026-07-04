@@ -23,6 +23,7 @@ export { verifyPublisherSignature, verifyAgainstPinned, signManifest, generatePu
 export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from './monitor';
 export { isSecretPath, classifyPath, containsSecret, redactSecrets, secretReadGate, screenEnv, secretWriteGate, type SecretPolicy, type EnvScreen } from './secrets';
 export { scanEgress } from './containment';
+export { isBlockedHost } from './netguard';
 export { sha256 } from './hash';
 export { ServiceRegistry, type ServiceInfo } from './services';
 export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind } from './broker';
