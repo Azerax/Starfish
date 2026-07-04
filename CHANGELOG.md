@@ -8,6 +8,23 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.16.0] - 2026-07-03
+
+Audit durability + truthful facts.
+
+### Security
+- Audit log survives a torn final line: `recover()` heals the partial tail and flags integrity instead of
+  throwing; mid-file corruption is treated as tamper. A torn/corrupt/truncated audit now enters a
+  deliberate safe-mode at boot (PDP denies all) rather than crashing (audit A16).
+- Head anchor `{seq,headHash}` persisted after every append and ON BY DEFAULT, so tail
+  truncation/rollback (invisible to a hash chain alone) is detected at boot (audit A17).
+- Size-based audit rotation into chained segment files; `verify()` walks sealed segments then the live
+  tail so the chain still verifies end to end across a reboot.
+- Conservative cost accounting: when a provider returns no countable token usage, the runner substitutes a
+  char/4 estimate (marked `(estimated)` in the audit) so the Token Governor still advances (audit A15).
+- `run_tests` executor now allow-lists test-selection args (rejects flags / metacharacters) to stop
+  runner-flag injection, and audits a failing run distinctly (deny) instead of `allow` (audit A18).
+
 ## [0.15.0] - 2026-07-03
 
 Egress + shell containment.

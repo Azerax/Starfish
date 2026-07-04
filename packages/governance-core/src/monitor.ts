@@ -5,7 +5,7 @@
 // while real governance events exist trips its own alarm (S-11 — injection fails safe).
 import { readFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import type { AuditLog } from './audit';
+import { parseAuditLines, type AuditLog } from './audit';
 import type { AuditEvent } from './types';
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
@@ -18,7 +18,7 @@ export class SecurityMonitor {
 
   private window(): AuditEvent[] {
     if (!existsSync(this.auditPath)) return [];
-    const all = readFileSync(this.auditPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AuditEvent);
+    const all = parseAuditLines(readFileSync(this.auditPath, 'utf8')).events;
     const since = all.filter((e) => e.seq >= this.cursor);
     if (all.length) this.cursor = all[all.length - 1].seq + 1;
     return since;
@@ -92,6 +92,6 @@ export class SecurityMonitor {
   /** Read the full audit (not cursor-advancing) — used by reconcile so it sees the same ground truth. */
   private peek(): AuditEvent[] {
     if (!existsSync(this.auditPath)) return [];
-    return readFileSync(this.auditPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AuditEvent);
+    return parseAuditLines(readFileSync(this.auditPath, 'utf8')).events;
   }
 }

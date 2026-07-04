@@ -67,10 +67,13 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
         }
         case 'run_tests': {
           try {
-            const extra = typeof call.input.args === 'string' && call.input.args ? call.input.args.split(/\s+/) : [];
+            // A18: allow-list test-selection args only (path/name filters). Reject flags (leading '-')
+            // and any token with shell/path-escape metacharacters to stop runner-flag injection.
+            const extra = (typeof call.input.args === 'string' && call.input.args ? call.input.args.split(/\s+/) : [])
+              .filter((a) => /^[A-Za-z0-9._/@]+$/.test(a) && !a.startsWith('-'));
             const out = execFileSync(testCmd[0], [...testCmd.slice(1), ...extra], { cwd: opts.projectRoot, encoding: 'utf8', timeout: 180_000, stdio: ['ignore', 'pipe', 'pipe'] });
             audit('run_tests', undefined, 'allow', 'tests ran'); return { ok: true, content: 'PASSED\n' + out.slice(-4000) };
-          } catch (e) { const m = e as { stdout?: string; stderr?: string; message?: string }; audit('run_tests', undefined, 'allow', 'tests failed'); return { ok: false, content: 'FAILED\n' + ((m.stdout || '') + (m.stderr || '') || m.message || '').slice(-4000) }; }
+          } catch (e) { const m = e as { stdout?: string; stderr?: string; message?: string }; audit('run_tests', undefined, 'deny', 'tests failed (nonzero exit)'); return { ok: false, content: 'FAILED\n' + ((m.stdout || '') + (m.stderr || '') || m.message || '').slice(-4000) }; }
         }
         case 'git_commit': {
           const msg = typeof call.input.message === 'string' ? call.input.message : 'starfish: governed commit';

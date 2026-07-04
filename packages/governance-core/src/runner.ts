@@ -91,7 +91,12 @@ export class HostRunner {
     const res = await this.fetcher(url, { method: req.method, headers, body: JSON.stringify(req.body) });
     const text = await res.text();
     let parsed: unknown; try { parsed = JSON.parse(text); } catch { parsed = undefined; }
-    const { tokens } = parseUsage(req.kind, parsed);
+    // A15: never let unparseable/absent usage silently cost 0 (which would starve the budget). When the
+    // provider gives no countable usage, fall back to a conservative char/4 estimate over the request +
+    // response so the Token Governor still advances and can trip.
+    const reported = parseUsage(req.kind, parsed).tokens;
+    const estimated = reported === 0;
+    const tokens = estimated ? Math.max(1, Math.ceil((JSON.stringify(req.body).length + text.length) / 4)) : reported;
     const price = this.prices[req.model]?.perMTokUsd ?? 0;
     const usd = (tokens / 1_000_000) * price;
 
@@ -99,7 +104,7 @@ export class HostRunner {
     const budget = this.tokens.record(plan.agentId, usd, tokens);
     this.audit?.append({ actor: plan.agentId, domain: 'system', action: 'model-call', target: req.model,
       decision: res.ok ? 'allow' : 'deny',
-      reason: `provider=${req.providerId} status=${res.status} tokens=${tokens} usd=${usd.toFixed(4)} budget=${budget}` });
+      reason: `provider=${req.providerId} status=${res.status} tokens=${tokens}${estimated ? '(estimated)' : ''} usd=${usd.toFixed(4)} budget=${budget}` });
     return { ok: res.ok, status: res.status, text, tokens, usd, budget };
   }
 }

@@ -99,8 +99,10 @@ export function verifySelfIntegrity(opts: {
   for (const rel of Object.keys(current)) if (m.files[rel] === undefined) failures.push(`unexpected:${rel}`);
 
   // 4. audit truncation / rollback (the anchored head must still be present at its seq)
-  if (!opts.audit.verify()) failures.push('audit-chain-broken');
-  else if (!auditContainsAnchor(opts.manifestPath, m.audit, opts)) failures.push('audit-truncated-or-rolled-back');
+  // Check the signed head anchor FIRST so tail truncation/rollback gets its specific label; only an
+  // anchor-present-but-chain-inconsistent state is a generic chain break (audit A17 hardened verify()).
+  if (!auditContainsAnchor(opts.manifestPath, m.audit, opts)) failures.push('audit-truncated-or-rolled-back');
+  else if (!opts.audit.verify()) failures.push('audit-chain-broken');
 
   return failures.length === 0
     ? { ok: true, reason: 'self-integrity verified (operator-signed)', failures: [], epoch: m.epoch }

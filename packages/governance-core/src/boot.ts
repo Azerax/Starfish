@@ -4,7 +4,7 @@
 // verify-before-invoke integrity gate over <skillsRoot>/<id>/source.
 import { join } from 'node:path';
 import { Registry } from './registry';
-import { AuditLog } from './audit';
+import { AuditLog, parseAuditLines } from './audit';
 import { PDP } from './pdp';
 import { RiskEngine } from './risk';
 import { PolicyEngine, loadPolicies } from './policy';
@@ -50,6 +50,13 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
     ? new Anchorer(makeAnchorAdapter({ backend: opts.anchor.backend ?? 'noop', filePath: opts.anchor.filePath }), { enabled: opts.anchor.enabled, everyNEvents: opts.anchor.everyNEvents }, audit)
     : new Anchorer(NoopAnchor, { enabled: false }, audit);   // OFF by default — zero overhead for personal use
   const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, router, capabilities, monitor, services, anchorer, safeMode: false };
+  // A16/A17: a torn/corrupt/truncated audit is a deliberate safe-mode, not a crash.
+  if (!audit.integrity.ok) {
+    g.safeMode = true;
+    pdp.setSafeMode(true, audit.integrity.reason);
+    audit.append({ actor: 'system', domain: 'governance', action: 'audit-integrity-fail', decision: 'deny', riskTier: 'critical', reason: audit.integrity.reason });
+    audit.append({ actor: 'system', domain: 'system', action: 'boot-attestation', decision: 'deny', reason: `SAFE MODE — audit integrity: ${audit.integrity.reason}` });
+  }
   if (opts?.stateDir) restoreGovernor(g, opts.stateDir);
 
   // Self-integrity: verify the operator-signed manifest over our OWN config/state/audit. Any tamper,
@@ -83,7 +90,7 @@ export function restoreGovernor(g: Governor, stateDir: string): void {
 /** Notarize the audit-to-date through the configured anchorer (best-effort; no-op when disabled). */
 export async function anchorAudit(g: Governor, auditPath: string): Promise<AnchorReceipt> {
   const events: AuditEvent[] = existsSync(auditPath)
-    ? readFileSync(auditPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AuditEvent)
+    ? parseAuditLines(readFileSync(auditPath, 'utf8')).events
     : [];
   return g.anchorer.anchor(events);
 }
