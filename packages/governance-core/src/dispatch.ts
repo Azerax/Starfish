@@ -49,11 +49,16 @@ export class Dispatcher {
     // Route to a worker model (audited inside the router). Budget pressure can downshift; high/critical never do.
     const route = this.router.select({ riskTier: task.riskTier, taskType: task.taskType, tags: task.tags, budget });
 
-    // Resolve the provider. If the routed provider isn't configured/registered, fall back to the active
-    // provider (still audited) so a one-provider operator setup still runs — never silently misroute.
+    // Resolve the provider. If the routed provider isn't configured/registered:
+    //  - high/critical tasks FAIL CLOSED (audit A14): substituting the active provider could silently
+    //    downgrade a "this tier must run on provider X" intent, so we refuse rather than misroute.
+    //  - low/medium tasks fall back to the active provider (still audited) so a one-provider setup runs.
     let provider: Provider;
     if (this.providers.has(route.providerId)) {
       provider = this.providers.get(route.providerId);
+    } else if (task.riskTier === 'high' || task.riskTier === 'critical') {
+      this.audit?.append({ actor: 'router', domain: 'governance', action: 'route-provider-unavailable', target: route.providerId, decision: 'deny', riskTier: task.riskTier, reason: `routed provider '${route.providerId}' not registered for ${task.riskTier}-risk task — failing closed (no provider substitution/downshift)` });
+      throw new GovernanceError(`dispatch blocked: routed provider '${route.providerId}' unavailable for ${task.riskTier}-risk task — refusing to substitute (fail closed)`);
     } else {
       provider = this.providers.active();
       this.audit?.append({ actor: 'router', domain: 'system', action: 'route-provider-substituted', target: provider.id, reason: `routed provider '${route.providerId}' not registered; using active '${provider.id}'` });

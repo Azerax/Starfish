@@ -8,6 +8,22 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.21.0] - 2026-07-03
+
+Provider/model expansion + cost governance.
+
+### Security
+- Capability-aware routing now FAILS CLOSED for high/critical tasks when the routed provider isn't
+  registered: the dispatcher refuses rather than silently substituting the active provider, so a
+  "this tier must run on provider X" intent can't be downgraded (audit A14). Low/medium tasks still
+  substitute (audited) so a single-provider setup runs.
+
+### Added
+- Adapter conformance suite: every runtime adapter (anthropic/openai/google/local/router) is asserted to
+  build a POST request and emit ONLY wire-safe tool names (`fs__read`, never `fs.read`) — a standing guard
+  against the tool-name-400 class of breakage.
+- Per-agent budget isolation test: one agent hitting its hard cap never pauses another.
+
 ## [0.20.0] - 2026-07-03
 
 Policy authoring + governance UX.

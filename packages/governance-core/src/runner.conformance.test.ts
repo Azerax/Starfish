@@ -64,12 +64,12 @@ describe('host send-runner — closes the dispatch loop (key + network isolated)
 
   it('blocks hosted-router data-egress unless the operator opts in', async () => {
     const blocked = harness([OPENROUTER], { usage: { total_tokens: 5 } });
-    await expect(new HostRunner({ tokens: blocked.tokens, keyResolver: () => KEY, fetcher: blocked.fetcher, audit: blocked.audit }).run(plan(blocked.d))).rejects.toThrow(/egress/i);
+    await expect(new HostRunner({ tokens: blocked.tokens, keyResolver: () => KEY, fetcher: blocked.fetcher, audit: blocked.audit }).run(plan(blocked.d, 'low'))).rejects.toThrow(/egress/i);
     expect(blocked.calls.length).toBe(0);
     expect(readFileSync(blocked.path, 'utf8')).toContain('egress-blocked');
 
     const allowed = harness([OPENROUTER], { usage: { total_tokens: 5 } });
-    const r = await new HostRunner({ tokens: allowed.tokens, keyResolver: () => KEY, fetcher: allowed.fetcher, allowEgress: true, audit: allowed.audit }).run(plan(allowed.d));
+    const r = await new HostRunner({ tokens: allowed.tokens, keyResolver: () => KEY, fetcher: allowed.fetcher, allowEgress: true, audit: allowed.audit }).run(plan(allowed.d, 'low'));
     expect(r.ok).toBe(true);
     expect(allowed.calls[0].headers['authorization']).toBe(`Bearer ${KEY}`);
   });

@@ -56,10 +56,11 @@ describe('governed dispatch — router × token governor × provider adapter', (
     expect(ev.some((e) => e.action === 'dispatch-blocked')).toBe(true);
   });
 
-  it('substitutes the active provider (audited) when the routed provider is not registered', () => {
+  it('substitutes the active provider (audited) when the routed provider is not registered (low/medium tier)', () => {
     const path = auditFile();
     const { d } = mkDispatcher(path, [LOCAL]);              // only a local provider configured
-    const plan = d.plan({ agentId: 'worker', task: { id: 't6', riskTier: 'high' }, messages: [{ role: 'user', content: 'x' }] });
+    // low/medium tasks may substitute; high/critical FAIL CLOSED instead (audit A14, covered separately).
+    const plan = d.plan({ agentId: 'worker', task: { id: 't6', riskTier: 'low' }, messages: [{ role: 'user', content: 'x' }] });
     expect(plan.provider.id).toBe('local');                // routed 'anthropic' absent → active 'local'
     expect(plan.request.authScheme).toBe('none');
     const ev = readFileSync(path, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { action: string });
