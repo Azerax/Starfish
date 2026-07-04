@@ -8,6 +8,19 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.14.0] - 2026-07-03
+
+Hardening II: sidecar input validation + local trust.
+
+### Security
+- `/v1/decisions` now builds the pending record from a strict allowlist (server owns actor, kind, and a
+  per-actor-namespaced refId; riskTier clamped to an enum; unknown fields ignored), closing the worker
+  metadata/refId-collision spoof (audit A6).
+- Request body size cap (256 KB -> 413) so a local caller cannot OOM the sidecar (audit A11).
+- Host-header validation (loopback hostnames only -> 421) hardens against browser/DNS-rebind origins (A12).
+- `starfish serve` writes `sidecar-tokens.json` with mode 0600 at creation; `doctor --embed` now FAILs
+  (not warns) on group/world-readable token files (audit A13).
+
 ## [0.13.0] - 2026-07-03
 
 Hardening I (from the code audit): normalization + defense-in-depth.

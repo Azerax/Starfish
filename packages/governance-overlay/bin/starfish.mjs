@@ -450,7 +450,7 @@ function runEmbedDoctor() {
     add('audit chain intact', g.verifyAudit() ? 'PASS' : 'FAIL', g.verifyAudit() ? 'hash-chain verified' : 'TAMPER - chain broken');
     add('deny-by-default active', g.safeMode() ? 'FAIL' : 'PASS', g.safeMode() ? 'in SAFE MODE (integrity failure)' : 'gate live');
   } catch (e) { add('governance boot', 'FAIL', (e && e.message) || String(e)); }
-  try { const m = statSync(join(root, 'sidecar-tokens.json')).mode; add('token file perms', (m & 0o077) ? 'WARN' : 'PASS', (m & 0o077) ? 'group/world-accessible - chmod 600' : '0600'); } catch { add('token file', 'WARN', 'none yet (created on first serve)'); }
+  try { const m = statSync(join(root, 'sidecar-tokens.json')).mode; add('token file perms', (m & 0o077) ? 'FAIL' : 'PASS', (m & 0o077) ? 'group/world-accessible - chmod 600' : '0600'); } catch { add('token file', 'WARN', 'none yet (created on first serve)'); }
   try { const pol = JSON.parse(readFileSync(join(root, 'governance', 'policies.json'), 'utf8')); const blanket = pol.find((p) => p.subject === '*' && p.resource === '*' && p.effect === 'allow' && /write|exec|shell|delete/.test(p.action || '')); add('no blanket write/exec allow', blanket ? 'FAIL' : 'PASS', blanket ? 'blanket allow: ' + blanket.id : 'deny-by-default holds'); } catch { add('policies', 'WARN', 'no policies.json'); }
   let bad = 0;
   console.log('  Starfish External - embedded deployment doctor: ' + root);
@@ -547,7 +547,7 @@ async function runServe() {
   const tokFile = join(root, 'sidecar-tokens.json');
   let toks;
   try { toks = JSON.parse(readFileSync(tokFile, 'utf8')); }
-  catch { toks = { worker: randomBytes(24).toString('hex'), operator: randomBytes(24).toString('hex') }; writeFileSync(tokFile, JSON.stringify(toks, null, 2)); try { chmodSync(tokFile, 0o600); } catch { /* best-effort */ } }
+  catch { toks = { worker: randomBytes(24).toString('hex'), operator: randomBytes(24).toString('hex') }; writeFileSync(tokFile, JSON.stringify(toks, null, 2), { mode: 0o600 }); try { chmodSync(tokFile, 0o600); } catch { /* best-effort */ } }
   const gov = createGovernance({ root, keyResolver: () => process.env.ANTHROPIC_API_KEY, allowCloudFs: flag('allow-cloud-fs') });
   const port = parseInt(opt('port', '0'), 10) || 0;
   const sc = await startSidecar({ governance: gov, identities: [{ token: toks.worker, actor: 'worker' }, { token: toks.operator, actor: 'operator' }], port });
