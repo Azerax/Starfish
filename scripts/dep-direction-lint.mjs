@@ -1,57 +1,73 @@
-// Dependency-direction lint (Phase 0).
-// Enforces the ring layering: governance-core < hooks < overlay < desktop.
+// Dependency-direction lint (Phase 0; hardened v0.17.0 for audit A19).
+// Enforces the ring layering: governance-core < hooks < sdk < overlay < desktop < ui.
 // A package may import ONLY packages in strictly LOWER layers.
-// In particular: governance-core imports nothing internal; transports never import the app.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+// v0.17.0: package list AUTO-DERIVED from packages/*/package.json; scans every import form
+// (import/export-from, bare side-effect import, dynamic import(), require()) across .ts AND .tsx.
+import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const LAYERS = {
-  '@starfish/governance-core': 0,
-  '@starfish/governance-hooks': 1,
-  '@starfish/sdk': 2,
-  '@starfish/governance-overlay': 3,
-  '@starfish/desktop': 4,
-  '@starfish/ui': 5,
-};
-const NAME_BY_DIR = {
-  'governance-core': '@starfish/governance-core',
-  'governance-hooks': '@starfish/governance-hooks',
-  'sdk': '@starfish/sdk',
-  'governance-overlay': '@starfish/governance-overlay',
-  'desktop': '@starfish/desktop',
-  'ui': '@starfish/ui',
-};
-const SKIP = new Set(['node_modules', 'dist', 'out', '.git']);
+const LAYER_ORDER = [
+  '@starfish/governance-core',
+  '@starfish/governance-hooks',
+  '@starfish/sdk',
+  '@starfish/governance-overlay',
+  '@starfish/desktop',
+  '@starfish/ui',
+];
+const LAYERS = Object.fromEntries(LAYER_ORDER.map((n, i) => [n, i]));
 
+const NAME_BY_DIR = {};
+for (const dir of readdirSync('packages')) {
+  const pj = join('packages', dir, 'package.json');
+  if (!existsSync(pj)) continue;
+  const name = JSON.parse(readFileSync(pj, 'utf8')).name;
+  if (typeof name === 'string' && name.startsWith('@starfish/')) NAME_BY_DIR[dir] = name;
+}
+
+const SKIP = new Set(['node_modules', 'dist', 'out', '.git']);
 function walk(dir) {
   let files = [];
   for (const e of readdirSync(dir)) {
     if (SKIP.has(e)) continue;
     const p = join(dir, e);
     if (statSync(p).isDirectory()) files = files.concat(walk(p));
-    else if (p.endsWith('.ts')) files.push(p);
+    else if (p.endsWith('.ts') || p.endsWith('.tsx')) files.push(p);
   }
   return files;
 }
 
-const importRe = /(?:import|export)[^'"]*from\s*['"](@starfish\/[a-z-]+)['"]/g;
-const violations = [];
+const PATTERNS = [
+  /(?:import|export)\b[^'"]*?from\s*['"](@starfish\/[a-z-]+)['"]/g,
+  /\bimport\s*['"](@starfish\/[a-z-]+)['"]/g,
+  /\bimport\s*\(\s*['"](@starfish\/[a-z-]+)['"]\s*\)/g,
+  /\brequire\s*\(\s*['"](@starfish\/[a-z-]+)['"]\s*\)/g,
+];
 
+const violations = [];
+for (const name of Object.values(NAME_BY_DIR)) {
+  if (LAYERS[name] === undefined) violations.push(`package ${name} is not placed in LAYER_ORDER — add it to scripts/dep-direction-lint.mjs`);
+}
 for (const [dir, pkgName] of Object.entries(NAME_BY_DIR)) {
   const myLayer = LAYERS[pkgName];
-  const base = join('packages', dir, 'src');
+  if (myLayer === undefined) continue;
   let files = [];
-  try { files = walk(base); } catch { continue; }
+  try { files = walk(join('packages', dir, 'src')); } catch { continue; }
   for (const f of files) {
     const src = readFileSync(f, 'utf8');
-    let m;
-    while ((m = importRe.exec(src))) {
-      const target = m[1];
-      if (target === pkgName) continue;
-      const tLayer = LAYERS[target];
-      if (tLayer === undefined) continue;
-      if (tLayer >= myLayer) {
-        violations.push(`${f}: ${pkgName} (layer ${myLayer}) imports ${target} (layer ${tLayer}) — FORBIDDEN (may import strictly lower layers only)`);
+    const seen = new Set();
+    for (const re of PATTERNS) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(src))) {
+        const target = m[1];
+        if (target === pkgName) continue;
+        const tLayer = LAYERS[target];
+        if (tLayer === undefined) continue;
+        const key = f + '->' + target;
+        if (tLayer >= myLayer && !seen.has(key)) {
+          seen.add(key);
+          violations.push(`${f}: ${pkgName} (layer ${myLayer}) imports ${target} (layer ${tLayer}) — FORBIDDEN (may import strictly lower layers only)`);
+        }
       }
     }
   }
@@ -62,4 +78,4 @@ if (violations.length) {
   for (const v of violations) console.error('  ' + v);
   process.exit(1);
 }
-console.log('Dependency-direction lint PASSED — core<hooks<overlay<desktop holds; governance imports nothing from transports/app.');
+console.log('Dependency-direction lint PASSED — core<hooks<sdk<overlay<desktop<ui holds; governance imports nothing from transports/app.');

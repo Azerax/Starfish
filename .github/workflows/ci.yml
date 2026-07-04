@@ -1,9 +1,9 @@
 name: CI
 on:
-  push: { branches: [main] }
-  pull_request: { branches: [main] }
+  push:
+  pull_request:
 jobs:
-  ci:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,13 +12,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Secret scan (supply chain)
+        run: npm run scan:secrets
       - name: Typecheck (type layer)
         run: npm run typecheck
       - name: Unit tests
         run: npm run test
-      - name: Conformance suite (Phase 1+)
+      - name: Conformance suite
         run: npm run test:conformance
-      - name: Determinism suite (Phase 2+)
+      - name: Determinism suite
         run: npm run test:determinism
       - name: Dependency-direction lint
         run: npm run lint:deps
@@ -26,3 +28,5 @@ jobs:
         run: npm run scan:ip
       - name: SBOM + license check (compliance)
         run: npm run sbom
+      - name: CLI bundle
+        run: npm run build:cli

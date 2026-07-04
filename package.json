@@ -16,10 +16,11 @@
     "lint:deps": "node scripts/dep-direction-lint.mjs",
     "scan:ip": "node scripts/ip-denylist-scan.mjs",
     "sbom": "node scripts/sbom.mjs",
-    "ci": "npm run typecheck && npm run test && npm run test:conformance && npm run test:determinism && npm run lint:deps && npm run scan:ip && npm run sbom",
+    "ci": "npm run typecheck && npm run test && npm run test:conformance && npm run test:determinism && npm run lint:deps && npm run scan:secrets && npm run scan:ip && npm run sbom",
     "art:fleet": "node art/generate.mjs",
     "build:cli": "node scripts/bundle-cli.mjs",
-    "prepare": "node scripts/bundle-cli.mjs"
+    "prepare": "node scripts/bundle-cli.mjs",
+    "scan:secrets": "node scripts/secret-scan.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

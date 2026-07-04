@@ -8,6 +8,24 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.17.0] - 2026-07-03
+
+Supply chain + release automation.
+
+### Added
+- Every internal package now declares its `@starfish/*` dependencies (hooks/overlay/desktop -> core [+ hooks];
+  sdk -> core+hooks; ui dev-deps sdk for its tests).
+- `scripts/secret-scan.mjs` (`npm run scan:secrets`): fails the build on committed private-key blocks or
+  provider token shapes; skips test fixtures and honors an inline `secret-scan:allow` pragma.
+- GitHub Actions: `ci.yml` runs the full verify gate + secret scan on every push/PR; `release.yml` publishes
+  the CLI with **npm provenance** (OIDC) + an SBOM artifact on a `v*` tag (needs the `NPM_TOKEN` secret).
+- Wire-protocol freeze test: `WIRE_VERSION` is pinned at 1 — the semver gate for the sidecar contract.
+
+### Changed
+- Dependency-direction lint (audit A19) auto-derives the package list from `packages/*/package.json` and now
+  matches side-effect / dynamic `import()` / `require()` imports across `.ts` AND `.tsx` (previously only
+  `import ... from` in `.ts`), so an upward dep can no longer slip through.
+
 ## [0.16.0] - 2026-07-03
 
 Audit durability + truthful facts.
