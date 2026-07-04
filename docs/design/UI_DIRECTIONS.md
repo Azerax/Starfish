@@ -75,3 +75,87 @@ Tradeoffs: needs more screen; more design work than D1.
 ## Next
 Prototype D1 + D5 as static HTML mockups against the real sidecar shapes (pending / audit / monitor),
 get your reaction, then wire the winner into `@starfish/ui` (SSE-ready per ROADMAP v0.18).
+
+---
+
+# Ten more directions (D6-D15)
+
+Five conventional-adjacent (D6-D10) and five from unrelated domains that map surprisingly well
+(D11-D15). The through-line for the "unrelated" set: every one is a real-world system for a human
+authorizing an autonomous/semi-autonomous actor, under risk, with a record - which IS governance.
+
+## Conventional-adjacent
+
+### D6 - Kanban board
+Decisions as cards flowing across columns: Proposed -> Awaiting you -> Approved/Denied -> Executed. Drag a
+card to approve. Why it works: makes the governance pipeline and where each action is stuck visible at a
+glance; universally understood. Tradeoff: horizontal space; less calm than an inbox.
+
+### D7 - Email triage (three-pane)
+Folders (by risk / agent / project) + list + reading pane, Gmail-style; approve = archive, deny = trash,
+"snooze" = defer. Why it works: everyone already does inbox triage; "inbox zero for approvals" is an
+intuitive goal and supports bulk actions on low-risk. Tradeoff: can feel heavy for a few items.
+
+### D8 - Conversational (chat thread)
+The agent "asks permission" as a message in a thread; you reply Approve/Deny inline; reads like Slack/iMessage.
+Why it works: matches how people already relate to agents; approval happens in the context of the ask, with
+the reason right there. Tradeoff: hard to see aggregate state; scrolling for history.
+
+### D9 - Notification control center
+macOS/iOS-style stacked notification cards with inline actions, plus a "control center" of confidence-level
+toggles per project/session. Why it works: nails "quiet until needed" + fast actions; the toggles expose the
+writes=ask/auto model cleanly. Tradeoff: notification fatigue if over-used.
+
+### D10 - Data grid / SIEM table
+A dense, sortable, filterable table of decisions (columns: time, actor, tool, target, risk, verdict) with
+saved filters and bulk-approve. Why it works: SOC analysts live in grids; risk-sort + filter + bulk is the
+fastest path at volume. Tradeoff: intimidating for non-technical operators; low emotional warmth.
+
+## Completely unrelated - yet they map exactly
+
+### D11 - Air traffic control (radar + clearances)
+Agents are blips on a scope; a pending action is an aircraft "requesting clearance"; you issue "cleared" or
+"go around"; risk = proximity/altitude; anomalies = conflict alerts. Why it works: ATC is literally
+real-time human authorization of autonomous actors under risk and time pressure - approve == grant
+clearance. Distinctive dark scope with a sweep. Tradeoff: spatial metaphor needs care to stay legible, not
+decorative.
+
+### D12 - Hospital triage / patient monitor
+Each agent is a "patient" with vitals: token budget = heart rate, risk tier = temperature, boundary health =
+BP; pending actions are "orders awaiting the attending's sign-off"; anomalies raise a calm-but-firm alarm.
+Why it works: clinical triage + physician sign-off is human-in-the-loop authorization, and "first, do no
+harm" is deny-by-default in spirit. Calm, high-trust aesthetic. Tradeoff: medical framing may feel odd for
+some hosts.
+
+### D13 - Customs / border checkpoint
+Every action is a "traveler" presenting a "passport" (its capability); you stamp APPROVED or DENIED;
+secrets/contraband are flagged at inspection; there's a declaration form (the reason). Why it works: border
+control IS deny-by-default admission with inspection and stamping - a near-1:1 map to the PDP + boundary +
+secret screening. Playful but precise. Tradeoff: heavy iconography risks kitsch if overdone.
+
+### D14 - Bank vault / dual-control (two-key)
+The signature move: high-risk actions require TWO keys turned together - the agent proposes (key 1), the
+operator approves (key 2), and the vault opens only with both. A ledger tape prints every action. Why it
+works: this is proposer != approver made literal (real vaults/wire transfers use dual control), and the
+printing ledger is the hash-chained audit. Strongest conceptual fit of the set. Tradeoff: the two-key
+animation must not add friction to routine low-risk items.
+
+### D15 - Courtroom docket
+Pending actions are "cases on the docket"; you rule (grant/deny) with a one-line opinion; policies are
+"precedent"; the audit is "the record"; deny-by-default is the presumption until authorized. Why it works:
+a judge authorizing under a rulebook, on the record, is exactly the governance loop; lends gravitas and a
+clear "why" for every decision. Tradeoff: formal tone; risk of feeling ponderous for quick approvals.
+
+## Honorable mentions (same "unrelated but apt" vein)
+- Mission control GO / NO-GO poll (each risky action = a per-station go/no-go before commit) - apt, but
+  overlaps the existing Bridge/Fleet concept.
+- Kitchen expediter at the pass (chef fires, expediter approves on a ticket rail) - fast QC metaphor.
+
+## How to choose among 15
+Pick by primary JOB, then dress it:
+- Fewest-items, prevent rubber-stamping -> D1 / D8 / D14.
+- High volume, power operators -> D10 / D7 / D5.
+- Trust / compliance story -> D3 / D15 / D13.
+- "Wow" demo that still works -> D11 / D14.
+All 15 are one design-token theme over the same data (pending / audit / monitor); the metaphor is skin, the
+IA underneath (risk-sorted queue + context + record + two-party approval) stays constant.
