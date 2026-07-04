@@ -1,6 +1,6 @@
 # Project Starfish — 1.0 Candidate Release Notes (v0.13.0 → v0.22.0)
 
-Project Starfish is a fork of Munder Difflin. This milestone is a hardening + productization run that takes
+This milestone is a hardening + productization run that takes
 the code audit's findings to closure and freezes the public surface for a 1.0 commitment. Every release was
 gated green (typecheck + full test suite + dependency-direction lint + CLI bundle; secret-scan from v0.17)
 before commit. Final suite: **420 tests across 83 files**. Nothing lowers the deny-by-default / fail-closed

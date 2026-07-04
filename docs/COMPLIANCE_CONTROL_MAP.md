@@ -1,8 +1,7 @@
 # Starfish → Compliance Control Mapping
 
 Informational mapping from Starfish's built controls to common frameworks. Not a certification and not
-legal advice; intended to help an adopting org evidence relevant controls. (Project Starfish is a fork of
-Munder Difflin.)
+legal advice; intended to help an adopting org evidence relevant controls.
 
 ## SOC 2 (Trust Services Criteria)
 | TSC | Starfish control | Where |
