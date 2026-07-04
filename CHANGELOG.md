@@ -8,6 +8,22 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.19.0] - 2026-07-03
+
+Multi-root / multi-tenant sidecar.
+
+### Added
+- `startMultiSidecar({ roots })`: one loopback sidecar governs several governed roots with hard per-root
+  isolation. A token belongs to exactly one root; requests route to that root's governance/broker/audit and
+  can never address or leak into another (per-root pending, audit, decision-resolved map, SSE scope). A
+  duplicate token across roots is rejected at construction (embed risks #22/#39).
+- Per-root operator principal sets: `RootSpec.operators` restricts who may approve.
+
+### Security
+- `DecisionBroker.resolve` takes an optional operator principal set; when supplied, the approver must be a
+  designated operator, closing the gap where any non-proposer agent could approve (audit A20). Single-tenant
+  `startSidecar` behavior is unchanged (operators unset).
+
 ## [0.18.0] - 2026-07-03
 
 Live dashboard: SSE streaming.

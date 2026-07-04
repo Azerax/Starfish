@@ -86,7 +86,7 @@ export { assertLocalRoot, assertSafeRoot } from './fsroot';
 export { makeInProcessRunner } from './conformance/inprocess';
 export { runScenarioPack, type ScenarioEnv, type ScenarioResult } from './conformance/scenarios';
 export type { RunnerDecision, RunnerPending } from './conformance/runner';
-export { startSidecar, WIRE_VERSION, type Sidecar, type SidecarIdentity, type SidecarOptions } from './serve';
+export { startSidecar, startMultiSidecar, WIRE_VERSION, type Sidecar, type SidecarIdentity, type SidecarOptions, type RootSpec, type MultiSidecarOptions } from './serve';
 export { makeSidecarRunner, type SidecarClientOptions } from './client';
 export { makeTaxonomy, DEFAULT_TAXONOMY, type ToolTaxonomy, type TaxonomyRule } from './taxonomy';
 export { makeOverlayRunner, withGovernance, type HostCall, type HostExecResult } from './overlayRunner';

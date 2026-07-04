@@ -52,11 +52,17 @@ export class DecisionBroker {
   has(id: string): boolean { return this.pending.has(id); }
   get(id: string): PendingDecision | undefined { return this.pending.get(id); }
 
-  /** Operator resolution. Enforces proposer != approver. Audits, resolves any awaiter, persists. */
-  resolve(id: string, verdict: DecisionVerdict, by: string): { ok: boolean; reason: string; decision?: PendingDecision } {
+  /** Operator resolution. Enforces proposer != approver, and — when an operator principal set is supplied
+   *  (audit A20) — that the approver is a designated operator (not merely some other agent). Audits,
+   *  resolves any awaiter, persists. */
+  resolve(id: string, verdict: DecisionVerdict, by: string, operators?: ReadonlySet<string> | readonly string[]): { ok: boolean; reason: string; decision?: PendingDecision } {
     const d = this.pending.get(id);
     if (!d) return { ok: false, reason: 'no such pending decision (already resolved?)' };
     if (by === d.actor) return { ok: false, reason: 'proposer != approver — the proposing actor cannot self-approve' };
+    if (operators !== undefined) {
+      const ok = Array.isArray(operators) ? operators.includes(by) : (operators as ReadonlySet<string>).has(by);
+      if (!ok) return { ok: false, reason: 'approver is not a designated operator (agent-vs-agent approval blocked)' };
+    }
     this.pending.delete(id);
     const w = this.waiters.get(id); if (w) { this.waiters.delete(id); w(verdict); }
     this.audit.append({ actor: by, domain: 'governance', action: verdict === 'approve' ? 'decision:approved' : 'decision:denied', target: d.target ?? d.refId, decision: verdict === 'approve' ? 'allow' : 'deny', riskTier: d.riskTier, reason: `operator ${verdict} — ${d.reason}` });
