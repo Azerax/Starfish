@@ -9,7 +9,7 @@ const RISK_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low
 // D5 "Split Cockpit": the risk-sorted approval queue is the hero (left); the selected decision's full
 // context (actor, tool, target, reason, and the actor's governed posture) fills the right pane so you
 // can never rubber-stamp. Crew / budgets / monitor / live feed are secondary, below.
-export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string }) {
+export function Bridge({ nameFor, go }: { nameFor: (t: Theme, id: string) => string; go?: (v: string) => void }) {
   const bridge = getBridge();
   const { theme } = useTheme();
   const [crew, setCrew] = useState<CrewMemberView[]>([]);
@@ -21,8 +21,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
   const [pending, setPending] = useState<DecisionLogEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentDetailView | null>(null);
-  const [feedOpen, setFeedOpen] = useState(false);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState('');   // (the live decision feed now lives on the Activity screen)
 
   useEffect(() => {
     const load = () => {
@@ -139,7 +138,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
       <div className="secondary">
         <section className="card">
           <h3>Crew <span className="src">{crew.filter((c) => statusOf(c) !== 'paused').length}/{crew.length} active</span></h3>
-          <div className="feed">
+          <div className="feed scrolly">
             {crew.map((c) => (
               <div key={c.id} className="dec" style={{ borderLeftColor: 'var(--line)' }}>
                 <span className={`tag ${statusOf(c)}`}><i className="led" /> {statusOf(c)}</span>
@@ -180,26 +179,15 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
           </section>
         )}
 
+        {/* At-a-glance governance summary — the full stream lives on the Activity screen (one-screen rule). */}
         <section className="card span2">
-          <h3 className="collapse" onClick={() => setFeedOpen((o) => !o)}>
-            <span className="chev">{feedOpen ? '▾' : '▸'}</span> Live governance decisions <span className="src">PDP · {decisions.length} recent</span>
-          </h3>
-          {feedOpen && (
-            <div className="feed scrolly">
-              {decisions.map((d) => {
-                const ov = resolved[d.id];
-                const verdict = ov ?? d.verdict;
-                return (
-                  <div className={`dec ${verdict}`} key={d.id}>
-                    <span className="verdict">{verdict.toUpperCase()}</span>
-                    <div className="what"><b>{nameFor(theme, d.actor)}</b> · {d.tool} {d.target ?? ''}
-                      <div className="reason">{ov ? (ov === 'allow' ? 'approved by operator' : 'denied by operator') : d.reason}</div></div>
-                    <span className="t">{d.ts}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <h3>Governance activity <span className="src">recent · PDP</span></h3>
+          <div className="stat" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div className="s"><div className="n ok">{decisions.filter((d) => (resolved[d.id] ?? d.verdict) === 'allow').length}</div><div className="l">allowed</div></div>
+            <div className="s"><div className="n warn">{decisions.filter((d) => (resolved[d.id] ?? d.verdict) === 'ask').length}</div><div className="l">asks</div></div>
+            <div className="s"><div className="n" style={{ color: 'var(--deny)' }}>{decisions.filter((d) => (resolved[d.id] ?? d.verdict) === 'deny').length}</div><div className="l">denied</div></div>
+          </div>
+          {go && <div style={{ marginTop: 10 }}><button className="act" onClick={() => go('activity')}>View all activity →</button></div>}
         </section>
       </div>
     </main>

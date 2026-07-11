@@ -8,10 +8,11 @@ import { Settings } from './screens/Settings';
 import { Padd } from './screens/Padd';
 import { Comm } from './screens/Comm';
 import { ReadyRoom } from './screens/ReadyRoom';
+import { Activity } from './screens/Activity';
 import { getBridge } from './bridge/useBridge';
 import type { ReadinessBlocker } from './bridge/types';
 
-type View = 'loading' | 'onboard' | 'bridge' | 'padd' | 'comm' | 'settings' | 'readyroom';
+type View = 'loading' | 'onboard' | 'bridge' | 'padd' | 'comm' | 'settings' | 'readyroom' | 'activity';
 
 function Clock() {
   const [t, setT] = useState(() => new Date().toTimeString().slice(0, 8));
@@ -39,6 +40,13 @@ function RiskChip() {
   return <button className={`pill risktol ${tol}`} onClick={toggle} title="Risk tolerance — click to change">Risk: {tol === 'medium' ? 'Medium' : 'Low'}</button>;
 }
 
+// Quiet access to the full governance-decision stream (its own screen). A live dot signals the stream is
+// active; the accurate at-a-glance counts live on the Bridge summary + the Activity screen — no misleading
+// badge number here (routine denials are healthy in a deny-by-default system).
+function ActivityChip({ go }: { go: (v: View) => void }) {
+  return <button className="pill" onClick={() => go('activity')} title="Live governance decisions"><span className="dot live" /> Activity</button>;
+}
+
 function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
   const { theme, themes, setThemeId, mode, toggleMode, canToggle } = useTheme();
   return (
@@ -49,6 +57,7 @@ function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
       <Clock />
       <span className="pill"><span className="dot" /> GOVERNED · fail-closed</span>
       <RiskChip />
+      <ActivityChip go={go} />
       <button className={`pill ready${alerts > 0 ? ' pulse' : ''}`} onClick={() => go('readyroom')} title="My Ready Room">🛎 Ready Room{alerts > 0 ? ` · ${alerts}` : ''}</button>
       <button className="pill" onClick={() => go('padd')} title="Skill Library — run a vetted skill">Skills</button>
       <button className="pill" onClick={() => go('comm')} title="Ask Starfish to do something">Chat</button>
@@ -126,7 +135,8 @@ function Shell() {
   else if (view === 'padd') screen = <Padd onBack={() => setView('bridge')} />;
   else if (view === 'comm') screen = <Comm onBack={() => setView('bridge')} />;
   else if (view === 'readyroom') screen = <><Header go={setView} alerts={blockers.length} /><ReadyRoom blockers={blockers} onBack={() => setView('bridge')} go={resolve} /></>;
-  else screen = <><Header go={setView} alerts={blockers.length} /><Bridge nameFor={displayName} /></>;
+  else if (view === 'activity') screen = <><Header go={setView} alerts={blockers.length} /><Activity /></>;
+  else screen = <><Header go={setView} alerts={blockers.length} /><Bridge nameFor={displayName} go={setView} /></>;
 
   return <>{screen}{showModal && <ReadyModal blockers={blockers} onResolve={resolve} onMinimize={() => { setDismissed(true); setView('readyroom'); }} onDismiss={() => setDismissed(true)} />}</>;
 }

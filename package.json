@@ -1,7 +1,7 @@
 {
   "name": "starfish",
   "private": true,
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Project Starfish: a governance-first, deny-by-default AI agent governance layer (monorepo). Govern Claude Code and any agent/skill build: authorize, contain, audit.",
   "license": "Apache-2.0",
   "workspaces": [

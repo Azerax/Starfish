@@ -8,6 +8,43 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 _Nothing yet._
 
+## [0.23.0] - 2026-07-10
+
+Risk model rework, a calm one-screen UI redesign, operator Risk Tolerance, and input/normalization hardening.
+See `docs/RELEASE_NOTES_v0.23.0.md`.
+
+### Added
+- **Risk model (0–100 composite).** New `riskmatrix.ts` (50-category matrix, floor set, decade tier bands +
+  10 human descriptors Clear→Forbidden) and `score.ts` (`assessRisk`, max-driven `composite`, `verdictFor`,
+  `assessmentFromTier`) — the single, deterministic scorer. Wired into the PDP: every decision carries the
+  composite; `RiskEngine.assess()` emits the full assessment. `docs/RISK_MATRIX.md`,
+  `RISK_TOLERANCE_PLAN.md`, `RISK_MODEL_MIGRATION_PLAN.md`, `RISK_MODEL_ADVERSARIAL_ANALYSIS.md` (50×3).
+- **Risk Tolerance setting.** Governed `RiskToleranceStore` (Low default, fail-safe-to-Low, operator-only,
+  Medium double-confirm, audited, auto-revert) applied to the live PDP; persistent header chip.
+- **Non-deviation.** `ScopeContractLedger` (per-task allowedTools/pathScope/commands/budget, hash-sealed,
+  D1–D4 gate) wired into the PDP; input re-provenance (`attest.ts` + scope `stampInputs`/`verifyInputs`).
+- **UI.** D5 "Split Cockpit" Bridge; light/dark design tokens; **Calm** neutral default (Fleet demoted to an
+  optional off-by-default skin, renderer + ring-3); flashing admin/root warning banner; **Activity** screen
+  for the live decision stream with an at-a-glance dashboard summary (the one-screen rule); score + descriptor
+  on approval cards; neutral nav ("Skills"/"Chat"). Design records: `docs/design/UI_LINEAGE.md`,
+  `UI_ONE_SCREEN.md`.
+- **Skills.** 10 governed launch-skill scaffolds + `skills/starter-skills.json` + `skills/README.md`.
+- **Docs.** `SECURITY.md`; `docs/comparisons/{STARFISH_VS_OPENCLAW,STARFISH_VS_HERMES}.md`;
+  `PERSONAS_AND_GAPS.md`, `PERSONA_THREAT_MODEL.md` (20×3), `HARDENING_BACKLOG.md`, `FEATURE_CANDIDATES.md`,
+  `MASTER_COMPLETION_PLAN.md`, `LAUNCH_READINESS_PLAN.md`, `design/RE_ARENA_ON_USE.md`.
+- **Chore.** Root package tracks the release version + `scripts/sync-versions.mjs` (`npm run version:sync`);
+  `.gitattributes` / `.gitignore` guards.
+
+### Security
+- **Normalize-before-match hardening.** Boundary `caseFold`/`sameOrUnder` treat `\` and `/` as equivalent on
+  Windows (closes a separator-based boundary-escape) and use `/`-relative containment; `boundaryForAgent/Skill`
+  forbid-checks use `sameOrUnder`. Secret-path classification defeats Windows filename tricks (NTFS ADS,
+  trailing dot/space). `netguard` strips trailing FQDN dots and unwraps IPv4-mapped IPv6.
+
+### Changed
+- Every PDP `Decision` now carries an optional `score`; `DecisionLogEntry` carries `score`/`descriptor`.
+- The published version is tracked from the repo root; `@starfish/*` package versions are synced (0.23.0).
+
 ## [0.22.0] - 2026-07-03
 
 1.0 candidate: freeze, docs, compliance. (External security review + counsel-reviewed legal terms remain
