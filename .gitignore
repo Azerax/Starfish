@@ -41,3 +41,9 @@ docs/ROUTE1_OVERLAY_PLAN.md
 docs/R0_TEST_PROMPT.md
 docs/STRATEGY_A_SECURITY_REVIEW.md
 site/site.zip
+
+# large binary archives / bundles — planning artifacts, not repo content
+*.tgz
+*.gz
+docs/planning/*.zip
+site/*.zip
