@@ -3,7 +3,7 @@
 // Audit-before-act on every decision. Deterministic: pure function of (input, policy, context).
 import type { Decision, Face, ToolCall, BoundarySet, ToolDef, AgentDef, RiskTier } from './types';
 import type { ScopeVerdict } from './scope';
-import type { RiskAssessment } from './score';
+import { assessmentFromTier, type RiskAssessment } from './score';
 import { isSecretPath, classifyPath, screenEnv, type SecretPolicy } from './secrets';
 import type { Registry } from './registry';
 import type { AuditLog } from './audit';
@@ -68,6 +68,9 @@ export class PDP {
       return sd;
     }
     const d = face === 'egress' ? this.egress(call) : this.ingress(call, bs);
+    // one risk model: backfill the 0–100 composite from the tier so EVERY decision (incl. hard-floor
+    // denials that short-circuit before scoring) carries a score from the single scorer (RM-3).
+    if (d.score === undefined && d.riskTier) d.score = assessmentFromTier(d.riskTier).score;
     try {
       this.audit.append({
         actor: call.agentId,

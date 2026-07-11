@@ -4,7 +4,7 @@ export type Verdict = 'allow' | 'deny' | 'ask';
 
 export interface CrewMemberView { id: string; role: string; status: 'active' | 'idle' | 'paused' | 'sweeping'; currentTaskId?: string; riskTier?: RiskTier; }
 export interface AgentDetailView { id: string; role: string; domain: string; status: 'active' | 'idle' | 'paused' | 'sweeping'; riskTier: RiskTier; currentTaskId?: string; allowedTools: string[]; boundary: { visibility: string[]; write: string[] }; notes?: string[]; }
-export interface DecisionLogEntry { id: string; ts: string; actor: string; tool: string; target?: string; verdict: Verdict; reason: string; riskTier?: RiskTier; }
+export interface DecisionLogEntry { id: string; ts: string; actor: string; tool: string; target?: string; verdict: Verdict; reason: string; riskTier?: RiskTier; score?: number; descriptor?: string; }
 export interface BudgetView { scope: string; status: string; usdUsed: number; usdLimit: number; tokensUsed: number; tokensLimit: number; }
 export interface MonitorView { lastSweepTs: string; counters: { denials: number; boundaryEscapes: number; hashMismatches: number; budgetHard: number; orphanPosts: number; casualties: number }; findings: unknown[]; reconciled: boolean; }
 export interface CapabilityView { id: string; kind: string; state: string; }

@@ -50,8 +50,8 @@ function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
       <span className="pill"><span className="dot" /> GOVERNED · fail-closed</span>
       <RiskChip />
       <button className={`pill ready${alerts > 0 ? ' pulse' : ''}`} onClick={() => go('readyroom')} title="My Ready Room">🛎 Ready Room{alerts > 0 ? ` · ${alerts}` : ''}</button>
-      <button className="pill" onClick={() => go('padd')} title="Skill Library">📟 PADD</button>
-      <button className="pill" onClick={() => go('comm')} title="Issue orders">📡 COMM</button>
+      <button className="pill" onClick={() => go('padd')} title="Skill Library — run a vetted skill">Skills</button>
+      <button className="pill" onClick={() => go('comm')} title="Ask Starfish to do something">Chat</button>
       <label className="pill">Theme&nbsp;
         <select value={theme.id} onChange={(e) => setThemeId(e.target.value)}>
           {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}

@@ -16,6 +16,7 @@ export type Verdict = 'allow' | 'deny' | 'ask';
 export interface DecisionLogEntry {
   id: string; ts: string; actor: string; tool: string;
   target?: string; verdict: Verdict; reason: string; riskTier?: RiskTier;
+  score?: number; descriptor?: string;   // RM-5: 0–100 composite + human band (Clear→Forbidden), for the approval card
 }
 export interface BudgetView { scope: string; status: BudgetStatus; usdUsed: number; usdLimit: number; tokensUsed: number; tokensLimit: number; }
 export interface MonitorView {

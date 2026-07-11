@@ -3,7 +3,7 @@
 import type {
   Governor, AuditEvent, AgentDef, ToolDef, RiskTier, ServiceInfo, BoundarySet, PendingDecision,
 } from '@starfish/governance-core';
-import { boundaryForAgent } from '@starfish/governance-core';
+import { boundaryForAgent, assessmentFromTier } from '@starfish/governance-core';
 import { join } from 'node:path';
 import type {
   CrewMemberView, DecisionLogEntry, BudgetView, MonitorView, AgentDetailView, CapabilityView, Verdict,
@@ -22,6 +22,12 @@ const NOTES: Record<string, string[]> = {
 };
 const roleOf = (a: AgentDef) => ROLE[a.domain ?? ''] ?? (a.domain ? a.domain[0].toUpperCase() + a.domain.slice(1) : a.id);
 const hhmmss = (iso: string) => { try { return new Date(iso).toTimeString().slice(0, 8); } catch { return iso; } };
+// RM-5: derive the 0–100 composite + human band (Clear→Forbidden) from the recorded tier, for the approval card.
+const band = (tier?: RiskTier): { score?: number; descriptor?: string } => {
+  if (!tier) return {};
+  const a = assessmentFromTier(tier);
+  return { score: a.score, descriptor: a.descriptor };
+};
 
 function currentTaskId(g: Governor, agentId: string): string | undefined {
   const active = new Set(['analysis', 'planning', 'decomposition', 'execution', 'validation', 'rework', 'retry']);
@@ -59,13 +65,14 @@ export function decisionLog(g: Governor, limit = 12): DecisionLogEntry[] {
   const mapped = evs.map((e): DecisionLogEntry => ({
     id: `a${e.seq}`, ts: hhmmss(e.ts), actor: e.actor, tool: e.action, target: e.target,
     verdict: (e.decision === 'deny' ? 'deny' : 'allow') as Verdict, reason: e.reason ?? '', riskTier: e.riskTier,
+    ...band(e.riskTier),
   }));
   return mapped.reverse().slice(0, limit);   // newest first
 }
 
 /** Pending operator decisions (from the broker) rendered as ASK rows the Bridge can act on. */
 export function pendingAsView(pending: PendingDecision[]): DecisionLogEntry[] {
-  return pending.map((d) => ({ id: d.id, ts: hhmmss(d.ts), actor: d.actor, tool: d.tool, target: d.target, verdict: 'ask' as Verdict, reason: d.reason, riskTier: d.riskTier }));
+  return pending.map((d) => ({ id: d.id, ts: hhmmss(d.ts), actor: d.actor, tool: d.tool, target: d.target, verdict: 'ask' as Verdict, reason: d.reason, riskTier: d.riskTier, ...band(d.riskTier) }));
 }
 
 export function budgetView(g: Governor): BudgetView[] {

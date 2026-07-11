@@ -9,8 +9,13 @@ const POOL: Omit<DecisionLogEntry, 'id' | 'ts'>[] = [
   { actor: 'hank', tool: 'audit.sweep', verdict: 'allow', reason: 'read-only monitor sweep', riskTier: 'low' },
 ];
 let seq = 100;
+// RM-5: representative composite + descriptor per tier (mirrors assessmentFromTier), for the dev preview.
+const BAND: Record<string, { score: number; descriptor: string }> = {
+  low: { score: 20, descriptor: 'Contained' }, medium: { score: 40, descriptor: 'Noted' },
+  high: { score: 60, descriptor: 'Heightened' }, critical: { score: 90, descriptor: 'Grave' }, injection: { score: 100, descriptor: 'Injection' },
+};
 function clock(o = 0): string { return new Date(Date.now() + o * 1000).toTimeString().slice(0, 8); }
-const feed: DecisionLogEntry[] = POOL.slice(0, 4).map((d, i) => ({ ...d, id: 'd' + (seq - i), ts: clock(-i * 6) }));
+const feed: DecisionLogEntry[] = POOL.slice(0, 4).map((d, i) => ({ ...d, ...BAND[d.riskTier ?? 'low'], id: 'd' + (seq - i), ts: clock(-i * 6) }));
 
 const CATALOG: DefaultSkillView[] = [
   { id: 'claude-api', kind: 'skill', category: 'reference', summary: 'Claude API & SDK docs', expectedRisk: 'low', plugin: 'claude-api' },
@@ -58,7 +63,7 @@ export const mockBridge: GovernanceBridge = {
     const d = DETAIL[id] ?? { role: c?.role ?? id, domain: 'unknown', riskTier: c?.riskTier ?? 'low', allowedTools: [], boundary: { visibility: [], write: [] } };
     return { id, status: c?.status ?? 'idle', currentTaskId: c?.currentTaskId, ...d };
   },
-  getDecisions: async (limit = 8) => { seq += 1; feed.unshift({ ...POOL[seq % POOL.length], id: 'd' + seq, ts: clock() }); feed.length = Math.min(feed.length, 40); return feed.slice(0, limit); },
+  getDecisions: async (limit = 8) => { seq += 1; const d = POOL[seq % POOL.length]; feed.unshift({ ...d, ...BAND[d.riskTier ?? 'low'], id: 'd' + seq, ts: clock() }); feed.length = Math.min(feed.length, 40); return feed.slice(0, limit); },
   getAudit: async () => [],
   getTasks: async () => [],
   getServices: async () => [],

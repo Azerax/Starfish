@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { GovernanceError, type ToolCall } from './types';
 import { sameOrUnder } from './boundary';
 import { sha256 } from './hash';
+import { stampFiles, verifyStamps, type FileStamp, type AttestResult } from './attest';
 import type { AuditLog } from './audit';
 
 export type DeviationClass = 'D1-tool' | 'D2-path' | 'D3-command' | 'D4-budget';
@@ -33,6 +34,7 @@ export interface ScopeContract {
   hash: string;                     // immutability seal over the fields above
   frozen: boolean;
   used: { calls: number };          // meter; advances as calls are admitted in-scope
+  inputs: FileStamp[];              // H5: stamps of picked input files (runtime, not sealed) — TOCTOU guard
 }
 
 const COMMAND_KEYS = ['command', 'cmd', 'template', 'argv'];
@@ -78,13 +80,27 @@ export class ScopeContractLedger {
       budget: input.budget ?? {},
       planHash: input.planHash ?? '',
     };
-    const c: ScopeContract = { ...base, hash: seal(base), frozen: true, used: { calls: 0 } };
+    const c: ScopeContract = { ...base, hash: seal(base), frozen: true, used: { calls: 0 }, inputs: [] };
     this.contracts.set(c.taskId, c);
     this.audit.append({ actor: input.proposer, domain: 'task', action: 'scope:derive', target: c.taskId, decision: 'allow', reason: `tools=${c.allowedTools.length} paths=${c.pathScope.length} cmds=${c.allowedCommands.length}` });
     return c;
   }
 
   get(taskId: string): ScopeContract | undefined { return this.contracts.get(taskId); }
+
+  /** H5 — stamp the input files this task picked; a later swap (cloud-sync/TOCTOU) is caught by verifyInputs. */
+  stampInputs(taskId: string, paths: string[]): void {
+    const c = this.contracts.get(taskId);
+    if (c) { c.inputs = stampFiles(paths); this.audit.append({ actor: c.proposer, domain: 'task', action: 'scope:stamp-inputs', target: taskId, decision: 'allow', reason: `${c.inputs.length} file(s) stamped` }); }
+  }
+  /** Re-verify stamped inputs at time-of-use. A changed file → deviation (fail-closed). */
+  verifyInputs(taskId: string): AttestResult {
+    const c = this.contracts.get(taskId);
+    if (!c) return { ok: false, changed: true, reason: 'no scope contract' };
+    const r = verifyStamps(c.inputs);
+    if (!r.ok) this.audit.append({ actor: c.proposer, domain: 'task', action: 'scope:input-deviation', target: taskId, decision: 'deny', riskTier: 'high', reason: r.reason });
+    return r;
+  }
 
   /** Verify a contract's seal still matches its fields — detects out-of-band tamper (attestation). */
   attest(taskId: string): ScopeVerdict {

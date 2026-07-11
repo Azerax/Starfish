@@ -35,6 +35,8 @@ export class RiskEngine {
     const text = JSON.stringify(call.input ?? {});
     if (/https?:\/\/|curl|wget|fetch\(|\.internal|\.local/i.test(text)) cats[2] = Math.min(cap, 7); // network
     if (/payment|invoice|\bspend\b|transfer|purchase/i.test(text)) cats[39] = Math.min(cap, 7);      // financial
+    if (/\brm\b|\bdelete\b|drop\s+table|truncate|overwrite|unlink/i.test(text)) cats[6] = Math.min(cap, 7); // reversibility
+    if (/upload|exfil|POST\s|multipart|attachment/i.test(text)) cats[12] = Math.min(cap, 7);          // exfiltration
     return assessRisk(cats);
   }
 }

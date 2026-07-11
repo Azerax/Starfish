@@ -72,7 +72,8 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
 
   const highCount = pending.filter((d) => d.riskTier === 'high' || d.riskTier === 'critical').length;
   const statusOf = (c: CrewMemberView) => (resumed[c.id] ? 'active' : c.status);
-  const chip = (r?: string) => <span className={`riskchip ${r ?? 'low'}`}>{r ?? 'low'}</span>;
+  const chip = (d: { riskTier?: string; descriptor?: string; score?: number }) =>
+    <span className={`riskchip ${d.riskTier ?? 'low'}`} title={`risk ${d.score ?? '—'}/100`}>{d.descriptor ?? d.riskTier ?? 'low'}{d.score != null ? ` · ${d.score}` : ''}</span>;
 
   return (
     <main className="bridge">
@@ -86,7 +87,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
             <div className="qcol">
               {pending.map((d) => (
                 <button key={d.id} className={`qitem${selected === d.id ? ' sel' : ''}`} onClick={() => setSelected(d.id)}>
-                  <div className="qtop">{chip(d.riskTier)}<span className="qtool">{d.tool}</span></div>
+                  <div className="qtop">{chip(d)}<span className="qtool">{d.tool}</span></div>
                   <div className="qactor">{nameFor(theme, d.actor)}</div>
                   {d.target && <div className="qtarget">{d.target}</div>}
                 </button>
@@ -101,7 +102,7 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
             <div className="ctx-empty"><div style={{ fontSize: 15 }}>Select an item to review it</div><div style={{ fontSize: 13 }}>You'll see who, what, where, why, the risk, and the agent's boundary before you decide.</div></div>
           ) : (
             <>
-              <div className="ctxhead">{chip(sel.riskTier)}<div className="ctxtitle">{nameFor(theme, sel.actor)} wants to <span className="mono">{sel.tool}</span></div></div>
+              <div className="ctxhead">{chip(sel)}<div className="ctxtitle">{nameFor(theme, sel.actor)} wants to <span className="mono">{sel.tool}</span></div></div>
               <table className="ctxmeta"><tbody>
                 {sel.target && <tr><td>target</td><td className="mono" style={{ color: 'var(--accent)' }}>{sel.target}</td></tr>}
                 <tr><td>requested</td><td className="mono">{sel.ts}</td></tr>
