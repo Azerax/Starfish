@@ -35,6 +35,7 @@ const DETAIL: Record<string, Omit<AgentDetailView, 'id' | 'status' | 'currentTas
 
 export const mockBridge: GovernanceBridge = {
   governed: true,
+  getPrivilege: async () => ({ elevated: false, user: 'you', platform: 'web' }),
   getBaseRoot: async () => ({ root: '~/Starfish', locked: false, suggested: '~/Starfish' }),
   pickBaseDir: async () => ({ path: '~/Starfish' }),
   setBaseRoot: async (dir: string) => ({ ok: true, root: dir || '~/Starfish', reason: 'mock: seeded + booted' }),

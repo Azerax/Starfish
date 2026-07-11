@@ -1,0 +1,20 @@
+{
+  "note": "The 10 built-in, trusted-by-provenance launch skills + the 2 governance-native skills. These ship WITH Starfish (unlike default-skills.json, which lists external intake candidates). Each is Arena-vetted + signed at build time. document-* rendering engines are imported from anthropics/skills; the rest are Starfish-authored.",
+  "trust": "builtin",
+  "skills": [
+    { "id": "starfish-docx",      "path": "skills/starfish-docx",      "category": "documents",   "summary": "Create/edit Word documents",                 "source": "import:anthropics/skills", "expectedRisk": "medium" },
+    { "id": "starfish-xlsx",      "path": "skills/starfish-xlsx",      "category": "documents",   "summary": "Create/edit/clean spreadsheets",             "source": "import:anthropics/skills", "expectedRisk": "medium" },
+    { "id": "starfish-pdf",       "path": "skills/starfish-pdf",       "category": "documents",   "summary": "PDF extract/fill/merge/split/create",        "source": "import:anthropics/skills", "expectedRisk": "medium" },
+    { "id": "starfish-pptx",      "path": "skills/starfish-pptx",      "category": "documents",   "summary": "Build/edit slide decks",                     "source": "import:anthropics/skills", "expectedRisk": "medium" },
+    { "id": "starfish-research",  "path": "skills/starfish-research",  "category": "knowledge",   "summary": "Web research → cited brief (taint-gated)",   "source": "authored", "expectedRisk": "medium" },
+    { "id": "starfish-organizer", "path": "skills/starfish-organizer", "category": "files",       "summary": "Sort/rename/dedupe/find; soft-delete",        "source": "authored", "expectedRisk": "medium" },
+    { "id": "starfish-compose",   "path": "skills/starfish-compose",   "category": "communication","summary": "Draft emails/messages (draft-only)",         "source": "authored", "expectedRisk": "low" },
+    { "id": "starfish-notes",     "path": "skills/starfish-notes",     "category": "knowledge",   "summary": "Transcript → summary + action items",        "source": "authored", "expectedRisk": "low" },
+    { "id": "starfish-recall",    "path": "skills/starfish-recall",    "category": "knowledge",   "summary": "Governed persistent memory capture/recall",  "source": "authored", "expectedRisk": "low" },
+    { "id": "starfish-schedule",  "path": "skills/starfish-schedule",  "category": "automation",  "summary": "Reminders + recurring governed jobs",        "source": "authored", "expectedRisk": "low" }
+  ],
+  "governanceSkills": [
+    { "id": "starfish-govern",  "path": "packages/governance-overlay/skills/starfish-govern", "summary": "Bring a build under governance" },
+    { "id": "starfish-verify",  "path": "skills/starfish-verify", "summary": "Clean-room gate runner" }
+  ]
+}

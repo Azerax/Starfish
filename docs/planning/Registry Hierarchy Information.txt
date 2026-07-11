@@ -1,0 +1,313 @@
+Registry Hierarchy
+1. Capability Registry
+
+Purpose: Master inventory of everything Project Starfish can do.
+
+Role:
+Acts as the system's table of contents.
+
+Contains references to:
+
+Agents
+Skills
+Tools
+Workflows
+Policies
+Memory providers
+Services
+
+Example:
+
+{
+  "capability_id": "filesystem_write",
+  "type": "tool",
+  "manifest": "tools/filesystem_write/manifest.json"
+}
+
+Think of this as:
+
+"What exists?"
+
+2. Agent Registry
+
+Purpose: Inventory of available agents.
+
+Role:
+Defines all reasoning entities.
+
+Contains:
+
+Agent ID
+Domain
+Risk level
+Allowed skills
+Allowed tools
+Model assignment
+Ownership
+
+Example:
+
+{
+  "agent_id": "architecture_agent",
+  "domain": "system_design",
+  "risk": "medium"
+}
+
+Answers:
+
+"Who can perform work?"
+
+3. Skill Registry
+
+Purpose: Catalog of reusable cognitive capabilities.
+
+Role:
+Maps abstract abilities to implementations.
+
+Examples:
+
+security_analysis
+design_architecture
+write_documentation
+generate_test_plan
+
+Answers:
+
+"What can agents know how to do?"
+
+4. Tool Registry
+
+Purpose: Catalog of executable tools.
+
+Role:
+Defines real-world actions.
+
+Examples:
+
+filesystem_write
+web_fetch
+database_query
+task_create
+
+Contains:
+
+Inputs
+Outputs
+Risk level
+Permissions
+Runtime location
+
+Answers:
+
+"What can the system physically do?"
+
+5. Policy Registry
+
+Purpose: Central governance authority.
+
+Role:
+Stores execution rules.
+
+Examples:
+
+Filesystem policy
+Network policy
+Agent restrictions
+Approval requirements
+
+Answers:
+
+"What is allowed?"
+
+6. Service Registry
+
+Purpose: Runtime discovery system.
+
+Role:
+Tracks active services.
+
+Examples:
+
+task-dispatcher
+task-executor
+overlay-reader
+overlay-writer
+mission-observer
+
+Contains:
+
+Health
+Endpoint
+Version
+Status
+
+Answers:
+
+"What is running right now?"
+
+7. Workflow Registry
+
+Purpose: Reusable process library.
+
+Role:
+Stores approved workflows.
+
+Examples:
+
+Research workflow
+Grant analysis workflow
+Documentation workflow
+CRM design workflow
+
+Answers:
+
+"How should common work be performed?"
+
+8. Memory Registry
+
+Purpose: Catalog of memory sources.
+
+Role:
+Tracks knowledge repositories.
+
+Examples:
+
+Working Memory
+Curated Knowledge
+Experience Logs
+Chroma Collections
+
+Answers:
+
+"Where can knowledge be retrieved?"
+
+9. Model Registry
+
+Purpose: AI model management.
+
+Role:
+Tracks available LLMs.
+
+Examples:
+
+{
+  "model": "gpt-5",
+  "provider": "openai",
+  "context": 200000,
+  "cost_tier": "high"
+}
+
+Answers:
+
+"Which minds are available?"
+
+10. Task Type Registry
+
+Purpose: Standardize work classification.
+
+Role:
+Defines valid task categories.
+
+Examples:
+
+research
+analysis
+design
+implementation
+documentation
+evaluation
+
+Answers:
+
+"What kind of work is this?"
+
+11. Event Registry
+
+Purpose: Standardize system telemetry.
+
+Role:
+Defines valid event types.
+
+Examples:
+
+task_created
+task_completed
+tool_invoked
+policy_denied
+
+Answers:
+
+"What happened?"
+
+12. Risk Registry
+
+Purpose: Central risk taxonomy.
+
+Role:
+Defines risk levels and controls.
+
+Examples:
+
+Risk	Description
+Low	Read-only actions
+Medium	Workspace modifications
+High	External system changes
+Critical	Human approval required
+
+Answers:
+
+"How dangerous is this?"
+
+13. Artifact Registry
+
+Purpose: Track outputs produced by the system.
+
+Role:
+Maintains lineage of generated assets.
+
+Examples:
+
+Reports
+Documents
+Code
+Diagrams
+Datasets
+
+Answers:
+
+"What has the system produced?"
+
+The Three Most Important Registries
+
+If I were building Project Starfish vNext, I would make these the constitutional registries:
+
+Capability Registry
+
+Source of truth for what exists.
+
+Policy Registry
+
+Source of truth for what is allowed.
+
+Service Registry
+
+Source of truth for what is currently active.
+
+Everything else can be derived from or linked to those three.
+
+A useful mental model is:
+
+Registry	Question
+Capability Registry	What exists?
+Agent Registry	Who can work?
+Skill Registry	What can they do?
+Tool Registry	What actions exist?
+Policy Registry	What is allowed?
+Service Registry	What is running?
+Workflow Registry	How is work done?
+Memory Registry	What is known?
+Model Registry	Which minds are available?
+Task Type Registry	What kind of work is it?
+Event Registry	What happened?
+Risk Registry	How dangerous is it?
+Artifact Registry	What was produced?

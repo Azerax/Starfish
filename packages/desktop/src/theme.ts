@@ -42,11 +42,21 @@ export const OPS: Theme = {
   palette: { command: '#5DB0FF', sciences: '#8699FF', security: '#FF6B6B', ops: '#7BD88F', bg: '#0F1115' },
 };
 
+// Neutral, calm, professional — the shipped DEFAULT. Fleet is an optional skin, off by default.
+export const CALM: Theme = {
+  id: 'calm',
+  name: 'Calm (default)',
+  shipName: 'Starfish', org: 'Operations', admiral: 'Operator',
+  agents: { michael: 'Orchestrator', dwight: 'Planner', toby: 'Intake', hank: 'Monitor', pam: 'Memory', worker: 'Worker' },
+  labels: { floor: 'Dashboard', task: 'Task', skillInvocation: 'Skill call', reasoningRequest: 'Request', auditFeed: 'Audit', escalation: 'Awaiting approval', casualty: 'failure', transporterRoom: 'Intake', addCapability: 'request to add', vetting: 'vetting', quarantine: 'quarantined', registered: 'registered' },
+  palette: { command: '#3f6fd8', sciences: '#6a4bb3', security: '#b3261e', ops: '#1a7f4b', bg: '#f6f6f4' },
+};
+
 // Runtime theme registry: register / select / list. Users add a Theme and switch to it live.
 export class ThemeRegistry {
   private themes = new Map<string, Theme>();
   private activeId: string;
-  constructor(initial: Theme[] = [FLEET, OPS], defaultId: string = FLEET.id) {
+  constructor(initial: Theme[] = [CALM, FLEET, OPS], defaultId: string = CALM.id) {
     for (const t of initial) this.register(t);
     if (!this.themes.has(defaultId)) throw new Error(`default theme not registered: ${defaultId}`);
     this.activeId = defaultId;

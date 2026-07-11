@@ -3,8 +3,12 @@ import { getBridge } from '../bridge/useBridge';
 import type { CrewMemberView, DecisionLogEntry, BudgetView, MonitorView, AgentDetailView } from '../bridge/types';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Theme } from '../theme/themes';
-import { CrewAvatar } from '../theme/icons';
 
+const RISK_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
+
+// D5 "Split Cockpit": the risk-sorted approval queue is the hero (left); the selected decision's full
+// context (actor, tool, target, reason, and the actor's governed posture) fills the right pane so you
+// can never rubber-stamp. Crew / budgets / monitor / live feed are secondary, below.
 export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string }) {
   const bridge = getBridge();
   const { theme } = useTheme();
@@ -12,17 +16,18 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
   const [decisions, setDecisions] = useState<DecisionLogEntry[]>([]);
   const [budgets, setBudgets] = useState<BudgetView[]>([]);
   const [monitor, setMonitor] = useState<MonitorView | null>(null);
-  const [resumed, setResumed] = useState<Record<string, boolean>>({});            // operator resumed
-  const [resolved, setResolved] = useState<Record<string, 'allow' | 'deny'>>({});  // operator decided
-  const [pending, setPending] = useState<DecisionLogEntry[]>([]);                  // STABLE queue of asks awaiting you
-  const [feedOpen, setFeedOpen] = useState(false);                                 // live log collapsed by default
-  const [selected, setSelected] = useState<string | null>(null);                  // crew detail drawer
+  const [resumed, setResumed] = useState<Record<string, boolean>>({});
+  const [resolved, setResolved] = useState<Record<string, 'allow' | 'deny'>>({});
+  const [pending, setPending] = useState<DecisionLogEntry[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentDetailView | null>(null);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     const load = () => {
       void bridge.getCrew().then(setCrew);
-      void bridge.getDecisions(12).then(setDecisions);
+      void bridge.getDecisions(14).then(setDecisions);
       void bridge.getBudgets().then(setBudgets);
       void bridge.getMonitor().then(setMonitor);
     };
@@ -31,225 +36,171 @@ export function Bridge({ nameFor }: { nameFor: (t: Theme, id: string) => string 
     return () => clearInterval(t);
   }, [bridge]);
 
-  // Accumulate ASK decisions into a STABLE pending queue so the items you must act on never reshuffle
-  // under the live feed. New asks append to the bottom; resolved ones drop out.
+  // Stable, risk-sorted pending queue (asks that await you); items never reshuffle under the live feed.
   useEffect(() => {
     setPending((cur) => {
       const have = new Set(cur.map((d) => d.id));
       const fresh = decisions.filter((d) => d.verdict === 'ask' && !have.has(d.id) && !resolved[d.id]);
       const kept = cur.filter((d) => !resolved[d.id]);
-      return [...kept, ...fresh].slice(0, 12);
+      return [...kept, ...fresh]
+        .sort((a, b) => (RISK_RANK[b.riskTier ?? 'low'] ?? 0) - (RISK_RANK[a.riskTier ?? 'low'] ?? 0))
+        .slice(0, 20);
     });
   }, [decisions, resolved]);
 
-  // Load the detail drawer when a crew member is selected
+  // Auto-select the top of the queue; load the acting agent's governed posture for the context pane.
+  useEffect(() => { if (!selected && pending.length) setSelected(pending[0].id); }, [pending, selected]);
+  const sel = useMemo(() => pending.find((d) => d.id === selected) ?? null, [pending, selected]);
   useEffect(() => {
-    if (!selected) { setDetail(null); return; }
+    setNote('');
+    if (!sel) { setDetail(null); return; }
     let live = true;
-    void bridge.getAgentDetail(selected).then((d) => { if (live) setDetail(d); });
+    void bridge.getAgentDetail(sel.actor).then((d) => { if (live) setDetail(d); }).catch(() => {});
     return () => { live = false; };
-  }, [bridge, selected]);
+  }, [bridge, sel]);
 
   async function resume(id: string) {
-    setResumed((m) => ({ ...m, [id]: true }));   // optimistic
+    setResumed((m) => ({ ...m, [id]: true }));
     await bridge.requestAction({ actor: 'operator', intent: { kind: 'resume', agentId: id } });
   }
   async function resolve(id: string, approve: boolean) {
     setResolved((m) => ({ ...m, [id]: approve ? 'allow' : 'deny' }));
-    setPending((cur) => cur.filter((d) => d.id !== id));   // clear from the queue immediately
-    await bridge.requestAction({ actor: 'operator', intent: { kind: approve ? 'approve' : 'deny', decisionId: id } });
+    setPending((cur) => cur.filter((d) => d.id !== id));
+    setSelected((s) => (s === id ? null : s));
+    await bridge.requestAction({ actor: 'operator', intent: { kind: approve ? 'approve' : 'deny', decisionId: id, note } });
   }
 
-  const activeCount = crew.filter((c) => (resumed[c.id] ? true : c.status !== 'paused')).length;
-  const pendingCount = pending.length;
-  const captainId = crew.find((c) => c.id === 'michael') ? 'michael' : crew[0]?.id;
+  const highCount = pending.filter((d) => d.riskTier === 'high' || d.riskTier === 'critical').length;
   const statusOf = (c: CrewMemberView) => (resumed[c.id] ? 'active' : c.status);
-
-  const drawerCrew = useMemo(() => crew.find((c) => c.id === selected) || null, [crew, selected]);
+  const chip = (r?: string) => <span className={`riskchip ${r ?? 'low'}`}>{r ?? 'low'}</span>;
 
   return (
-    <main className="grid">
-      <section className="card span2">
-        <h3>Crew <span className="src">live · {activeCount}/{crew.length} active</span></h3>
-        <div className="crew">
-          {crew.map((c) => {
-            const status = statusOf(c);
-            const isCaptain = c.id === captainId;
-            return (
-              <button className={`c card-btn${selected === c.id ? ' sel' : ''}`} key={c.id} onClick={() => setSelected(c.id)} title="View boundary & allowlist">
-                <div className="avatar"><CrewAvatar id={c.id} /></div>
-                <div style={{ flex: 1 }}>
-                  <div className="nm">{nameFor(theme, c.id)}
-                    {isCaptain && pendingCount > 0 && <span className="badge" title="Decisions awaiting your go / no-go">⚑ {pendingCount} Orders Pending</span>}
-                  </div>
-                  <div className="role">{c.role}</div>
-                  <div className="st">
-                    <span className={`tag ${status}`}><i className="led" /> {status}</span>
-                    {c.currentTaskId && <span className="muted">{c.currentTaskId}</span>}
-                    <span className={`risk-${c.riskTier}`} title="Authority tier: how much governance scrutiny this crew role gets">clearance: {c.riskTier}</span>
-                  </div>
-                </div>
-                {status === 'paused' && <span className="act resume" onClick={(e) => { e.stopPropagation(); void resume(c.id); }}>Resume</span>}
-              </button>
-            );
-          })}
+    <main className="bridge">
+      <div className="cockpit">
+        {/* LEFT — risk-sorted approval queue (the hero) */}
+        <div>
+          <div className="col-head"><span>Needs your go / no-go</span><span>{pending.length} pending · {highCount} high</span></div>
+          {pending.length === 0 ? (
+            <div className="empty">Nothing awaiting you. New approvals appear here, risk-sorted, and hold still.</div>
+          ) : (
+            <div className="qcol">
+              {pending.map((d) => (
+                <button key={d.id} className={`qitem${selected === d.id ? ' sel' : ''}`} onClick={() => setSelected(d.id)}>
+                  <div className="qtop">{chip(d.riskTier)}<span className="qtool">{d.tool}</span></div>
+                  <div className="qactor">{nameFor(theme, d.actor)}</div>
+                  {d.target && <div className="qtarget">{d.target}</div>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      </section>
 
-      {/* Action queue — STABLE; these are the only items you must touch, and they never reshuffle. */}
-      <section className="card">
-        <h3>Needs your go / no-go <span className="src">{pendingCount} pending</span></h3>
-        {pendingCount === 0 ? (
-          <div className="empty">✓ Nothing awaiting you. New approvals will appear here and hold still.</div>
-        ) : (
-          <div className="queue">
-            {pending.map((d) => (
-              <div className="qrow" key={d.id}>
-                <div className="what">
-                  <b>{nameFor(theme, d.actor)}</b> · {d.tool} {d.target ?? ''}
-                  <div className="reason">{d.reason}</div>
-                </div>
-                <div className="acts">
-                  <button className="act approve" onClick={() => resolve(d.id, true)}>Approve</button>
-                  <button className="act deny" onClick={() => resolve(d.id, false)}>Deny</button>
-                </div>
+        {/* RIGHT — full decision context; no rubber-stamping */}
+        <section className="ctxpane">
+          {!sel ? (
+            <div className="ctx-empty"><div style={{ fontSize: 15 }}>Select an item to review it</div><div style={{ fontSize: 13 }}>You'll see who, what, where, why, the risk, and the agent's boundary before you decide.</div></div>
+          ) : (
+            <>
+              <div className="ctxhead">{chip(sel.riskTier)}<div className="ctxtitle">{nameFor(theme, sel.actor)} wants to <span className="mono">{sel.tool}</span></div></div>
+              <table className="ctxmeta"><tbody>
+                {sel.target && <tr><td>target</td><td className="mono" style={{ color: 'var(--accent)' }}>{sel.target}</td></tr>}
+                <tr><td>requested</td><td className="mono">{sel.ts}</td></tr>
+                {detail?.domain && <tr><td>agent role</td><td>{detail.role} · {detail.domain}</td></tr>}
+              </tbody></table>
+
+              <div className="ctxlabel">why this needs you</div>
+              <div className="ctxreason">{sel.reason}</div>
+
+              {detail && (
+                <>
+                  <div className="ctxlabel">agent boundary</div>
+                  <table className="ctxmeta"><tbody>
+                    <tr><td>visibility</td><td className="mono">{detail.boundary.visibility.join(', ') || '—'}</td></tr>
+                    <tr><td>write</td><td className="mono">{detail.boundary.write.join(', ') || 'none (read-only)'}</td></tr>
+                  </tbody></table>
+                  <div className="ctxlabel">allowed capabilities <span style={{ textTransform: 'none', letterSpacing: 0 }}>· deny-by-default otherwise</span></div>
+                  {detail.allowedTools.length === 0 ? <div className="empty">None — cannot invoke tools directly.</div> :
+                    <div className="chips">{detail.allowedTools.map((t) => <span className="chip" key={t}>{t}</span>)}</div>}
+                </>
+              )}
+
+              <input className="ctx-note" placeholder="Add a reason (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+              <div className="ctxacts">
+                <button className="act deny" onClick={() => resolve(sel.id, false)}>Deny</button>
+                <button className="act approve" onClick={() => resolve(sel.id, true)}>Approve</button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {/* SECONDARY — crew, budgets, monitor, live feed */}
+      <div className="secondary">
+        <section className="card">
+          <h3>Crew <span className="src">{crew.filter((c) => statusOf(c) !== 'paused').length}/{crew.length} active</span></h3>
+          <div className="feed">
+            {crew.map((c) => (
+              <div key={c.id} className="dec" style={{ borderLeftColor: 'var(--line)' }}>
+                <span className={`tag ${statusOf(c)}`}><i className="led" /> {statusOf(c)}</span>
+                <div className="what"><b>{nameFor(theme, c.id)}</b> <span className="muted">{c.role}</span>
+                  {c.currentTaskId && <div className="reason">{c.currentTaskId}</div>}</div>
+                {statusOf(c) === 'paused' && <button className="act resume" onClick={() => void resume(c.id)}>Resume</button>}
               </div>
             ))}
           </div>
-        )}
-      </section>
-
-      <section className="card">
-        <h3>Token Governor <span className="src">live · budgets</span></h3>
-        {budgets.map((b) => (
-          <div key={b.scope} className="budget">
-            {b.usdLimit > 0 ? (
-              <>
-                <div className="kv"><span>{b.scope} (USD)</span><b>${b.usdUsed.toFixed(2)} / ${b.usdLimit.toFixed(2)}</b></div>
-                <div className="meter"><i style={{ width: `${Math.min(100, (b.usdUsed / b.usdLimit) * 100)}%`, background: b.status === 'hard' ? 'var(--deny)' : 'linear-gradient(90deg,var(--ok),var(--warn))' }} /></div>
-                {b.status === 'hard' && <div className="warn">hard cap - paused (resume on the crew card)</div>}
-              </>
-            ) : (
-              <div className="kv"><span>{b.scope} (USD)</span><b>${b.usdUsed.toFixed(2)} · <span style={{ color: 'var(--ok)' }}>platform-managed</span></b></div>
-            )}
-          </div>
-        ))}
-        {monitor && (
-          <div className="govmini">
-            <div className="kv"><span>Denials this sweep</span><b>{monitor.counters.denials}</b></div>
-            <div className="kv"><span>Boundary / hash alerts</span><b>{monitor.counters.boundaryEscapes} / {monitor.counters.hashMismatches}</b></div>
-            <div className="kv"><span>Last sweep</span><b className="mono">{monitor.lastSweepTs}</b></div>
-          </div>
-        )}
-      </section>
-
-      {/* Live log — collapsible & scroll-isolated so the churn stays out of your way. */}
-      <section className="card span2">
-        <h3 className="collapse" onClick={() => setFeedOpen((o) => !o)}>
-          <span className="chev">{feedOpen ? '▾' : '▸'}</span> Live governance decisions
-          <span className="src">live · PDP · {decisions.length} recent</span>
-        </h3>
-        {feedOpen && (
-          <div className="feed scrolly">
-            {decisions.map((d, i) => {
-              const ov = resolved[d.id];
-              const verdict = ov ?? d.verdict;
-              return (
-                <div className={`dec ${verdict}${i === 0 && !ov ? ' fresh' : ''}`} key={d.id}>
-                  <span className="verdict">{verdict.toUpperCase()}</span>
-                  <div className="what">
-                    <b>{nameFor(theme, d.actor)}</b> · {d.tool} {d.target ?? ''}
-                    <div className="reason">{ov ? (ov === 'allow' ? '✓ approved by operator' : '✗ denied by operator') : d.reason}</div>
-                  </div>
-                  <span className="t">{d.ts}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {monitor && (
-        <section className="card span2">
-          <h3>Security monitor — {nameFor(theme, 'hank')} <span className="src">live · read-only sweep</span></h3>
-          <div className="stat">
-            <div className="s"><div className="n ok">{monitor.counters.boundaryEscapes}</div><div className="l">Boundary esc.</div></div>
-            <div className="s"><div className="n ok">{monitor.counters.hashMismatches}</div><div className="l">Hash mism.</div></div>
-            <div className="s"><div className="n warn">{monitor.counters.denials}</div><div className="l">Denials</div></div>
-            <div className="s"><div className="n">{monitor.counters.casualties}</div><div className="l">Casualties</div></div>
-          </div>
-          <div className={`ribbon ${monitor.reconciled ? 'ok' : 'bad'}`}>
-            {monitor.reconciled ? '✓ Watcher reconciled against deterministic counters.' : '⚠ Anomalies detected (boundary / hash / budget / orphan) - investigate.'} Last sweep {monitor.lastSweepTs}.
-          </div>
         </section>
-      )}
 
-      {/* Crew detail drawer — boundary, allowlist, recent posture, governed actions. */}
-      {selected && drawerCrew && (
-        <>
-          <div className="drawer-scrim" onClick={() => setSelected(null)} />
-          <aside className="drawer" role="dialog" aria-label="Crew detail">
-            <div className="drawer-head">
-              <div className="avatar lg"><CrewAvatar id={drawerCrew.id} /></div>
-              <div style={{ flex: 1 }}>
-                <div className="nm">{nameFor(theme, drawerCrew.id)}</div>
-                <div className="role">{detail?.role ?? drawerCrew.role}{detail?.domain ? ` · ${detail.domain}` : ''}</div>
-                <div className="st">
-                  <span className={`tag ${statusOf(drawerCrew)}`}><i className="led" /> {statusOf(drawerCrew)}</span>
-                  <span className={`risk-${drawerCrew.riskTier}`} title="Authority tier: how much governance scrutiny this crew role gets">clearance: {drawerCrew.riskTier}</span>
-                  {drawerCrew.currentTaskId && <span className="muted">{drawerCrew.currentTaskId}</span>}
-                </div>
-              </div>
-              <button className="x" onClick={() => setSelected(null)} aria-label="Close">✕</button>
+        <section className="card">
+          <h3>Token Governor <span className="src">budgets</span></h3>
+          {budgets.map((b) => (
+            <div key={b.scope}>
+              {b.usdLimit > 0 ? (<>
+                <div className="kv"><span>{b.scope}</span><b>${b.usdUsed.toFixed(2)} / ${b.usdLimit.toFixed(2)}</b></div>
+                <div className="meter"><i style={{ width: `${Math.min(100, (b.usdUsed / b.usdLimit) * 100)}%`, background: b.status === 'hard' ? 'var(--deny)' : 'var(--ok)' }} /></div>
+              </>) : (
+                <div className="kv"><span>{b.scope}</span><b>${b.usdUsed.toFixed(2)} · <span style={{ color: 'var(--ok)' }}>platform</span></b></div>
+              )}
             </div>
+          ))}
+          {monitor && (
+            <div className="govmini">
+              <div className="kv"><span>Denials this sweep</span><b>{monitor.counters.denials}</b></div>
+              <div className="kv"><span>Boundary / hash alerts</span><b>{monitor.counters.boundaryEscapes} / {monitor.counters.hashMismatches}</b></div>
+              <div className="kv"><span>Last sweep</span><b className="mono">{monitor.lastSweepTs}</b></div>
+            </div>
+          )}
+        </section>
 
-            {!detail ? <div className="empty">Loading governed posture…</div> : (
-              <div className="drawer-body">
-                <div className="dsec">
-                  <h4>Allowed capabilities <span className="src">deny-by-default otherwise</span></h4>
-                  {detail.allowedTools.length === 0 ? <div className="empty">None — cannot invoke tools directly.</div> : (
-                    <div className="chips">{detail.allowedTools.map((t) => <span className="chip" key={t}>{t}</span>)}</div>
-                  )}
-                </div>
-                <div className="dsec">
-                  <h4>Boundary</h4>
-                  <div className="kv"><span>Visibility</span><b className="mono">{detail.boundary.visibility.join(', ') || '—'}</b></div>
-                  <div className="kv"><span>Write</span><b className="mono">{detail.boundary.write.join(', ') || 'none (read-only)'}</b></div>
-                </div>
-                {detail.notes && detail.notes.length > 0 && (
-                  <div className="dsec">
-                    <h4>Governance notes</h4>
-                    <ul className="notes">{detail.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+        {monitor && (
+          <section className="card span2">
+            <div className={`ribbon ${monitor.reconciled ? 'ok' : 'bad'}`}>
+              {monitor.reconciled ? 'Watcher reconciled against deterministic counters.' : 'Anomalies detected (boundary / hash / budget / orphan) — investigate.'} Last sweep {monitor.lastSweepTs}.
+            </div>
+          </section>
+        )}
+
+        <section className="card span2">
+          <h3 className="collapse" onClick={() => setFeedOpen((o) => !o)}>
+            <span className="chev">{feedOpen ? '▾' : '▸'}</span> Live governance decisions <span className="src">PDP · {decisions.length} recent</span>
+          </h3>
+          {feedOpen && (
+            <div className="feed scrolly">
+              {decisions.map((d) => {
+                const ov = resolved[d.id];
+                const verdict = ov ?? d.verdict;
+                return (
+                  <div className={`dec ${verdict}`} key={d.id}>
+                    <span className="verdict">{verdict.toUpperCase()}</span>
+                    <div className="what"><b>{nameFor(theme, d.actor)}</b> · {d.tool} {d.target ?? ''}
+                      <div className="reason">{ov ? (ov === 'allow' ? 'approved by operator' : 'denied by operator') : d.reason}</div></div>
+                    <span className="t">{d.ts}</span>
                   </div>
-                )}
-                <div className="dsec">
-                  <h4>Recent decisions</h4>
-                  {(() => {
-                    const mine = decisions.filter((d) => d.actor === drawerCrew.id).slice(0, 6);
-                    return mine.length === 0 ? <div className="empty">No recent activity in the live window.</div> : (
-                      <div className="feed">
-                        {mine.map((d) => {
-                          const verdict = resolved[d.id] ?? d.verdict;
-                          return (
-                            <div className={`dec ${verdict}`} key={d.id}>
-                              <span className="verdict">{verdict.toUpperCase()}</span>
-                              <div className="what">{d.tool} {d.target ?? ''}<div className="reason">{d.reason}</div></div>
-                              <span className="t">{d.ts}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-                {statusOf(drawerCrew) === 'paused' && (
-                  <button className="act resume wide" onClick={() => { void resume(drawerCrew.id); }}>Resume agent</button>
-                )}
-              </div>
-            )}
-          </aside>
-        </>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

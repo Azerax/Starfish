@@ -26,8 +26,11 @@ export interface ReadinessBlocker { id: string; severity: 'stop' | 'warn'; title
 export interface ReadinessView { ok: boolean; blockers: ReadinessBlocker[]; }
 export interface CostView { mode: 'platform' | 'starfish'; budgetUsd: number; }
 
+export interface PrivilegeView { elevated: boolean; user?: string; platform?: string }
+
 export interface GovernanceBridge {
   governed: true;
+  getPrivilege?(): Promise<PrivilegeView>;   // elevated (admin/root) detection for the warning banner
   getBaseRoot(): Promise<{ root: string; locked: boolean; lockedBy?: string; suggested: string }>;
   pickBaseDir(): Promise<{ path: string | null }>;
   setBaseRoot(dir: string, operator?: string, theme?: string): Promise<{ ok: boolean; root: string; reason: string }>;

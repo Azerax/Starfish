@@ -33,6 +33,7 @@ const bridge = {
   restoreTrash: (id: string) => ipcRenderer.invoke('delete:trash:restore', { id }),
   purgeTrash: (id: string, confirm: true) => ipcRenderer.invoke('delete:trash:purge', { id, confirm }),
   getReadiness: () => ipcRenderer.invoke('gov:getReadiness'),
+  getPrivilege: () => ipcRenderer.invoke('sys:getPrivilege'),
   getCost: () => ipcRenderer.invoke('provider:getCost'),
   setCost: (mode: string, budgetUsd?: number) => ipcRenderer.invoke('provider:setCost', { mode, budgetUsd }),
 };

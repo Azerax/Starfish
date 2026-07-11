@@ -3,7 +3,7 @@ export type Face = 'ingress' | 'egress';
 export type RiskTier = 'low' | 'medium' | 'high' | 'critical' | 'injection';
 export type ToolCategory = 'read' | 'write' | 'exec' | 'meta';
 
-export interface Decision { allow: boolean; ask?: boolean; reason: string; riskTier?: RiskTier; }
+export interface Decision { allow: boolean; ask?: boolean; reason: string; riskTier?: RiskTier; score?: number; }
 
 export interface ToolDef {
   id: string;

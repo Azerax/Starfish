@@ -20,11 +20,11 @@ function Clock() {
 }
 
 function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
-  const { theme, themes, setThemeId } = useTheme();
+  const { theme, themes, setThemeId, mode, toggleMode, canToggle } = useTheme();
   return (
     <header className="topbar">
       <span className="badge-slot"><FleetBadge /></span>
-      <div className="brand">GCS&nbsp;Starfish<small>{theme.labels.floor} · Mission Control</small></div>
+      <div className="brand">Starfish<small>{theme.labels.floor} · governance</small></div>
       <div className="spacer" />
       <Clock />
       <span className="pill"><span className="dot" /> GOVERNED · fail-closed</span>
@@ -36,6 +36,7 @@ function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
           {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      {canToggle && <button className="pill modetoggle" onClick={toggleMode} title="Toggle light / dark">{mode === 'dark' ? 'Dark' : 'Light'}</button>}
       <button className="pill" onClick={() => go('settings')} title="Provider & model settings">⚙ Settings</button>
     </header>
   );
@@ -109,6 +110,20 @@ function Shell() {
   return <>{screen}{showModal && <ReadyModal blockers={blockers} onResolve={resolve} onMinimize={() => { setDismissed(true); setView('readyroom'); }} onDismiss={() => setDismissed(true)} />}</>;
 }
 
+// On a governed system, workers must never run as OS admin/root — and Windows hands new accounts admin
+// by default. If elevated, warn loudly with a flashing red banner on every screen.
+function AdminBanner() {
+  const [priv, setPriv] = useState<{ elevated: boolean; user?: string } | null>(null);
+  useEffect(() => { void getBridge().getPrivilege?.().then(setPriv).catch(() => {}); }, []);
+  if (!priv?.elevated) return null;
+  return (
+    <div className="admin-banner" role="alert">
+      <span className="ab-dot" />
+      <span><b>Running as administrator{priv.user ? ` (${priv.user})` : ''}.</b> Governed agents must never run with admin rights — Windows grants this by default. Close Starfish and relaunch as a standard user.</span>
+    </div>
+  );
+}
+
 export function App() {
-  return <ThemeProvider><div className="app"><Shell /></div></ThemeProvider>;
+  return <ThemeProvider><div className="app"><AdminBanner /><Shell /></div></ThemeProvider>;
 }

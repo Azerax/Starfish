@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { FLEET, OPS, ThemeRegistry, displayName, label, type Theme } from './index';
+import { CALM, FLEET, OPS, ThemeRegistry, displayName, label, type Theme } from './index';
 
 const TREK = ['LCARS', 'Starfleet', 'U.S.S.', 'NCC-', 'Vulcan', 'Spock', 'Spokk', 'Odo', "O'Brien"];
 
 describe('Theme system — user-swappable themes (ring 3)', () => {
-  it('defaults to Fleet and lists registered themes', () => {
+  it('defaults to Calm (neutral) and lists registered themes; Fleet is an optional skin', () => {
     const reg = new ThemeRegistry();
-    expect(reg.active().id).toBe('fleet');
-    expect(reg.list().map(t => t.id).sort()).toEqual(['fleet', 'ops']);
+    expect(reg.active().id).toBe('calm');
+    expect(reg.list().map(t => t.id).sort()).toEqual(['calm', 'fleet', 'ops']);
   });
   it('switches the active theme at runtime', () => {
     const reg = new ThemeRegistry();

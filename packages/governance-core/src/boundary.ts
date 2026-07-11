@@ -40,14 +40,21 @@ function symlinkBelowRoot(path: string, root: string): boolean {
 // Case/Unicode normalization for containment compares. Windows + macOS filesystems are case-INSENSITIVE,
 // so a case-varied path (or a denied subtree like .STARFISH) must still match. NFC-normalize too. (audit A1)
 const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
+const WINDOWS = process.platform === 'win32';
+// On Windows '\' and '/' are equivalent separators, so a mixed-separator path must NOT evade a boundary
+// or deny-subtree check. '\' is a legal *filename* character on POSIX, so we only fold it on Windows.
 export function caseFold(p: string, insensitive: boolean = CASE_INSENSITIVE): string {
-  const n = p.normalize('NFC');
+  let n = p.normalize('NFC');
+  if (WINDOWS) n = n.replace(/\\/g, '/');
   return insensitive ? n.toLowerCase() : n;
 }
+// Prefix containment on the normalized form. The separator here is ALWAYS '/': caseFold has mapped
+// Windows '\' to '/', and POSIX uses '/'. Using the OS `sep` (a '\' on Windows) was the bug that let
+// 'C:\root' fail to contain 'C:/root/x' — a separator-based boundary escape.
 export function sameOrUnder(child: string, parent: string, insensitive: boolean = CASE_INSENSITIVE): boolean {
   const c = caseFold(child, insensitive);
   const pa = caseFold(parent, insensitive);
-  const withSep = pa.endsWith(sep) ? pa : pa + sep;
+  const withSep = pa.endsWith('/') ? pa : pa + '/';
   return c === pa || c.startsWith(withSep);
 }
 
@@ -70,7 +77,7 @@ export function containCheck(path: string, mode: 'read' | 'write', bs: BoundaryS
 export interface AgentBoundarySpec { projectRoot: string; workspace: string; agentDir: string; sharedReads?: string[]; forbid?: string[]; }
 export function boundaryForAgent(spec: AgentBoundarySpec): BoundarySet {
   const forbid = (spec.forbid ?? []).map((f) => resolve(f));
-  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => pp === f || pp.startsWith(f + sep)); };
+  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => sameOrUnder(pp, f)); };
   const visibility = [spec.projectRoot, spec.agentDir, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
   const write = [spec.workspace, spec.agentDir].filter((r) => !inForbid(r));
   if (write.length === 0) throw new GovernanceError('boundaryForAgent: no writable root after applying forbid list');
@@ -86,7 +93,7 @@ export interface SkillBoundarySpec { skillsRoot: string; skillId: string; shared
 export function boundaryForSkill(spec: SkillBoundarySpec): BoundarySet {
   const { source, workspace } = skillWorkspaceLayout(spec.skillsRoot, spec.skillId);
   const forbid = (spec.forbid ?? []).map((f) => resolve(f));
-  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => pp === f || pp.startsWith(f + sep)); };
+  const inForbid = (p: string) => { const pp = resolve(p); return forbid.some((f) => sameOrUnder(pp, f)); };
   const visibility = [source, workspace, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
   const write = [workspace].filter((r) => !inForbid(r));
   if (write.length === 0) throw new GovernanceError('boundaryForSkill: workspace is forbidden - cannot derive a writable root');

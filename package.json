@@ -1,7 +1,7 @@
 {
   "name": "starfish",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.22.0",
   "description": "Project Starfish: a governance-first, deny-by-default AI agent governance layer (monorepo). Govern Claude Code and any agent/skill build: authorize, contain, audit.",
   "license": "Apache-2.0",
   "workspaces": [
@@ -20,7 +20,8 @@
     "art:fleet": "node art/generate.mjs",
     "build:cli": "node scripts/bundle-cli.mjs",
     "prepare": "node scripts/bundle-cli.mjs",
-    "scan:secrets": "node scripts/secret-scan.mjs"
+    "scan:secrets": "node scripts/secret-scan.mjs",
+    "version:sync": "node scripts/sync-versions.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

@@ -4,7 +4,20 @@
 // they are detectable + redactable. Deterministic; one source of truth for "what is a secret."
 import type { RiskTier } from './types';
 
-const norm = (p: string) => p.replace(/\\/g, '/');
+// Normalize a path for secret classification. Fold '\'→'/', then defeat Windows filename tricks that
+// open the SAME underlying file but dodge a naive suffix match: NTFS alternate data streams
+// ('.env::$DATA', 'secret.pem:hidden') and trailing dots/spaces ('.env.', '.env ') all resolve to the
+// base name on Windows, so they must classify as the secret they are. Applied on the basename only, so
+// a drive letter ('C:/…') and directory colons are preserved. Deny-safe: erring toward "is a secret".
+const norm = (p: string): string => {
+  const s = p.replace(/\\/g, '/');
+  const i = s.lastIndexOf('/');
+  const dir = i >= 0 ? s.slice(0, i + 1) : '';
+  let base = i >= 0 ? s.slice(i + 1) : s;
+  base = base.replace(/:.*$/, '');    // strip NTFS ADS suffix (name:stream[:$DATA])
+  base = base.replace(/[ .]+$/, '');  // strip Windows trailing dots/spaces
+  return dir + base;
+};
 
 /** Paths that are secrets by virtue of WHAT THEY ARE (name/location), regardless of content. */
 const SECRET_PATH: { re: RegExp; why: string }[] = [

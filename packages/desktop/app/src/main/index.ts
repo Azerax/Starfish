@@ -5,6 +5,7 @@ import { app, BrowserWindow, ipcMain, safeStorage, dialog } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
   crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor } from '@starfish/desktop';
 import { homedir } from 'node:os';
@@ -262,6 +263,25 @@ function registerIpc(): void {
     host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'cost:set-mode', target: mode, decision: 'allow', reason: mode === 'starfish' ? `starfish cap $${budgetUsd ?? 0}` : 'platform-managed (provider console enforces the cap)' });
     return { ok: true };
   });
+
+  // ---- privilege check: on a governed system, workers must NOT run as OS admin/root. Windows hands new
+  // accounts admin by default, so we detect elevation; the UI shows a flashing red banner when elevated. ----
+  function detectPrivilege(): { elevated: boolean; user: string; platform: string } {
+    const platform = process.platform;
+    const user = process.env.USERNAME || process.env.USER || 'unknown';
+    let elevated = false;
+    try {
+      if (platform === 'win32') {
+        // is-admin heuristic: `net session` (execFile, fixed argv, no shell) succeeds only when elevated
+        execFileSync('net', ['session'], { stdio: 'ignore', windowsHide: true, timeout: 4000 });
+        elevated = true;
+      } else if (typeof process.getuid === 'function') {
+        elevated = process.getuid() === 0;   // root on POSIX
+      }
+    } catch { elevated = false; }
+    return { elevated, user, platform };
+  }
+  ipcMain.handle('sys:getPrivilege', () => detectPrivilege());
 
   // ---- readiness: the 'total stop' issues that block real work. Surfaced in the Ready Room + a forced
   // (but dismissible) popup. Deny-by-default philosophy: if the operator can't act, say so loudly. ----

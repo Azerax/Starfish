@@ -2,6 +2,8 @@
 // ingress = authorization (integrity → gate basics → risk → policy → combine); egress = containment.
 // Audit-before-act on every decision. Deterministic: pure function of (input, policy, context).
 import type { Decision, Face, ToolCall, BoundarySet, ToolDef, AgentDef, RiskTier } from './types';
+import type { ScopeVerdict } from './scope';
+import type { RiskAssessment } from './score';
 import { isSecretPath, classifyPath, screenEnv, type SecretPolicy } from './secrets';
 import type { Registry } from './registry';
 import type { AuditLog } from './audit';
@@ -13,6 +15,9 @@ import { scanEgress } from './containment';
 export interface TaskBinding { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean }; }
 // verify-before-invoke: re-checks a skill's integrity at call time (tamper → not ok).
 export interface IntegrityGate { verify(capabilityId: string): { ok: boolean; changed?: string[]; reason?: string }; }
+// non-deviation: the task's Scope Contract narrows the agent's general grants (D1–D4). The provider is
+// stateful (it meters budget), so decide() stays a function of (input, contract-state).
+export interface ScopeBinding { enforce: boolean; provider: { check(call: ToolCall, paths: string[]): ScopeVerdict }; }
 
 export class PDP {
   private risk: RiskEngine;
@@ -21,6 +26,8 @@ export class PDP {
   private integrity?: IntegrityGate;
   private secretPolicy?: SecretPolicy;
   private secretGatekeeper?: string;
+  private scopeGate?: ScopeBinding;
+  private riskTolerance: 'low' | 'medium' = 'low';   // operator setting; default Low (deny-by-default posture)
   private safeMode = false;
   private safeModeReason = '';
   constructor(
@@ -33,6 +40,7 @@ export class PDP {
     integrity?: IntegrityGate,
     secretPolicy?: SecretPolicy,
     secretGatekeeper?: string,
+    scopeGate?: ScopeBinding,
   ) {
     this.risk = risk ?? new RiskEngine();
     this.policy = policy ?? new PolicyEngine();
@@ -40,12 +48,18 @@ export class PDP {
     this.integrity = integrity;
     this.secretPolicy = secretPolicy;
     this.secretGatekeeper = secretGatekeeper;
+    this.scopeGate = scopeGate;
   }
 
   /** Lockdown: while in safe mode the PDP denies EVERYTHING (fail-closed) until the operator
    *  re-attests integrity and clears it. Used when boot self-integrity verification fails. */
   setSafeMode(on: boolean, reason = ''): void { this.safeMode = on; this.safeModeReason = on ? reason : ''; }
   isSafeMode(): boolean { return this.safeMode; }
+
+  /** Operator Risk Tolerance. Low (default): only low-tier auto-runs. Medium: composite ≤70 auto-runs.
+   *  Hard floors, injection, and critical are unaffected (checked before the tolerance widening). */
+  setRiskTolerance(t: 'low' | 'medium'): void { this.riskTolerance = t === 'medium' ? 'medium' : 'low'; }
+  getRiskTolerance(): 'low' | 'medium' { return this.riskTolerance; }
 
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
     if (this.safeMode) {
@@ -90,6 +104,14 @@ export class PDP {
       if (tool.allowedAgents !== '*' && !tool.allowedAgents.includes(call.agentId)) {
         return { allow: false, reason: 'agent-not-authorized' };
       }
+      // non-deviation: the task's Scope Contract narrows the agent's general grants (D1 tool, D2 path,
+      // D3 command, D4 budget). A deviation is denied; the monitor treats it as a trust-revoking event.
+      if (this.scopeGate?.enforce) {
+        const paths: string[] = [];
+        for (const key of tool.pathParams) { const v = call.input[key]; if (typeof v === 'string') paths.push(v); }
+        const sv = this.scopeGate.provider.check(call, paths);
+        if (!sv.ok) return { allow: false, riskTier: 'high', reason: `scope-deviation${sv.deviation ? ` (${sv.deviation})` : ''}: ${sv.reason}` };
+      }
       const mode = tool.category === 'read' ? 'read' : tool.category === 'meta' ? null : 'write';
       if (mode) {
         for (const key of tool.pathParams) {
@@ -114,17 +136,27 @@ export class PDP {
       return { allow: false, reason: 'evaluator-error (fail-closed)' };
     }
     const tier = this.risk.classify(call, tool);
+    const assessment = this.risk.assess(call, tool);
     const pol = this.policy.evaluate(`agent:${call.agentId}`, `tool:${call.tool}`, this.firstPath(call) ?? '*');
-    return this.combine(tier, pol);
+    return this.combine(tier, pol, assessment);
   }
 
-  private combine(tier: RiskTier, pol: Effect | 'nomatch'): Decision {
-    if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier };
-    if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier };
-    if (tier === 'critical') return { allow: false, ask: true, reason: 'critical — human approval required (no auto-allow)', riskTier: tier };
-    if (tier === 'low') return { allow: true, reason: 'low-risk auto-allow', riskTier: tier };
-    if (pol === 'allow') return { allow: true, reason: `${tier}-risk allowed by policy`, riskTier: tier };
-    return { allow: false, ask: true, reason: `${tier}-risk escalated (no allow policy)`, riskTier: tier };
+  // Risk Tolerance widening only ever turns an ASK into an ALLOW for mid-risk work, and only when no hard
+  // floor is tripped. Low ceiling 30 == the low tier (already auto-allowed), so at Low there is ZERO
+  // behaviour change; Medium (ceiling 70) additionally auto-runs the medium/high band. injection + critical
+  // + policy-deny are resolved BEFORE the widening, so tolerance can never lift them.
+  private combine(tier: RiskTier, pol: Effect | 'nomatch', assessment?: RiskAssessment): Decision {
+    const score = assessment?.score;
+    if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier, score };
+    if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier, score };
+    if (tier === 'critical') return { allow: false, ask: true, reason: 'critical — human approval required (no auto-allow)', riskTier: tier, score };
+    if (tier === 'low') return { allow: true, reason: 'low-risk auto-allow', riskTier: tier, score };
+    if (pol === 'allow') return { allow: true, reason: `${tier}-risk allowed by policy`, riskTier: tier, score };
+    const ceiling = this.riskTolerance === 'medium' ? 70 : 30;
+    if (assessment && !assessment.hardDeny && assessment.floors.length === 0 && assessment.score <= ceiling) {
+      return { allow: true, reason: `${tier}-risk auto-allowed under ${this.riskTolerance} risk tolerance (score ${assessment.score})`, riskTier: tier, score };
+    }
+    return { allow: false, ask: true, reason: `${tier}-risk escalated (no allow policy)`, riskTier: tier, score };
   }
 
   private egress(call: ToolCall): Decision {
