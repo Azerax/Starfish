@@ -36,6 +36,10 @@ const DETAIL: Record<string, Omit<AgentDetailView, 'id' | 'status' | 'currentTas
 export const mockBridge: GovernanceBridge = {
   governed: true,
   getPrivilege: async () => ({ elevated: false, user: 'you', platform: 'web' }),
+  getRiskTolerance: async () => ({ value: 'low' as const }),
+  setRiskTolerance: async (next, confirmed) => (next === 'medium' && !confirmed)
+    ? { ok: false, value: 'low' as const, reason: 'medium requires double-confirmation' }
+    : { ok: true, value: next, reason: `risk tolerance set to ${next}` },
   getBaseRoot: async () => ({ root: '~/Starfish', locked: false, suggested: '~/Starfish' }),
   pickBaseDir: async () => ({ path: '~/Starfish' }),
   setBaseRoot: async (dir: string) => ({ ok: true, root: dir || '~/Starfish', reason: 'mock: seeded + booted' }),

@@ -11,7 +11,7 @@ import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults, seedInstall } from '@starfish/governance-overlay';
-import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, AgentLoop, STARFISH_TOOL_SCHEMAS, type KeyResolver, type DeletionConfig, type BoundarySet, type ToolCall } from '@starfish/governance-core';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, AgentLoop, RiskToleranceStore, STARFISH_TOOL_SCHEMAS, type KeyResolver, type DeletionConfig, type BoundarySet, type ToolCall } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
@@ -42,6 +42,21 @@ type CatSkill = { id: string; kind: string; category: string; summary: string; e
 const CATALOG: CatSkill[] = (defaultSkillsJson as { sets: { plugin: string; skills: Omit<CatSkill, 'plugin'>[] }[] })
   .sets.flatMap((set) => set.skills.map((s) => ({ ...s, plugin: set.plugin })));
 
+// ---- Risk Tolerance (operator setting): governed store, persisted per-workspace, applied to the live
+// PDP. Default Low; fail-safe to Low on corrupt config; Medium requires the UI double-confirmation. ----
+let tolStore: RiskToleranceStore | undefined;
+function tolFile(): string { return join(root, 'state', 'risk-tolerance.json'); }
+function loadAndApplyTolerance(): void {
+  if (!host) return;
+  tolStore = new RiskToleranceStore(host.governor.audit);
+  let raw: unknown = {};
+  try { raw = JSON.parse(readFileSync(tolFile(), 'utf8')); } catch { /* missing → Low */ }
+  host.governor.pdp.setRiskTolerance(tolStore.load(raw));
+}
+function persistTolerance(): void {
+  try { mkdirSync(dirname(tolFile()), { recursive: true }); writeFileSync(tolFile(), JSON.stringify(tolStore?.serialize() ?? { riskTolerance: 'low' }, null, 2)); } catch { /* best-effort */ }
+}
+
 async function bootGovernance(): Promise<void> {
   try {
     host = await createHost({
@@ -57,6 +72,7 @@ async function bootGovernance(): Promise<void> {
     for (const c of host.governor.capabilities.snapshot()) {
       if (c.status === 'quarantined') broker.file({ actor: 'toby', kind: 'capability', tool: 'capability:vet', target: c.id, refId: c.id, riskTier: c.riskTier, reason: `${c.kind} quarantined (tier=${c.riskTier}) — operator consent required` });
     }
+    loadAndApplyTolerance();
   } catch (err) {
     console.error('[governance] fail-closed boot error (run `npm run init:gov`):', (err as Error).message);
   }
@@ -282,6 +298,16 @@ function registerIpc(): void {
     return { elevated, user, platform };
   }
   ipcMain.handle('sys:getPrivilege', () => detectPrivilege());
+
+  // ---- Risk Tolerance: read the operator setting; change it (operator-only, Medium double-confirmed),
+  // apply it to the live PDP, and persist. Hard floors are enforced independently of this value. ----
+  ipcMain.handle('sys:getRiskTolerance', () => ({ value: tolStore?.get() ?? 'low' }));
+  ipcMain.handle('sys:setRiskTolerance', (_e, arg: { next: 'low' | 'medium'; confirmed?: boolean }) => {
+    if (!host || !tolStore) return { ok: false, value: 'low' as const, reason: 'governance not booted' };
+    const r = tolStore.set(arg?.next, 'operator', { confirmed: arg?.confirmed });
+    if (r.ok) { host.governor.pdp.setRiskTolerance(r.value); persistTolerance(); }
+    return r;
+  });
 
   // ---- readiness: the 'total stop' issues that block real work. Surfaced in the Ready Room + a forced
   // (but dismissible) popup. Deny-by-default philosophy: if the operator can't act, say so loudly. ----

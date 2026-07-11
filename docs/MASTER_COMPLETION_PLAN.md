@@ -18,6 +18,11 @@
 
 **Governance-consistent call I made while you were out:** I declined to re-score the tested producers (RM-3 proper) or touch anything I couldn't verify green, per "don't break what works / evidence-based." Those are staged below, not shipped.
 
+### Session 2 (autonomous, post-ci-green)
+- **RM-4 core — governed `RiskToleranceStore`** (`governance-core/src/tolerance.ts`) + conformance tests: default Low, fail-safe-to-Low on corrupt, operator-only, Medium needs double-confirm, audited, auto-revert. **Verified: typecheck EXIT 0 + 12/12 harness.**
+- **RM-4/RM-5 wired end-to-end** — main process loads/persists tolerance per-workspace and applies it to the **live PDP** (`host.governor.pdp.setRiskTolerance`); bridge `getRiskTolerance`/`setRiskTolerance(confirmed)`; a **persistent header chip** ("Risk: Low/Medium", Medium pulses in warning colour) with a **two-step confirmation** to raise to Medium and one-click drop to Low. *Renderer/Electron — needs your app run to confirm; governance-core half is verified.*
+- **H5 — input re-provenance** (`governance-core/src/attest.ts`) + tests: stamp a picked file, re-verify at use, catch a cloud/TOCTOU swap. **Verified: typecheck + harness (in the 12/12).** *Primitive shipped; wiring it into the task pathScope attestation is a small follow-up.*
+
 ---
 
 ## Phase 0 — Green the foundation ★ (gate for everything)

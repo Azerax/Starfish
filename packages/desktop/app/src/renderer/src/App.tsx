@@ -19,6 +19,26 @@ function Clock() {
   return <span className="pill mono"><span className="dot live" /> {t}</span>;
 }
 
+// Persistent Risk Tolerance chip. Low is quiet; Medium pulses in a warning colour so you never forget
+// you're in the looser mode. Raising to Medium requires a two-step confirmation; dropping to Low is one click.
+function RiskChip() {
+  const [tol, setTol] = useState<'low' | 'medium'>('low');
+  useEffect(() => { void getBridge().getRiskTolerance?.().then((r) => setTol(r.value)).catch(() => {}); }, []);
+  async function toggle() {
+    const b = getBridge();
+    if (tol === 'low') {
+      if (!window.confirm('Switch to Medium risk tolerance?\n\nTools and tasks scored up to 70/100 will run without asking you. Safety floors — files, secrets, destructive shell, network exfiltration, deletions — still always require you.\n\nBest on a spare machine, with backups, or when experimenting.')) return;
+      if (!window.confirm('Are you sure? You can switch back to Low anytime.')) return;
+      const r = await b.setRiskTolerance?.('medium', true);
+      if (r?.ok) setTol('medium');
+    } else {
+      const r = await b.setRiskTolerance?.('low');
+      if (r?.ok) setTol('low');
+    }
+  }
+  return <button className={`pill risktol ${tol}`} onClick={toggle} title="Risk tolerance — click to change">Risk: {tol === 'medium' ? 'Medium' : 'Low'}</button>;
+}
+
 function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
   const { theme, themes, setThemeId, mode, toggleMode, canToggle } = useTheme();
   return (
@@ -28,6 +48,7 @@ function Header({ go, alerts }: { go: (v: View) => void; alerts: number }) {
       <div className="spacer" />
       <Clock />
       <span className="pill"><span className="dot" /> GOVERNED · fail-closed</span>
+      <RiskChip />
       <button className={`pill ready${alerts > 0 ? ' pulse' : ''}`} onClick={() => go('readyroom')} title="My Ready Room">🛎 Ready Room{alerts > 0 ? ` · ${alerts}` : ''}</button>
       <button className="pill" onClick={() => go('padd')} title="Skill Library">📟 PADD</button>
       <button className="pill" onClick={() => go('comm')} title="Issue orders">📡 COMM</button>

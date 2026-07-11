@@ -34,6 +34,8 @@ const bridge = {
   purgeTrash: (id: string, confirm: true) => ipcRenderer.invoke('delete:trash:purge', { id, confirm }),
   getReadiness: () => ipcRenderer.invoke('gov:getReadiness'),
   getPrivilege: () => ipcRenderer.invoke('sys:getPrivilege'),
+  getRiskTolerance: () => ipcRenderer.invoke('sys:getRiskTolerance'),
+  setRiskTolerance: (next: 'low' | 'medium', confirmed?: boolean) => ipcRenderer.invoke('sys:setRiskTolerance', { next, confirmed }),
   getCost: () => ipcRenderer.invoke('provider:getCost'),
   setCost: (mode: string, budgetUsd?: number) => ipcRenderer.invoke('provider:setCost', { mode, budgetUsd }),
 };

@@ -31,6 +31,8 @@ export interface PrivilegeView { elevated: boolean; user?: string; platform?: st
 export interface GovernanceBridge {
   governed: true;
   getPrivilege?(): Promise<PrivilegeView>;   // elevated (admin/root) detection for the warning banner
+  getRiskTolerance?(): Promise<{ value: 'low' | 'medium' }>;
+  setRiskTolerance?(next: 'low' | 'medium', confirmed?: boolean): Promise<{ ok: boolean; value: 'low' | 'medium'; reason: string }>;
   getBaseRoot(): Promise<{ root: string; locked: boolean; lockedBy?: string; suggested: string }>;
   pickBaseDir(): Promise<{ path: string | null }>;
   setBaseRoot(dir: string, operator?: string, theme?: string): Promise<{ ok: boolean; root: string; reason: string }>;

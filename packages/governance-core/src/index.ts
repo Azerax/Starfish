@@ -16,6 +16,8 @@ export { PDP, type IntegrityGate, type TaskBinding, type ScopeBinding } from './
 export { ScopeContractLedger, type ScopeContract, type ScopeContractInput, type ScopeVerdict, type DeviationClass } from './scope';
 export { CATEGORIES, CATEGORY_COUNT, FLOOR_IDS, HARD_DENY_IDS, FLOOR_TRIGGER, RISK_BANDS, type RiskCategory, type CategoryId, type RiskBand } from './riskmatrix';
 export { assessRisk, composite, bandOf, tierOf, descriptorOf, verdictFor, assessmentFromTier, type RiskAssessment, type CategoryScores, type RiskTolerance, type Verdict as RiskVerdict } from './score';
+export { RiskToleranceStore, type ToleranceConfig } from './tolerance';
+export { stampFile, verifyStamp, stampFiles, verifyStamps, type FileStamp, type AttestResult } from './attest';
 export { readSkillFiles, scanSymlinks, fileIntegrityGate, runWithIntegrity, type VerifiedRun } from './integrity';
 export { governedList, type ListResult } from './listing';
 export { assessDeletion, governedDelete, defaultProtected, type DeletionTarget, type DeletionImpact, type DeletionConfig, type FsProbe, type DeleteOps, type GovernedDeleteDeps, type GovernedDeleteResult } from './deletion';
