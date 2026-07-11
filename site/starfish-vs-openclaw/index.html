@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfish vs OpenClaw: Governed vs Ungoverned AI Agents | Project Starfish</title>
+<meta name="description" content="A fair comparison of Project Starfish and OpenClaw. Same local, autonomous agent capabilities — but Starfish loads governance first, so a clicked link or a malicious skill can't turn into a breach.">
+<link rel="canonical" href="https://projectstarfish.ca/starfish-vs-openclaw/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://projectstarfish.ca/starfish-vs-openclaw/">
+<meta property="og:title" content="Starfish vs OpenClaw: Governed vs Ungoverned AI Agents">
+<meta property="og:description" content="Everything OpenClaw does — files, OS, web, memory, skills — with governance that loads first and can't be turned off.">
+<meta property="og:image" content="https://projectstarfish.ca/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://projectstarfish.ca/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"What is the difference between Starfish and OpenClaw?","acceptedAnswer":{"@type":"Answer","text":"OpenClaw is a local, autonomous AI agent that connects a model to your files, OS, messaging apps, and the internet. Project Starfish provides the same class of capability but as a deny-by-default governance layer: every action is authorized, contained, and audited before it runs, and the governance cannot be switched off."}},
+{"@type":"Question","name":"Is Starfish a replacement for OpenClaw?","acceptedAnswer":{"@type":"Answer","text":"Starfish is not a rival to OpenClaw so much as the governance layer the category needs. OpenClaw made agentic AI accessible to millions; Starfish is designed so that accessibility can scale without the breaches that follow ungoverned agents."}},
+{"@type":"Question","name":"Why do autonomous AI agents need governance?","acceptedAnswer":{"@type":"Answer","text":"An agent with access to your files, shell, and network runs with real authority. Without deny-by-default authorization, boundary enforcement, and a tamper-evident audit trail, a single clicked link, a malicious skill, or a prompt injection can escalate into remote code execution or data exfiltration."}}
+]}
+</script>
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/agentic-ai-security/">Agentic AI security</a><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article>
+  <div class="eyebrow">Comparison</div>
+  <h1>Starfish vs OpenClaw</h1>
+  <p class="lede">OpenClaw did the hardest thing in software: it made agentic AI real and accessible to millions and lit up a generation of builders. This isn't a takedown. It's the case that the movement OpenClaw started can only scale if the agent is governed — and that governing it shouldn't cost you the capability that made it worth running.</p>
+
+  <h2>What they share</h2>
+  <p>Both run locally and connect a model to your machine. Both can touch files, shell, network, and apps; both keep persistent memory across sessions; both work tasks in the background; both are model-agnostic and extend through skills. That capability surface is the bar, and Starfish meets it — each action just runs gated and audited.</p>
+
+  <h2>The difference: governance loads first</h2>
+  <p>OpenClaw's design gives the agent authority and trusts it to behave. Starfish inverts that — the agent is a guest inside a governance layer that mediates every action:</p>
+  <ul>
+    <li><strong>Deny-by-default.</strong> No tool runs unless it's registered, allowed for that agent, tied to a task, inside the agent's boundary, and passes risk and policy.</li>
+    <li><strong>Vetting is the only door.</strong> Skills are provenance-checked, risk-scored, and prompt-injection-screened before they can run; medium-risk and above are quarantined pending your consent. There is no "just install this."</li>
+    <li><strong>Hash-chained audit, audit-before-act.</strong> Every meaningful action is recorded to an append-only log; if the log can't be written, nothing runs.</li>
+    <li><strong>Hard floors a setting can't lift.</strong> Filesystem boundary, secrets, catastrophic shell, and network exfiltration are enforced independently of any policy or tolerance.</li>
+    <li><strong>Fail-closed.</strong> Missing or tampered governance halts startup or enters safe mode.</li>
+  </ul>
+
+  <h2>The security delta, mapped to real incidents</h2>
+  <p>OpenClaw's rapid rise surfaced exactly the failure modes governance is built to prevent. Each maps to a control Starfish ships:</p>
+  <ul>
+    <li><strong>A clicked link becoming remote code execution</strong> → no ungoverned exec path; shell runs only through vetted command-templates, and page or message content is treated as data, never instructions.</li>
+    <li><strong>Malicious marketplace skills</strong> → vetting-is-the-only-door: provenance, static analysis, an injection screen, and hash-on-vet before a skill can run, plus a curated, signed built-in set.</li>
+    <li><strong>Agent endpoints exposed to the internet</strong> → external sources are deny-by-default and tainted; the egress guard blocks internal and foreign destinations.</li>
+    <li><strong>Shadow installs with no review or audit</strong> → governed install and a hash-chained audit; nothing runs ungoverned or unseen.</li>
+  </ul>
+
+  <h2>Honest tradeoffs</h2>
+  <p>Starfish asks you sometimes — deny-by-default means genuinely risky actions pause for a human. A Risk Tolerance setting and earned auto-approval tune that so routine, reversible work stays quiet, while the hard floors never yield. Starfish is also younger, with a smaller integration and community footprint; its bet is that governance, not integration count, decides whether you can trust an agent with real authority. A chat-first and messaging-app surface is on the roadmap.</p>
+
+  <h2>Who should choose which</h2>
+  <p>Choose OpenClaw if you want maximum integrations today on a machine where a mistake is cheap and you'll own the risk yourself. Choose Starfish if the agent will touch anything you can't afford to lose — real files, credentials, money, customers — and you want proof, not hope, that it stayed in bounds.</p>
+
+  <p style="margin-top:22px"><a class="cta-btn" href="/">Explore Starfish - Apache-2.0, local-first, deny-by-default</a></p>
+  <div class="backrow"><a href="/">&larr; Project Starfish home</a> &middot; <a href="/starfish-vs-hermes/">Starfish vs Hermes &rarr;</a></div>
+</article>
+</div>
+<div class="foot"><div class="wrap">Project Starfish &middot; open-source, deny-by-default AI governance &middot; Apache-2.0. OpenClaw is an independent project; comparisons are made in good faith from public information.</div></div>
+</body></html>

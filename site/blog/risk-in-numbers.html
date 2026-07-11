@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk in numbers, and a calmer cockpit · Project Starfish</title>
+<meta name="description" content="v0.23: a 50-category, 0–100 risk score; an operator Risk-Tolerance dial that never lifts the hard floors; and a calm, one-screen governance cockpit.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/risk-in-numbers.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-07-10</div><h1>Risk in numbers, and a calmer cockpit</h1><div class="dek">v0.23 reworks how Starfish decides how risky an action is, hands the operator a dial to tune it, and rebuilds the desktop surface so nothing that needs you ever hides below the fold.</div>
+<p>For a governance system, "how risky is this?" is the load-bearing question — it decides what runs, what asks, and what routes to a bigger model. Until now the answer was a coarse four-tier label. In v0.23 it's a number: every governed action is scored one to ten across <strong>fifty risk categories</strong> — file access, network, data sensitivity, reversibility, execution, autonomy, exfiltration, self-modification, and forty-six more — which roll up into a single <strong>0–100 composite</strong> with ten human descriptors, from Clear to Forbidden.</p>
+<p>The roll-up is deliberately <em>max-driven, not averaged</em>. A naïve average would let one catastrophic dimension get diluted by dozens of harmless ones; instead the riskiest single dimension sets the floor, and stacking several high dimensions pushes it higher. A handful of categories are hard <em>floors</em> — the constitutional guarantees (boundaries, secrets, destructive execution, exfiltration, loss of audit, touching governance itself) expressed in the scoring language, so the number can widen convenience but never open a dangerous door. The old four-tier label still exists as a derived view, which is why the entire prior test suite passes untouched.</p>
+
+<div class="pull">One dangerous dimension can never be diluted by fifty benign ones — and no score, however low, lifts a hard floor.</div>
+
+<h2>A dial the operator controls</h2>
+<p>On top of the score sits <strong>Risk Tolerance</strong>: Low by default, or Medium. On Medium, actions scoring up to 70 of 100 run without asking — for people on a spare machine, with backups, or just experimenting who'd rather not be interrupted for routine, reversible work. What Medium <em>cannot</em> do is lift a hard floor, a prompt-injection reject, or a critical action; those always require a human. It's a governed setting like any other: operator-only, a two-step confirmation to raise it, one click to drop it, audited, persisted, and fail-safe to Low if the config is ever unreadable. A chip in the header shows it, and pulses when you're in the looser mode so you never forget. We stress-tested the whole model against fifty ways to game it before shipping.</p>
+
+<h2>A cockpit that fits one screen</h2>
+<p>The desktop surface was redesigned around a simple rule: a governance console fails if what needs your attention is a scroll away. The default is now a calm, neutral, light-or-dark cockpit — a risk-sorted approval queue on the left and the selected decision's full context on the right, so you can never rubber-stamp. Each card shows the risk descriptor and score. The old always-scrolling decision feed moved to its own Activity screen, and the dashboard keeps only an at-a-glance summary that links to it. The playful "fleet" theme that started this project is still here — just as an optional skin, off by default, because a security control plane earns trust by looking like one. And if you launch as administrator, a banner flashes: governed workers should not run with the keys to the whole machine.</p>
+<p>None of this lowers the deny-by-default, fail-closed floor. It makes the floor legible — you can finally see the number behind every decision — and lets you decide, deliberately and reversibly, how much of the routine you want to handle yourself.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a build journal reconstructed from the project history.</div></div>
+</body></html>

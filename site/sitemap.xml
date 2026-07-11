@@ -3,6 +3,7 @@
   <url><loc>https://projectstarfish.ca/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
 
   <url><loc>https://projectstarfish.ca/blog/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/risk-in-numbers.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/the-1.0-candidate.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/burning-the-boat.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/going-public.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
@@ -15,4 +16,6 @@
 
   <url><loc>https://projectstarfish.ca/agentic-ai-security/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://projectstarfish.ca/what-is-ai-governance/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/starfish-vs-openclaw/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/starfish-vs-hermes/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>
