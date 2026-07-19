@@ -22,16 +22,23 @@ All notable changes to Project Starfish are recorded here. The format follows
   `typecheck:web` is now green.
 
 ### Security
-- **T-05 command-composition gap closed.** The live executor (`packages/desktop/src/peps.ts`) had its own
-  unhardened `git_commit`/`run_tests` implementation that bypassed the neutralized command templates
-  (`core.hooksPath=/dev/null` + scrubbed git config; the runner binary directly instead of `npm test`)
-  already built and tested in `governance-core/templates.ts` a month earlier. `run_tests` defaulted to
-  plain `npm test` with no override anywhere in the app — the exact CLI command-composition attack
-  described in MOSAIC (arXiv:2607.02857) and MOSAIC-Bench (arXiv:2605.03952). Both tools now route through
-  `runTemplate()`; `node_test` extended to keep the allowlisted arg-filter `run_tests` already had.
-  Regression tests added (`peps.conformance.test.ts`) that plant an actual malicious `.git/hooks/pre-commit`
-  and an actual malicious `package.json` test script, exercised through the real executor — that pairing had
-  zero test coverage before, likely why the drift went unnoticed for a month.
+- **T-05 command-composition gap closed.** MOSAIC (arXiv:2607.02857) reports a 96.59% attack success rate
+  chaining benign CLI commands via shared OS state (a planted git hook, a queued `postinstall` script);
+  MOSAIC-Bench (arXiv:2605.03952) reports 53–86% across nine production coding agents from six vendors,
+  with only two refusals across the entire benchmark. Five deployed defense classes — instruction
+  scanners, capability control, information-flow tracking, command scanners, an alignment monitor — all
+  failed against it; the strongest still let 82.57% through. Our own `Project Starfish THREAT MODEL.md`
+  had independently named this exact mechanism as **T-05** five weeks before either paper published, and
+  the prescribed fix (`core.hooksPath=/dev/null` + `--no-verify` + scrubbed git config for commits; the
+  runner binary directly instead of `npm test`) was built and tested in `governance-core/templates.ts` at
+  the time — it just was never wired into the live executor. The live tool executor
+  (`packages/desktop/src/peps.ts`) had its own separate, unhardened `git_commit`/`run_tests`
+  implementation, with `run_tests` defaulting to plain `npm test` with no override anywhere in the app.
+  Both tools now route through `runTemplate()`; `node_test` extended to keep the allowlisted arg-filter
+  `run_tests` already had. Regression tests added (`peps.conformance.test.ts`) that plant an actual
+  malicious `.git/hooks/pre-commit` and an actual malicious `package.json` test script, exercised through
+  the real executor — that pairing had zero test coverage before, likely why the drift went unnoticed for
+  a month.
 
 ### Docs
 - `USABILITYROADMAP.md` (technical-creator path, M0–M6) and `DEPRECATED.md` (deprecation ledger) added;
