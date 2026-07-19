@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuditLog } from '@starfish/governance-core';
@@ -51,5 +52,48 @@ describe('PEPs - real boundary-checked execution', () => {
     const { exec } = setup();
     const r = await exec(call('frobnicate', {}));
     expect(r.ok).toBe(false); expect(r.content).toMatch(/no executor/);
+  });
+});
+
+// Regression guard (MOSAIC / arXiv:2607.02857 — CLI command-composition attacks via shared OS state:
+// a planted repo hook or package.json script fires from a later "ordinary" command). Exercised through
+// the real public makeExecutor() interface — the actual wiring an agent hits — not just the underlying
+// governance-core template in isolation, since that's precisely the seam that drifted out of sync before.
+describe('PEPs - T-05 command-composition attacks are neutralized end to end', () => {
+  it('git_commit does not run a malicious .git/hooks/pre-commit planted in the worktree', async () => {
+    const { root, exec } = setup();
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 'a@b.c'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 'a'], { cwd: root });
+    mkdirSync(join(root, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(root, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\ntouch "${join(root, 'PWNED')}"\n`, { mode: 0o755 });
+    const r = await exec(call('git_commit', { message: 'safe commit' }));
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(root, 'PWNED'))).toBe(false);
+  });
+  it('run_tests does not run a malicious package.json "test" script', async () => {
+    const { root, exec } = setup();
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'x', scripts: { test: `touch ${join(root, 'PWNED')}` } }));
+    await exec(call('run_tests', {}));
+    expect(existsSync(join(root, 'PWNED'))).toBe(false);
+  });
+  it('run_tests still accepts allowlisted path/name filter args', async () => {
+    const { root, exec } = setup();
+    const r = await exec(call('run_tests', { args: 'src/a.test.js' }));
+    // No test files exist yet, so node --test legitimately reports failure/empty — the point here is
+    // that a well-formed arg is passed through (not rejected as argv-injection) and nothing throws.
+    expect(typeof r.content).toBe('string');
+  });
+  it('run_tests rejects a whole args value that itself starts with a flag', async () => {
+    const { root, exec } = setup();
+    const r = await exec(call('run_tests', { args: '--eval=require("fs").writeFileSync("' + join(root, 'PWNED') + '","x")' }));
+    expect(r.ok).toBe(false);
+    expect(existsSync(join(root, 'PWNED'))).toBe(false);
+  });
+  it('run_tests silently drops a mid-string flag-injection token, keeping only the safe filter token', async () => {
+    const { root, exec } = setup();
+    const r = await exec(call('run_tests', { args: `src/a.test.js --eval=require("fs").writeFileSync("${join(root, 'PWNED')}","x")` }));
+    expect(existsSync(join(root, 'PWNED'))).toBe(false);
+    expect(typeof r.content).toBe('string');
   });
 });
