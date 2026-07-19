@@ -6,7 +6,43 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **`starfish audit`** — read-only view of the hash-chained decision log: `--json` (scriptable JSONL),
+  `--since <seq>`, `--limit <n>`, `--deny`, `--ingress`, and `--verify` (chain-integrity check; non-zero
+  exit on tamper). CLI-only change — no core or public-API-surface changes.
+- **Daemon auto-start** — the overlay hook starts the PDP daemon on the first governed tool call if it
+  isn't running, then re-asks. Fail-closed is preserved (deny if it can't be brought up + reached). Opt
+  out with `STARFISH_NO_AUTOSTART=1`.
+- Root `dev` / `dev:web` / `dev:setup` scripts that proxy to `packages/desktop/app` so `npm run dev`
+  works from the repo root.
+
+### Fixed
+- Desktop renderer typecheck: a nav-prop mismatch in `App.tsx` (a `Bridge` `go` call-site adapter) and a
+  `Verdict`-typed effective-verdict helper in `Bridge.tsx` so the activity "asks" count typechecks;
+  `typecheck:web` is now green.
+
+### Security
+- **T-05 command-composition gap closed.** The live executor (`packages/desktop/src/peps.ts`) had its own
+  unhardened `git_commit`/`run_tests` implementation that bypassed the neutralized command templates
+  (`core.hooksPath=/dev/null` + scrubbed git config; the runner binary directly instead of `npm test`)
+  already built and tested in `governance-core/templates.ts` a month earlier. `run_tests` defaulted to
+  plain `npm test` with no override anywhere in the app — the exact CLI command-composition attack
+  described in MOSAIC (arXiv:2607.02857) and MOSAIC-Bench (arXiv:2605.03952). Both tools now route through
+  `runTemplate()`; `node_test` extended to keep the allowlisted arg-filter `run_tests` already had.
+  Regression tests added (`peps.conformance.test.ts`) that plant an actual malicious `.git/hooks/pre-commit`
+  and an actual malicious `package.json` test script, exercised through the real executor — that pairing had
+  zero test coverage before, likely why the drift went unnoticed for a month.
+
+### Docs
+- `USABILITYROADMAP.md` (technical-creator path, M0–M6) and `DEPRECATED.md` (deprecation ledger) added;
+  `docs/OVERLAY_USAGE.md` documents `starfish audit` + daemon auto-start.
+
+### Verified
+- Full `npm run ci` gate green in a clean Linux checkout: typecheck, unit, **conformance 468 (1 skipped)**,
+  determinism, dependency-direction lint, secret-scan, IP-scan, SBOM/license. Desktop app **launches** on
+  Windows (M1).
+- `npm run ci` green after the T-05 fix, on Windows: 90 test files, **477 passed / 3 skipped**, including
+  the new command-composition regression tests in `peps.conformance.test.ts`.
 
 ## [0.23.0] - 2026-07-10
 
