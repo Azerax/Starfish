@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, copyFileSync, rmSync } from 'node:fs';
 import { resolve, relative, join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { containCheck, isSecretPath, type BoundarySet, type ToolCall, type AuditLog } from '@starfish/governance-core';
+import { containCheck, isSecretPath, runTemplate, type BoundarySet, type ToolCall, type AuditLog } from '@starfish/governance-core';
 
 export interface PepOptions {
   projectRoot: string;
@@ -12,7 +12,6 @@ export interface PepOptions {
   audit?: AuditLog;
   backupDir?: string;
   backups?: number;
-  testCmd?: string[];          // default ['npm','test']
   maxReadBytes?: number;       // default 100k
 }
 export interface ToolExecResult { ok: boolean; content: string }
@@ -31,7 +30,6 @@ function snapshot(absPath: string, backupDir: string, projectRoot: string, keep:
 
 export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<ToolExecResult> {
   const max = opts.maxReadBytes ?? 100_000;
-  const testCmd = opts.testCmd ?? ['npm', 'test'];
   const audit = (action: string, target: string | undefined, decision: 'allow' | 'deny', reason: string) =>
     { try { opts.audit?.append({ actor: 'worker', domain: decision === 'allow' ? 'tool' : 'governance', action: `exec:${action}`, target, decision, reason }); } catch { /* noop */ } };
 
@@ -66,22 +64,27 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
           return { ok: true, content: `wrote ${p}` };
         }
         case 'run_tests': {
+          // Routed through governance-core's `node_test` command template (threat model T-05):
+          // always the runner binary directly (`node --test`), never `npm test` / `npm run <script>`,
+          // so an in-worktree package.json can't smuggle in arbitrary code as the "test" entry point.
           try {
-            // A18: allow-list test-selection args only (path/name filters). Reject flags (leading '-')
-            // and any token with shell/path-escape metacharacters to stop runner-flag injection.
-            const extra = (typeof call.input.args === 'string' && call.input.args ? call.input.args.split(/\s+/) : [])
-              .filter((a) => /^[A-Za-z0-9._/@]+$/.test(a) && !a.startsWith('-'));
-            const out = execFileSync(testCmd[0], [...testCmd.slice(1), ...extra], { cwd: opts.projectRoot, encoding: 'utf8', timeout: 180_000, stdio: ['ignore', 'pipe', 'pipe'] });
+            const args = typeof call.input.args === 'string' ? call.input.args : '';
+            const { code, out } = runTemplate('node_test', { args }, opts.projectRoot);
+            if (code !== 0) { audit('run_tests', undefined, 'deny', 'tests failed (nonzero exit)'); return { ok: false, content: 'FAILED\n' + out.slice(-4000) }; }
             audit('run_tests', undefined, 'allow', 'tests ran'); return { ok: true, content: 'PASSED\n' + out.slice(-4000) };
-          } catch (e) { const m = e as { stdout?: string; stderr?: string; message?: string }; audit('run_tests', undefined, 'deny', 'tests failed (nonzero exit)'); return { ok: false, content: 'FAILED\n' + ((m.stdout || '') + (m.stderr || '') || m.message || '').slice(-4000) }; }
+          } catch (e) { audit('run_tests', undefined, 'deny', (e as Error).message); return { ok: false, content: 'FAILED\n' + ((e as Error).message || '').slice(-4000) }; }
         }
         case 'git_commit': {
+          // Routed through governance-core's `git_commit` command template (threat model T-05): repo
+          // hooks disabled (core.hooksPath=/dev/null) + --no-verify + scrubbed global/system git config,
+          // so a malicious .git/hooks/pre-commit (or hooksPath redirect) planted in the worktree can't fire.
           const msg = typeof call.input.message === 'string' ? call.input.message : 'starfish: governed commit';
           try {
             execFileSync('git', ['add', '-A'], { cwd: opts.projectRoot, stdio: 'ignore' });
-            const out = execFileSync('git', ['commit', '--no-verify', '-m', msg], { cwd: opts.projectRoot, encoding: 'utf8' });
+            const { code, out } = runTemplate('git_commit', { message: msg }, opts.projectRoot);
+            if (code !== 0) { audit('git_commit', undefined, 'deny', 'commit failed'); return { ok: false, content: '[git_commit error]\n' + out.slice(0, 400) }; }
             audit('git_commit', undefined, 'allow', msg); return { ok: true, content: out.trim() };
-          } catch (e) { return { ok: false, content: '[git_commit error: ' + ((e as Error).message || '').slice(0, 400) + ']' }; }
+          } catch (e) { audit('git_commit', undefined, 'deny', (e as Error).message); return { ok: false, content: '[git_commit error: ' + ((e as Error).message || '').slice(0, 400) + ']' }; }
         }
         default:
           audit(call.tool, p, 'deny', 'no executor'); return { ok: false, content: `[no executor for ${call.tool}]` };

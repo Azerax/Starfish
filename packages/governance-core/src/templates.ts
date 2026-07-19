@@ -5,14 +5,23 @@
 import { execFileSync } from 'node:child_process';
 
 const META = /[;&|`$<>(){}\n\r]/;
+// A18: allow-list test-selection args only (path/name tokens). Reject flags (leading '-') and any
+// token with shell/path-escape metacharacters to stop runner-flag injection via a "safe" free-text field.
+const ARG_TOKEN = /^[A-Za-z0-9._/@]+$/;
 
 export interface TemplateDef { id: string; bin: string; build: (p: Record<string, string>) => string[]; }
+
+function filterTestArgs(raw?: string): string[] {
+  if (!raw) return [];
+  return raw.split(/\s+/).filter((a) => a.length > 0 && ARG_TOKEN.test(a) && !a.startsWith('-'));
+}
 
 export const TEMPLATES: Record<string, TemplateDef> = {
   // git with repo hooks disabled (core.hooksPath=/dev/null) + --no-verify; global/system config neutralized via env.
   git_commit: { id: 'git_commit', bin: 'git', build: (p) => ['-c', 'core.hooksPath=/dev/null', 'commit', '--no-verify', '-m', p.message] },
-  // tests run the runner binary directly — never `npm test` — so package.json scripts are not an entry point.
-  node_test: { id: 'node_test', bin: 'node', build: () => ['--test'] },
+  // tests run the runner binary directly — never `npm test`/`npm run <script>` — so package.json
+  // scripts are never the entry point. `args` is an optional allowlisted filter of path/name tokens.
+  node_test: { id: 'node_test', bin: 'node', build: (p) => ['--test', ...filterTestArgs(p.args)] },
 };
 
 export function validateParams(params: Record<string, unknown>): { ok: boolean; reason: string } {
