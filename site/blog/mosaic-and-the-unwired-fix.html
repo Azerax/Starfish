@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOSAIC, and the fix that was already sitting there · Project Starfish</title>
+<meta name="description" content="A paper on CLI command-composition attacks sent us back to our own threat model, and turned up a hardened defense we'd built a month earlier but never wired into the executor that actually runs.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/mosaic-and-the-unwired-fix.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-07-19</div><h1>MOSAIC, and the fix that was already sitting there</h1><div class="dek">A paper on CLI command-composition attacks sent us back to our own threat model — and turned up a hardened defense we'd built a month earlier but never wired into the executor that actually runs.</div>
+<p>MOSAIC (arXiv:2607.02857) and its companion MOSAIC-Bench (arXiv:2605.03952) describe an attack class that needs no malicious instruction at all: chain individually benign CLI commands so one step's ordinary side effect — a hook path written to <code>.git/config</code>, a queued <code>postinstall</code> script — becomes the next step's silent execution. Across five coding agents and five backbone models, MOSAIC hit a 96.59% success rate. Five deployed defenses — instruction scanners, capability control, information-flow tracking, command scanners, an alignment monitor — all failed, because none of them reconstruct the producer-consumer state relation across separate commands. The strongest still let 82.57% through.</p>
+<p>Our own threat model had already named this. <strong>T-05</strong>, written five weeks before MOSAIC published, calls out <code>git commit</code> running <code>.git/hooks/pre-commit</code> and <code>npm test</code> running whatever <code>package.json</code> says as "full code execution living inside the agent's own writable worktree." The prescribed fix — <code>core.hooksPath=/dev/null</code> plus <code>--no-verify</code> and a scrubbed git config for commits, the runner binary directly instead of <code>npm test</code> — was built and tested in <code>governance-core</code>'s command templates a month before the paper existed.</p>
+<p>It just wasn't being used. The live executor that actually runs an agent's <code>git_commit</code> and <code>run_tests</code> calls had its own, separate, unhardened implementation: <code>--no-verify</code> alone on commits, no config neutralization, and <code>run_tests</code> defaulting to plain <code>npm test</code> with no override anywhere in the app. Two hardened templates, fully tested a month earlier, sitting one call away from the code path they were built to protect — unused. Neither tool had a single test exercising it through the real executor, which is very likely why the drift went unnoticed for a month.</p>
+<div class="pull">A hardened defense that isn't wired into the code path it protects is not a defense — it's a design document.</div>
+<p>The fix routes both tools through the existing templates instead of duplicating them, extends the test-runner template to keep the allowlisted arg-filtering <code>run_tests</code> already had, and adds regression tests that plant an actual malicious <code>pre-commit</code> hook and an actual malicious <code>package.json</code> test script — exercised through the real executor, not just the template in isolation. <code>npm run ci</code>: 90 test files, 477 passed, 3 pre-existing skips, nothing broken.</p>
+<p>The find is a useful data point on its own terms: a threat-modeling process converging independently on the same vulnerability class an academic paper later formalized, and a defense shape — remove the capability from the tool surface, rather than try to detect intent — that held up against every one of the five approaches MOSAIC tested. But the miss is the more durable lesson. Design intent and wired reality are two different claims, and only one of them is checked by <code>npm run ci</code>.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>
