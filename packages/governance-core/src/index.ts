@@ -22,7 +22,26 @@ export { readSkillFiles, scanSymlinks, fileIntegrityGate, runWithIntegrity, type
 export { governedList, type ListResult } from './listing';
 export { assessDeletion, governedDelete, defaultProtected, type DeletionTarget, type DeletionImpact, type DeletionConfig, type FsProbe, type DeleteOps, type GovernedDeleteDeps, type GovernedDeleteResult } from './deletion';
 export { MessageRouter, type OutgoingMessage, type DeliveredMessage, type RouteResult, type MessageAct } from './messaging';
-export { GovernedMemory, type Evidence, type Claim, type Entity, type DecisionRecord } from './memory';
+export { GovernedMemory, type Evidence, type Claim, type Entity, type DecisionRecord, type MemorySnapshot, type GovernedMemoryOptions } from './memory';
+export { aggregateConfidence, pointsOf, type EvidenceItem, type ConfidenceResult } from './confidence';
+export { WikiGate, classifyStakes, requiredApprovers, sealApproval, verifyBinding, type ApprovalBinding, type GateRequest, type GateVerdict, type WikiGateOptions } from './wikigate';
+export { EvidenceWiki, wikiSnapshotHash, type PageContent, type CreatePageInput, type WikiWriteResult, type EvidenceWikiOptions } from './wiki';
+export { retrieve, estimateTokens, resolveBudget, ThucydidesGate, type ThucydidesOptions } from './retrieval';
+export {
+  LINK_KINDS, HIGH_STAKES_LINKS, CONFIDENTIALITY_LEVELS, CONFIDENTIALITY_RANK,
+  UNKNOWN_PAGE_RANK, UNKNOWN_CLEARANCE_RANK, TRUST_CLASSES, TRUST_CEILING, UNKNOWN_TRUST,
+  COUNTS_TOWARD_INDEPENDENCE, POINTS_MIN, POINTS_MAX, AUTO_APPROVE_POINTS,
+  MIN_INDEPENDENT_SOURCES, PER_SOURCE_CAP_POINTS, MAX_CONFLICT_PENALTY_POINTS,
+  DIVERSITY_BONUS_PER_SOURCE, MAX_DIVERSITY_BONUS, ALWAYS_HIGH_STAKES_TYPES,
+  ALWAYS_HIGH_STAKES_OPS, DUAL_CONTROL_OPS, DUAL_CONTROL_N,
+  DEFAULT_RETRIEVAL_BUDGET, MAX_RETRIEVAL_BUDGET,
+  MEMORY_DATA_OPEN, MEMORY_DATA_CLOSE, REDACTION_MARK,
+  WIKI_SCHEMA, WIKI_SCHEMA_VERSION, MEMORY_SCHEMA, MEMORY_SCHEMA_VERSION,
+  type LinkKind, type Confidentiality, type TrustClass, type Stakes, type WikiOp,
+  type Tombstone, type PageVersion, type Page, type Link, type MergeRecord, type SplitRecord,
+  type RetrievalBudget, type RetrievalRequest, type RetrievedPage, type TruncationReason,
+  type RetrievalStats, type RetrievalResult, type WikiView, type WikiSnapshot, type RestoreResult,
+} from './wikitypes';
 export { vet, renderReport, hashFiles, fileManifest, diffManifest, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';
 export { verifyPublisherSignature, verifyAgainstPinned, signManifest, generatePublisherKeypair, type PinnedPublisher } from './signature';
 export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from './monitor';

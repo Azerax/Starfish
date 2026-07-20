@@ -104,6 +104,17 @@ export class PDP {
     try {
       tool = this.tools.get(call.tool);
       if (!tool) return { allow: false, reason: 'tool-not-registered (default-deny)' };
+      // Sanctity invariant 4 — memory content can NEVER authorize a tool call. A call whose
+      // parameters came out of a governed-memory read may only read; anything that writes, executes,
+      // or reconfigures is denied outright, no matter how convincing the stored text was. This is
+      // the terminal mitigation for stored prompt injection (T2): even if a poisoned page survives
+      // write screening AND read screening, the action it is arguing for cannot happen.
+      if (call.memoryDerived && tool.category !== 'read') {
+        return {
+          allow: false, riskTier: 'injection',
+          reason: `memory-derived input cannot authorize a ${tool.category} tool (memory is data, not instructions)`,
+        };
+      }
       if (tool.allowedAgents !== '*' && !tool.allowedAgents.includes(call.agentId)) {
         return { allow: false, reason: 'agent-not-authorized' };
       }

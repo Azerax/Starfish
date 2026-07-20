@@ -14,6 +14,7 @@
     "test:conformance": "vitest run conformance",
     "test:determinism": "vitest run determinism",
     "lint:deps": "node scripts/dep-direction-lint.mjs",
+    "verify:memory-wiki": "node scripts/verify/memory-wiki.mjs",
     "scan:ip": "node scripts/ip-denylist-scan.mjs",
     "sbom": "node scripts/sbom.mjs",
     "ci": "npm run typecheck && npm run test && npm run test:conformance && npm run test:determinism && npm run lint:deps && npm run scan:secrets && npm run scan:ip && npm run sbom",
