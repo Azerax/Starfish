@@ -4,7 +4,7 @@ All notable changes to Project Starfish are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/). Dates are YYYY-MM-DD.
 
-## [Unreleased]
+## [0.24.0] - 2026-07-19
 
 ### Added
 - **`starfish audit`** — read-only view of the hash-chained decision log: `--json` (scriptable JSONL),
