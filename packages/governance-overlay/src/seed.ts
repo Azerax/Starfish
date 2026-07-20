@@ -19,6 +19,12 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'git_commit', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },
     { id: 'shell', category: 'exec', pathParams: [], allowedAgents: ['worker'], riskTier: 'high' },        // Claude Code Bash -> shell (screened; ask)
     { id: 'net', category: 'network', pathParams: [], allowedAgents: ['worker'], riskTier: 'medium' },     // WebFetch/WebSearch -> net (ask)
+    // Memory Wiki. Herodotus is the SOLE writer; everyone may read, but only through Thucydides.
+    { id: 'memory.read', category: 'read', pathParams: [], allowedAgents: '*', riskTier: 'low' },
+    { id: 'memory.write', category: 'write', pathParams: [], allowedAgents: ['herodotus'], riskTier: 'medium' },
+    { id: 'memory.promote', category: 'meta', pathParams: [], allowedAgents: ['herodotus'], riskTier: 'high' },
+    { id: 'memory.link', category: 'meta', pathParams: [], allowedAgents: ['herodotus'], riskTier: 'high' },
+    { id: 'memory.restructure', category: 'meta', pathParams: [], allowedAgents: ['herodotus'], riskTier: 'high' },
   ],
   agents: [
     { id: 'michael', domain: 'orchestration', riskTier: 'medium' },
@@ -28,6 +34,12 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'pam', domain: 'memory', allowedTools: ['fs.read', 'fs.write'], riskTier: 'low' },
     { id: 'custodian', domain: 'custodial', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], riskTier: 'medium' },
     { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.write', 'git_commit'], riskTier: 'high' },
+    // T6 — Herodotus the Recorder holds memory tools and NOTHING else: no fs, no shell, no net.
+    // A prompt-injected scribe therefore cannot exfiltrate or pivot, and still cannot promote
+    // anything on its own — the gate and a human do that.
+    { id: 'herodotus', domain: 'memory', allowedTools: ['memory.read', 'memory.write', 'memory.promote', 'memory.link', 'memory.restructure'], riskTier: 'low' },
+    // Thucydides the Critical Reader is the read path and holds read only.
+    { id: 'thucydides', domain: 'memory', allowedTools: ['memory.read'], riskTier: 'low' },
   ],
   policies: [
     { id: 'p-read', subject: '*', action: 'tool:fs.read', resource: '*', effect: 'allow' },
@@ -35,6 +47,14 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'p-commit', subject: 'agent:worker', action: 'tool:git_commit', resource: '*', effect: 'ask' },
     { id: 'p-shell', subject: 'agent:worker', action: 'tool:shell', resource: '*', effect: 'ask' },
     { id: 'p-net', subject: 'agent:worker', action: 'tool:net', resource: '*', effect: 'ask' },
+    // Memory reads are broadly allowed because the read GATE (need-to-know, redaction, bounds) is
+    // what governs them, not the policy verb. Writes and promotion are Herodotus-only. Without an
+    // explicit allow the memory gate fails closed and everything queues for a human, by design.
+    { id: 'p-mem-read', subject: '*', action: 'tool:memory.read', resource: '*', effect: 'allow' },
+    { id: 'p-mem-write', subject: 'agent:herodotus', action: 'tool:memory.write', resource: '*', effect: 'allow' },
+    { id: 'p-mem-promote', subject: 'agent:herodotus', action: 'tool:memory.promote', resource: '*', effect: 'allow' },
+    { id: 'p-mem-link', subject: 'agent:herodotus', action: 'tool:memory.link', resource: '*', effect: 'allow' },
+    { id: 'p-mem-restructure', subject: 'agent:herodotus', action: 'tool:memory.restructure', resource: '*', effect: 'ask' },
   ],
 };
 

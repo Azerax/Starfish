@@ -38,6 +38,8 @@ export function governanceArtifacts(governanceDir: string, stateDir?: string): {
     { rel: 'state/capabilities.json', abs: join(stateDir, 'capabilities.json') },
     { rel: 'state/services.json', abs: join(stateDir, 'services.json') },
     { rel: 'state/tasks.snapshot.json', abs: join(stateDir, 'tasks.snapshot.json') },
+    { rel: 'state/memory.snapshot.json', abs: join(stateDir, 'memory.snapshot.json') },
+    { rel: 'state/wiki.snapshot.json', abs: join(stateDir, 'wiki.snapshot.json') },
   );
   return set.filter((a) => existsSync(a.abs));
 }
