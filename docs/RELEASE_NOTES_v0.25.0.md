@@ -18,6 +18,16 @@ with a test that would have caught the gap, and the suite grew from 602 to 656 p
 
 ---
 
+## Scope — what this hardens, and the boundary it hardens toward
+
+This release also makes the **threat model explicit** ([`docs/THREAT_MODEL.md`](THREAT_MODEL.md)):
+Starfish provides reasonable, advanced governance — it defends against a misbehaving/hijacked **agent**
+and **injected content**, and it **trusts the operator and their machine**. Disabling your own governance,
+or a host already running native attacker code (including a browser 0-day in the desktop UI), is out of
+scope by design — not a failure to fix. Every finding below is an *in-scope* gap; the desktop
+renderer-authority work raises the bar and shrinks blast radius within that boundary, and states its
+residual honestly rather than pretending to defeat an attacker who already owns the process.
+
 ## The method
 
 Four adversarial sweeps over `packages/*/src`, each with a single question:

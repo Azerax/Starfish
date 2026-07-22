@@ -50,9 +50,22 @@ architectural: *does typing a brief actually dispatch a governed run that produc
 
 ---
 
+## Scope
+
+Starfish provides **reasonable, advanced governance — not bulletproof governance.** It defends against a
+misbehaving/hijacked agent and against injected content; it trusts the operator and their machine.
+Disabling your own governance, or a fully compromised host, is out of scope by design. The explicit
+boundary — in scope, out of scope, trust assumptions — is in
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), and it is the lens every hardening decision is triaged
+through.
+
 ## Toward 1.0
 
 1.0 is a commitment to a frozen wire protocol and public API, not a feature count. Remaining:
+
+- **Governance-core in its own process** — run the governor as a daemon with the desktop app as an
+  untrusted client, moving the crown jewels behind OS process isolation from the entire UI. The
+  architecturally load-bearing hardening; makes the UI toolkit a product decision, not a security one.
 
 - **Supply-chain posture** — OpenSSF Scorecard is currently **3.7/10**. Workflow hardening (least-privilege
   `GITHUB_TOKEN`, SHA-pinned actions, Dependabot) and dependency-vulnerability triage are planned.
