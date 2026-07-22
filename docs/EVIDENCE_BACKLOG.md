@@ -75,10 +75,13 @@ This also closes M0's outstanding item: *"capture one full governed task end-to-
 `requestAction({ actor:'operator', intent:{ kind:'mission', text }})`, but no one has confirmed a run
 completes and writes something.
 
-**Re-test:** `npm run dev`, type a brief, watch it through to an artifact on disk.
-**Capture:** screenshots of the run, the approval card, the resulting file, and the audit entries.
-**Blocks:** the Calm Home UI (building a one-input home over a dispatch that doesn't run would be an
-overclaim in interface form) and any public "you can create with Starfish" claim.
+**Status update 2026-07-22 — PLUMBING VERIFIED.** `dispatch-e2e.conformance.test.ts` (packages/desktop)
+drives the whole seam with a stubbed model: a model `tool_use(fs.write)` → `AgentLoop` → the real
+`makeExecutor` → a real file on disk, under governance; and a write outside the boundary is denied (no
+artifact). So the Calm Home sits on a proven dispatch, not a hope. **Still owed (E2-live):** a run with a
+REAL model (egress + key — Scott's call) to confirm a real model drives it well, with screenshots of the
+run/approval/artifact/audit. The plumbing gate no longer blocks the UI; the live capture does still gate
+any public "you can create with Starfish" claim.
 
 ---
 
