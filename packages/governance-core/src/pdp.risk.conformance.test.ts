@@ -98,3 +98,44 @@ describe('self-audit fixes — F8 / F9 / F10', () => {
     expect(d.reason).toContain('boundary');
   });
 });
+
+describe('F1 — a shell command reading a secret path can never silently auto-allow', () => {
+  const shellTool = [{ id: 'shell', category: 'exec' as const, pathParams: [], allowedAgents: '*' as const }];
+
+  it('cat of an SSH private key escalates to ASK, not allow (even with an allow policy)', () => {
+    const p = pdp(shellTool, [{ id: 'a', subject: 'agent:a', action: 'tool:shell', resource: '*', effect: 'allow' }] as never);
+    const d = p.decide('ingress', { agentId: 'a', tool: 'shell', input: { command: 'cat ~/.ssh/id_rsa' } }, BS);
+    expect(d.allow).toBe(false);
+    expect(d.ask).toBe(true);
+    expect(d.reason).toContain('secret');
+  });
+
+  it('the same holds under MEDIUM tolerance (the tier ceiling cannot lift it)', () => {
+    const p = pdp(shellTool, [{ id: 'a', subject: 'agent:a', action: 'tool:shell', resource: '*', effect: 'allow' }] as never);
+    p.setRiskTolerance('medium');
+    const d = p.decide('ingress', { agentId: 'a', tool: 'shell', input: { command: 'cp /home/u/.aws/credentials /tmp/x' } }, BS);
+    expect(d.allow).toBe(false);
+    expect(d.ask).toBe(true);
+  });
+
+  it('a plain .env read and an input redirect are caught', () => {
+    const p = pdp(shellTool);
+    expect(p.decide('ingress', { agentId: 'a', tool: 'shell', input: { command: 'base64 .env' } }, BS).ask).toBe(true);
+    expect(p.decide('ingress', { agentId: 'a', tool: 'shell', input: { command: 'openssl rsa < server.pem' } }, BS).ask).toBe(true);
+  });
+
+  it('legitimate shell commands are NOT tripped (no false positives on the golden path)', () => {
+    const p = pdp(shellTool, [{ id: 'a', subject: 'agent:a', action: 'tool:shell', resource: '*', effect: 'allow' }] as never);
+    for (const command of [
+      'npm run build',
+      'git commit -m "note about the .env docs"',   // mentions .env but no read verb applied to a path
+      'node --test',
+      'ls -la src',
+      'echo hello > notes.txt',
+      'cat src/index.ts',                            // reads a normal file, not a secret
+    ]) {
+      const d = p.decide('ingress', { agentId: 'a', tool: 'shell', input: { command } }, BS);
+      expect(d.reason, command).not.toContain('secret');
+    }
+  });
+});

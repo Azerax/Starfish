@@ -45,7 +45,7 @@ export {
 export { vet, renderReport, hashFiles, fileManifest, diffManifest, CapabilityLedger, type VettingInput, type VettingReport, type CapabilityFile } from './vetting';
 export { verifyPublisherSignature, verifyAgainstPinned, signManifest, generatePublisherKeypair, type PinnedPublisher } from './signature';
 export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from './monitor';
-export { isSecretPath, classifyPath, containsSecret, redactSecrets, secretReadGate, screenEnv, secretWriteGate, type SecretPolicy, type EnvScreen } from './secrets';
+export { isSecretPath, classifyPath, containsSecret, redactSecrets, secretReadGate, screenEnv, secretWriteGate, commandReadsSecret, type SecretPolicy, type EnvScreen } from './secrets';
 export { scanEgress } from './containment';
 export { isBlockedHost } from './netguard';
 export { sha256 } from './hash';

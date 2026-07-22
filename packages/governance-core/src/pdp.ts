@@ -4,7 +4,7 @@
 import type { Decision, Face, ToolCall, BoundarySet, ToolDef, AgentDef, RiskTier } from './types';
 import type { ScopeVerdict } from './scope';
 import { assessmentFromTier, type RiskAssessment } from './score';
-import { isSecretPath, classifyPath, screenEnv, type SecretPolicy } from './secrets';
+import { isSecretPath, classifyPath, screenEnv, commandReadsSecret, type SecretPolicy } from './secrets';
 import type { Registry } from './registry';
 import type { AuditLog } from './audit';
 import { containCheck } from './boundary';
@@ -147,6 +147,19 @@ export class PDP {
               const content = typeof call.input.content === 'string' ? call.input.content : '';
               if (content) { const sc = screenEnv(content); if (!sc.ok) return { allow: false, riskTier: 'critical', reason: `poisoned .env rejected: ${sc.findings.join('; ')}` }; }
             }
+          }
+        }
+      }
+      // F1: exec/shell tools declare pathParams:[], so the containment + secret loop above never ran —
+      // a raw `cat ~/.ssh/id_rsa` reached the risk scorer with no secret screening and, at Medium
+      // tolerance, auto-allowed silently. Screen exec-tool string inputs for a secret-file READ and
+      // force ASK (a human) — tolerance-independent, so it can never be a silent auto-allow. This is a
+      // floor: it does not hard-deny (which would break legitimate `.env` workflows on a false match),
+      // it removes the ability to auto-run without a human seeing it.
+      if (tool.category === 'exec') {
+        for (const v of Object.values(call.input)) {
+          if (typeof v === 'string' && commandReadsSecret(v)) {
+            return { allow: false, ask: true, riskTier: 'critical', reason: 'shell command reads a secret path — human approval required (no auto-allow)' };
           }
         }
       }

@@ -9,12 +9,12 @@
 
 **Date:** 2026-07-20 (draft) · **Theme:** we turned the audit on ourselves. A systematic adversarial
 self-audit of Starfish's own governance core — comparing every stated guarantee against the code that
-should enforce it — surfaced a batch of real gaps. This release closes eighteen of them, each with a
+should enforce it — surfaced a batch of real gaps. This release closes nineteen of them, each with a
 regression test that plants the actual attack.
 
 The honest framing up front: **finding these is the system working, not failing.** A governance product
 that cannot show you where its own edges were is not one to trust with a boundary. Every fix below ships
-with a test that would have caught the gap, and the suite grew from 602 to 628 passing as a result.
+with a test that would have caught the gap, and the suite grew from 602 to 632 passing as a result.
 
 ---
 
@@ -65,6 +65,16 @@ readable. The `forbid` list is now carried through as an explicit `deny` subtree
 path's custodian boundary was brought into the same posture, so neither the agent path nor the cleanup
 path can reach the tamper-evident log.
 
+### A shell command reading a secret can no longer silently auto-run
+The raw `shell` tool declares no path parameters, so the boundary and secret-path checks that guard
+`fs.read`/`fs.write` never inspected it — `cat ~/.ssh/id_rsa` reached the risk scorer unscreened and, at
+Medium risk tolerance, auto-allowed with no human. A shell command that **reads or copies a secret path**
+now escalates to a human decision, **tolerance-independent** — it can never be a silent auto-allow. The
+screen is conservative (a read/copy verb applied to a secret-path token), so ordinary shell — build
+commands, `git commit` messages that merely mention `.env`, reading normal source files — is untouched.
+(General path containment for arbitrary shell arguments remains broad by design; routing exec through the
+hardened command templates is the architectural direction, tracked separately.)
+
 ### Risk and policy decisions are correct at the edges
 Three correctness gaps in the decision path: an operator's explicit `ask` rule on a low-risk tool was
 silently discarded (now honoured); a governance `meta` tool that declared a path skipped the boundary and
@@ -103,7 +113,7 @@ all lookups use, so a "remote kill" that reported success actually blocks the so
 
 ## How to verify
 `npm run ci` (typecheck + unit + conformance + determinism + dependency-direction lint + secret/IP scans +
-SBOM). This batch: **99 test files, 628 passed, 3 skipped** — including the new self-audit regression
+SBOM). This batch: **99 test files, 632 passed, 3 skipped** — including the new self-audit regression
 tests (`selfaudit-fixes.conformance.test.ts` plus additions to the netguard, sources, memory, wiki,
 boundary, pdp-risk, and boot-persistence suites). Every fix above has a test that plants the actual
 attack it refuses.
