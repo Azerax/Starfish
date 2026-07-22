@@ -33,7 +33,10 @@ export const GOVERNANCE_SEED: { tools: SeedTool[]; agents: SeedAgent[]; policies
     { id: 'hank', domain: 'monitor', allowedTools: ['fs.read'], riskTier: 'low' },
     { id: 'pam', domain: 'memory', allowedTools: ['fs.read', 'fs.write'], riskTier: 'low' },
     { id: 'custodian', domain: 'custodial', allowedTools: ['fs.read', 'fs.list', 'fs.delete'], riskTier: 'medium' },
-    { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.write', 'git_commit'], riskTier: 'high' },
+    // F7: allowedTools must cover EVERY tool the tool-registry grants this agent, or PDP enforcement of
+    // the per-agent allowlist would deny a legitimate call. worker is granted fs.read/list (via '*'),
+    // fs.write, git_commit, shell, net — all listed here explicitly now.
+    { id: 'worker', domain: 'execution', allowedTools: ['fs.read', 'fs.list', 'fs.write', 'git_commit', 'shell', 'net', 'memory.read'], riskTier: 'high' },
     // T6 — Herodotus the Recorder holds memory tools and NOTHING else: no fs, no shell, no net.
     // A prompt-injected scribe therefore cannot exfiltrate or pivot, and still cannot promote
     // anything on its own — the gate and a human do that.

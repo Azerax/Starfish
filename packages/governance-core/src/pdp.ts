@@ -64,7 +64,7 @@ export class PDP {
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
     if (this.safeMode) {
       const sd: Decision = { allow: false, reason: `safe-mode: ${this.safeModeReason || 'governance integrity failure'}` };
-      try { this.audit.append({ actor: call.agentId, domain: 'governance', action: `${face}:${call.tool}`, target: this.firstPath(call), decision: 'deny', reason: sd.reason }); } catch { /* already failing closed */ }
+      try { this.audit.append({ actor: call.agentId, domain: 'governance', action: `${face}:${call.tool}`, target: this.resourceOf(call), decision: 'deny', reason: sd.reason }); } catch { /* already failing closed */ }
       return sd;
     }
     const d = face === 'egress' ? this.egress(call) : this.ingress(call, bs);
@@ -76,7 +76,7 @@ export class PDP {
         actor: call.agentId,
         domain: d.allow ? 'tool' : 'governance',
         action: `${face}:${call.tool}`,
-        target: this.firstPath(call),
+        target: this.resourceOf(call),
         decision: d.allow ? 'allow' : 'deny',
         reason: d.reason,
         riskTier: d.riskTier,
@@ -117,6 +117,16 @@ export class PDP {
       }
       if (tool.allowedAgents !== '*' && !tool.allowedAgents.includes(call.agentId)) {
         return { allow: false, reason: 'agent-not-authorized' };
+      }
+      // F7: enforce the agent's OWN capability allowlist, not only the tool's allowedAgents. This was
+      // declared on AgentDef, shown in the UI as "deny-by-default otherwise", and never checked — so a
+      // read-only agent (e.g. thucydides, allowedTools:['memory.read']) could call fs.read (a `*` tool)
+      // and the "Thucydides reads memory only" invariant was cosmetic. Backward-compatible: an agent
+      // that declares NO allowedTools is unrestricted (unchanged); only a declared, non-empty allowlist
+      // is enforced. The seed's own agents were reconciled so their lists cover what they legitimately call.
+      const agentDef = this.agents.get(call.agentId);
+      if (agentDef?.allowedTools && agentDef.allowedTools.length > 0 && !agentDef.allowedTools.includes(call.tool)) {
+        return { allow: false, reason: `tool not in ${call.agentId}'s capability allowlist (deny-by-default)` };
       }
       // non-deviation: the task's Scope Contract narrows the agent's general grants (D1 tool, D2 path,
       // D3 command, D4 budget). A deviation is denied; the monitor treats it as a trust-revoking event.
@@ -168,7 +178,7 @@ export class PDP {
     }
     const tier = this.risk.classify(call, tool);
     const assessment = this.risk.assess(call, tool);
-    const pol = this.policy.evaluate(`agent:${call.agentId}`, `tool:${call.tool}`, this.firstPath(call) ?? '*');
+    const pol = this.policy.evaluate(`agent:${call.agentId}`, `tool:${call.tool}`, this.resourceOf(call, tool) ?? '*');
     return this.combine(tier, pol, assessment);
   }
 
@@ -199,7 +209,16 @@ export class PDP {
     return scan.clean ? { allow: true, reason: 'egress-clear' } : { allow: false, reason: scan.reason! };
   }
 
-  private firstPath(call: ToolCall): string | undefined {
+  // F6: the policy resource must be the tool's DECLARED path, not merely the first string-valued input
+  // in JSON order. Previously an attacker could put a benign decoy first — `{note:'/project/ok',
+  // path:'/etc/passwd'}` — so the call was adjudicated against a rule scoped to the decoy. When the tool
+  // is known, resolve the resource from `tool.pathParams`; fall back to the first string only when the
+  // tool declares no path params (or is unknown, as in the pre-resolution audit path).
+  private resourceOf(call: ToolCall, tool?: ToolDef): string | undefined {
+    if (tool && tool.pathParams.length) {
+      for (const key of tool.pathParams) { const v = call.input[key]; if (typeof v === 'string') return v; }
+      return undefined;   // tool declares paths but none supplied → no resource (matches '*' rules only)
+    }
     for (const v of Object.values(call.input)) if (typeof v === 'string') return v;
     return undefined;
   }
