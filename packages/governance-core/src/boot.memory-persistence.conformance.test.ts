@@ -136,3 +136,20 @@ describe('F11 — corrupt tasks/capabilities/services restore into safe mode, no
     expect(g.safeMode).toBe(false);
   });
 });
+
+describe('F0 phase 1 — enforcement posture is explicit + audited (never silent)', () => {
+  it('the Governor exposes its posture and emits an audit line at boot', () => {
+    const { dir, state } = gdir();
+    const g = loadGovernor(dir, join(dir, 'audit.jsonl'), { stateDir: state });
+    expect(g.posture).toBeDefined();
+    expect(typeof g.posture.integrity).toBe('boolean');
+    expect(g.posture.scopeNonDeviation).toBe(false);          // honestly off — no contract issuer yet
+    expect(g.posture.secretGatekeeper).toBe('toby');
+    expect(g.audit.recent(50).some((e) => e.action === 'enforcement-posture')).toBe(true);
+  });
+  it('F0 phase 2 — passing skillsRoot turns integrity ON in the posture', () => {
+    const { dir, state } = gdir();
+    const g = loadGovernor(dir, join(dir, 'audit.jsonl'), { stateDir: state, skillsRoot: join(dir, 'skills') });
+    expect(g.posture.integrity).toBe(true);
+  });
+});
