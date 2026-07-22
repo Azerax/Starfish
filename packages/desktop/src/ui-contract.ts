@@ -63,7 +63,7 @@ export type UiIntent =
   | { kind: 'approve'; decisionId: string }       // operator resolves a broker-pending decision
   | { kind: 'deny'; decisionId: string }
   | { kind: 'resume'; agentId: string };           // clear a token-governor hard pause
-export interface ActionRequest { actor: string; intent: UiIntent; }
+export interface ActionRequest { actor: string; intent: UiIntent; token?: unknown; }   // token: F28 capability token (preload-attached; renderer-supplied `actor` is NOT authoritative)
 export interface ActionResult { decision: Decision; applied: boolean; }
 export interface GovernanceActionApi { requestAction(req: ActionRequest): Promise<ActionResult>; }
 

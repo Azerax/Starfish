@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
-  crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor } from '@starfish/desktop';
+  crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor,
+  IpcAuthority, buildRendererManifest, verifyRenderer, guardRenderer, type RendererManifest, type PrivilegedOp } from '@starfish/desktop';
+import { watch } from 'node:fs';
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
 import { governDefaults, seedInstall } from '@starfish/governance-overlay';
@@ -128,9 +130,65 @@ function createSplash(): void {
     webPreferences: { preload: join(HERE, '../preload/splash.mjs'), contextIsolation: true, sandbox: false } });
   loadPage(splash, 'splash');
 }
+// F28/F29 — IPC authority + renderer-integrity guard. `ipcAuthority` makes privileged operations
+// main-owned (a capability token the renderer only gets via the preload, plus a main-assigned operator
+// identity), and `rendererGuard` continuously verifies the shipped renderer bundle (on load, on change,
+// periodically) so attacker code cannot run in the renderer to begin with. Both are set up at boot.
+let ipcAuthority: IpcAuthority | null = null;
+let rendererGuard: { ok: () => boolean; verifyNow: () => { ok: boolean; reason: string }; stop: () => void } | null = null;
+const RENDERER_DIR = join(HERE, '../renderer');
+const rendererManifestPath = (): string => join(HERE, '..', 'renderer-manifest.json');
+
+function setupIpcAuthority(): void {
+  // Trust-on-first-run: capture the manifest of the shipped renderer once, persist it, verify against it
+  // thereafter. This catches a bundle swapped while the app was closed AND tampering while it runs. The
+  // residual (a bundle already tampered at very first launch) is closed by the signed self-integrity
+  // manifest — tracked; stated, not hidden.
+  let manifest: RendererManifest;
+  const mp = rendererManifestPath();
+  try {
+    if (existsSync(mp)) manifest = JSON.parse(readFileSync(mp, 'utf8')) as RendererManifest;
+    else { manifest = buildRendererManifest(RENDERER_DIR); writeFileSync(mp, JSON.stringify(manifest)); }
+  } catch { manifest = buildRendererManifest(RENDERER_DIR); }
+
+  rendererGuard = guardRenderer({
+    dir: RENDERER_DIR, manifest, periodMs: 30_000,
+    watch: (d, opts, cb) => watch(d, opts, () => cb()),
+    onTamper: (r) => {
+      try { host?.governor.pdp.setSafeMode(true, `renderer integrity: ${r.reason}`); } catch { /* noop */ }
+      try { host?.governor.audit.append({ actor: 'system', domain: 'governance', action: 'renderer-tamper', decision: 'deny', riskTier: 'critical', reason: r.reason, detail: { changed: r.changed, added: r.added, removed: r.removed } }); } catch { /* noop */ }
+      try { dialog.showErrorBox('Starfish — renderer integrity failure', `${r.reason}\n\nPrivileged actions are disabled until the app is reinstalled/re-verified.`); } catch { /* noop */ }
+    },
+  });
+  ipcAuthority = new IpcAuthority({ operator: readOnb().operator || 'operator', integrityOk: () => rendererGuard?.ok() ?? false });
+}
+
+/** Fail-closed authorization for a privileged IPC op. Returns the MAIN-assigned operator, or null if
+ *  refused (bad/missing token, or renderer tampered). The renderer supplies nothing authoritative. */
+function authorizePrivileged(op: PrivilegedOp, token: unknown): { operator: string } | { refused: string } {
+  if (!ipcAuthority) return { refused: 'ipc authority not initialised' };
+  const v = ipcAuthority.authorize({ op, token });
+  if (!v.allow) {
+    try { host?.governor.audit.append({ actor: 'system', domain: 'governance', action: `ipc-refused:${op}`, decision: 'deny', riskTier: 'high', reason: v.reason }); } catch { /* noop */ }
+    return { refused: v.reason };
+  }
+  return { operator: v.operator! };
+}
+
 function createWindow(): void {
   win = new BrowserWindow({ width: 1320, height: 860, show: false, backgroundColor: '#04060f',
-    webPreferences: { preload: join(HERE, '../preload/index.mjs'), contextIsolation: true, sandbox: false } });
+    webPreferences: {
+      preload: join(HERE, '../preload/index.mjs'),
+      contextIsolation: true,
+      sandbox: true,                                    // F30: sandbox the renderer
+      // F28: the capability token reaches ONLY the preload (closure), never page-readable script.
+      additionalArguments: [`--sf-ipc-token=${ipcAuthority?.sessionToken() ?? ''}`],
+    } });
+  // F30: strict CSP — no remote or inline script can execute in the renderer, so injection has no vector.
+  win.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+    cb({ responseHeaders: { ...details.responseHeaders,
+      'Content-Security-Policy': ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "connect-src 'self'", "object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"].join('; ') } });
+  });
   loadPage(win, 'index');
 }
 
@@ -179,18 +237,25 @@ function registerIpc(): void {
   ipcMain.handle('gov:requestAction', async (_e, req: ActionRequest): Promise<ActionResult> => {
     const g = G();
     const intent = (req?.intent ?? {}) as { kind?: string; decisionId?: string; agentId?: string; text?: string; skill?: string };
-    const by = req?.actor || 'operator';
     if (!g || !broker) return { decision: { allow: false, ask: true, reason: 'governance not booted' }, applied: false };
 
-    if ((intent.kind === 'approve' || intent.kind === 'deny') && intent.decisionId) {
-      const d = broker.get(intent.decisionId);
-      const r = broker.resolve(intent.decisionId, intent.kind === 'approve' ? 'approve' : 'deny', by);
-      if (r.ok && intent.kind === 'approve' && d?.kind === 'capability' && d.refId) g.capabilities.approve(d.refId, by);  // side-effect: enable the consented capability
-      return { decision: { allow: r.ok && intent.kind === 'approve', ask: false, reason: r.reason }, applied: r.ok };
-    }
-    if (intent.kind === 'resume' && intent.agentId) {
-      g.tokens.resume(intent.agentId, by);
-      return { decision: { allow: true, ask: false, reason: `resumed ${intent.agentId}` }, applied: true };
+    // F28: approve / deny / resume are PRIVILEGED. The operator is MAIN-assigned (never req.actor), the
+    // call must carry the capability token, and the broker's operator-set is enforced so a self-approval
+    // by an agent is impossible. The renderer supplies nothing authoritative here.
+    if ((intent.kind === 'approve' || intent.kind === 'deny' || intent.kind === 'resume')) {
+      const auth = authorizePrivileged(intent.kind === 'resume' ? 'approve' : intent.kind, req?.token);
+      if ('refused' in auth) return { decision: { allow: false, ask: false, reason: `privileged action refused: ${auth.refused}` }, applied: false };
+      const by = auth.operator;
+      if ((intent.kind === 'approve' || intent.kind === 'deny') && intent.decisionId) {
+        const d = broker.get(intent.decisionId);
+        const r = broker.resolve(intent.decisionId, intent.kind === 'approve' ? 'approve' : 'deny', by, [by]);
+        if (r.ok && intent.kind === 'approve' && d?.kind === 'capability' && d.refId) g.capabilities.approve(d.refId, by);  // side-effect: enable the consented capability
+        return { decision: { allow: r.ok && intent.kind === 'approve', ask: false, reason: r.reason }, applied: r.ok };
+      }
+      if (intent.kind === 'resume' && intent.agentId) {
+        g.tokens.resume(intent.agentId, by);
+        return { decision: { allow: true, ask: false, reason: `resumed ${intent.agentId}` }, applied: true };
+      }
     }
     // COMM order / PADD skill -> a governed agent run. Asks during the run land in the broker and appear
     // in 'Needs your go/no-go'; approve/deny there resolves them and the run continues.
@@ -302,9 +367,13 @@ function registerIpc(): void {
   // ---- Risk Tolerance: read the operator setting; change it (operator-only, Medium double-confirmed),
   // apply it to the live PDP, and persist. Hard floors are enforced independently of this value. ----
   ipcMain.handle('sys:getRiskTolerance', () => ({ value: tolStore?.get() ?? 'low' }));
-  ipcMain.handle('sys:setRiskTolerance', (_e, arg: { next: 'low' | 'medium'; confirmed?: boolean }) => {
+  ipcMain.handle('sys:setRiskTolerance', (_e, arg: { next: 'low' | 'medium'; confirmed?: boolean; token?: unknown }) => {
     if (!host || !tolStore) return { ok: false, value: 'low' as const, reason: 'governance not booted' };
-    const r = tolStore.set(arg?.next, 'operator', { confirmed: arg?.confirmed });
+    // F28: raising risk tolerance is privileged (it widens what auto-runs). Require the capability token
+    // and a verified renderer; the `confirmed` flag alone — which the renderer controls — is not authority.
+    const auth = authorizePrivileged('setRiskTolerance', arg?.token);
+    if ('refused' in auth) return { ok: false, value: tolStore.get(), reason: `refused: ${auth.refused}` };
+    const r = tolStore.set(arg?.next, auth.operator, { confirmed: arg?.confirmed });
     if (r.ok) { host.governor.pdp.setRiskTolerance(r.value); persistTolerance(); }
     return r;
   });
@@ -384,8 +453,14 @@ function registerIpc(): void {
   ipcMain.handle('delete:assess', (_e, { path, recursive }: { path: string; recursive?: boolean }) =>
     impactView(assessDeletion({ path, recursive }, delCfg(), realFsProbe(), custodianBoundary)));
 
-  ipcMain.handle('delete:file', (_e, { path, recursive, approved }: { path: string; recursive?: boolean; approved?: boolean }) => {
+  ipcMain.handle('delete:file', (_e, { path, recursive, approved, token }: { path: string; recursive?: boolean; approved?: boolean; token?: unknown }) => {
     if (!host) return { ok: false, reason: 'governance not booted', impact: impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)) };
+    // F28: a delete that carries `approved:true` is a privileged self-approval — require the capability
+    // token + verified renderer. The core gate (hard rules + PDP) still applies underneath.
+    if (approved) {
+      const auth = authorizePrivileged('delete', token);
+      if ('refused' in auth) return { ok: false, reason: `delete refused: ${auth.refused}`, impact: impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)) };
+    }
     const r = governedCustodianDelete(host.governor.pdp, { agentId: 'custodian', tool: 'fs.delete', input: { path, recursive: !!recursive } }, custodianBoundary,
       { cfg: delCfg(), store: store(), trashDir: trashDir(), audit: host.governor.audit, approved: !!approved });
     return { ok: r.ok, reason: r.reason, impact: impactView(r.impact), trashedTo: r.trashedTo };
@@ -393,9 +468,13 @@ function registerIpc(): void {
 
   ipcMain.handle('delete:trash:list', () => store().list());
   ipcMain.handle('delete:trash:restore', (_e, { id }: { id: string }) => store().restore(id));
-  ipcMain.handle('delete:trash:purge', (_e, { id, confirm }: { id: string; confirm: boolean }) => {
-    if (confirm !== true) return { ok: false };   // permanent — explicit operator confirmation required
-    host?.governor.audit.append({ actor: 'operator', domain: 'governance', action: 'trash-purge', target: id, decision: 'allow', reason: 'permanent removal confirmed by operator' });
+  ipcMain.handle('delete:trash:purge', (_e, { id, confirm, token }: { id: string; confirm: boolean; token?: unknown }) => {
+    // F29: a permanent purge is irreversible. The renderer-supplied `confirm` boolean is NOT authority —
+    // require the capability token + a verified renderer bundle.
+    const auth = authorizePrivileged('purge', token);
+    if ('refused' in auth) return { ok: false, reason: `purge refused: ${auth.refused}` };
+    if (confirm !== true) return { ok: false };
+    host?.governor.audit.append({ actor: auth.operator, domain: 'governance', action: 'trash-purge', target: id, decision: 'allow', reason: 'permanent removal (token-authorized, renderer verified)' });
     return { ok: store().purge(id) };
   });
 
@@ -431,6 +510,7 @@ app.whenReady().then(async () => {
   try { const pj = JSON.parse(readFileSync(join(root, 'state', 'providers.json'), 'utf8')); if (pj.activeId) providerReg.setActive(pj.activeId); } catch { /* default anthropic */ }
   try { const cj = JSON.parse(readFileSync(join(root, 'state', 'providers.json'), 'utf8')); if (cj.costMode === 'starfish' && cj.budgetUsd > 0 && host) host.governor.tokens.setBudget('worker', { hardUsd: cj.budgetUsd, softUsd: cj.budgetUsd * 0.8 }); } catch { /* platform-managed default */ }
   restoreRegistryIfEmpty();
+  setupIpcAuthority();   // F28/F29 — mint the capability token + start the renderer-integrity guard before the window loads
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
