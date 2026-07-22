@@ -8,7 +8,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
   crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor,
-  IpcAuthority, buildRendererManifest, verifyRenderer, guardRenderer, type RendererManifest, type PrivilegedOp } from '@starfish/desktop';
+  IpcAuthority, buildRendererManifest, verifyRenderer, guardRenderer, type RendererManifest, type PrivilegedOp,
+  privilegedApproveOrDeny, privilegedResume, privilegedSetTolerance, privilegedDelete, privilegedPurge, type PrivilegedDeps } from '@starfish/desktop';
 import { watch } from 'node:fs';
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
@@ -163,16 +164,16 @@ function setupIpcAuthority(): void {
   ipcAuthority = new IpcAuthority({ operator: readOnb().operator || 'operator', integrityOk: () => rendererGuard?.ok() ?? false });
 }
 
-/** Fail-closed authorization for a privileged IPC op. Returns the MAIN-assigned operator, or null if
- *  refused (bad/missing token, or renderer tampered). The renderer supplies nothing authoritative. */
-function authorizePrivileged(op: PrivilegedOp, token: unknown): { operator: string } | { refused: string } {
-  if (!ipcAuthority) return { refused: 'ipc authority not initialised' };
-  const v = ipcAuthority.authorize({ op, token });
-  if (!v.allow) {
-    try { host?.governor.audit.append({ actor: 'system', domain: 'governance', action: `ipc-refused:${op}`, decision: 'deny', riskTier: 'high', reason: v.reason }); } catch { /* noop */ }
-    return { refused: v.reason };
-  }
-  return { operator: v.operator! };
+// F29 — the trusted path: a MAIN-process modal a renderer cannot synthesize even with code execution
+// (the Chromium-RCE residual closure). Returns true iff a human clicked the confirm button.
+function trustedConfirm(op: PrivilegedOp, detail: string): boolean {
+  try {
+    const idx = dialog.showMessageBoxSync(win ?? undefined as never, {
+      type: 'warning', buttons: ['Cancel', op === 'purge' ? 'Delete permanently' : 'Authorize'], defaultId: 0, cancelId: 0,
+      title: 'Starfish — confirm privileged action', message: 'This action needs your explicit confirmation.', detail,
+    });
+    return idx === 1;
+  } catch { return false; }   // no dialog available → fail closed
 }
 
 function createWindow(): void {
@@ -218,6 +219,26 @@ const DEV = {
 function registerIpc(): void {
   // ---- LIVE read path: every view is projected from the booted Governor (DEV is the pre-boot fallback). ----
   const G = () => host?.governor;
+
+  // F28/F29 — wire the REAL dependencies into the tested privileged-IPC logic (packages/desktop/src).
+  // The Electron handlers below are thin wrappers over privileged*() so the authorize-then-act path is
+  // the unit-tested one, not a re-implementation. Delete/purge closures are hoisted (used at call time).
+  const privilegedDeps = (): PrivilegedDeps => ({
+    authority: ipcAuthority!,
+    trustedConfirm,
+    audit: (e) => { try { host?.governor.audit.append({ actor: 'operator', domain: 'governance', ...e, riskTier: e.riskTier as never }); } catch { /* noop */ } },
+    broker: { get: (id) => broker?.get(id), resolve: (id, v, by, ops) => broker!.resolve(id, v, by, ops) },
+    enableCapability: (refId, by) => host?.governor.capabilities.approve(refId, by),
+    resumeAgent: (agentId, by) => host?.governor.tokens.resume(agentId, by),
+    setTolerance: (next, by, confirmed) => tolStore!.set(next, by, { confirmed }),
+    applyTolerance: (value) => host?.governor.pdp.setRiskTolerance(value),
+    doDelete: (path, recursive, approved) => {
+      const r = governedCustodianDelete(host!.governor.pdp, { agentId: 'custodian', tool: 'fs.delete', input: { path, recursive } }, custodianBoundary,
+        { cfg: delCfg(), store: store(), trashDir: trashDir(), audit: host!.governor.audit, approved });
+      return { ok: r.ok, reason: r.reason, value: { impact: impactView(r.impact), trashedTo: r.trashedTo } };
+    },
+    doPurge: (id) => store().purge(id),
+  });
   ipcMain.handle('gov:getCrew', () => { const g = G(); return g ? crewView(g) : DEV.crew; });
   ipcMain.handle('gov:getDecisions', (_e, limit?: number) => {
     const g = G(); if (!g) return DEV.decisions;
@@ -239,23 +260,15 @@ function registerIpc(): void {
     const intent = (req?.intent ?? {}) as { kind?: string; decisionId?: string; agentId?: string; text?: string; skill?: string };
     if (!g || !broker) return { decision: { allow: false, ask: true, reason: 'governance not booted' }, applied: false };
 
-    // F28: approve / deny / resume are PRIVILEGED. The operator is MAIN-assigned (never req.actor), the
-    // call must carry the capability token, and the broker's operator-set is enforced so a self-approval
-    // by an agent is impossible. The renderer supplies nothing authoritative here.
-    if ((intent.kind === 'approve' || intent.kind === 'deny' || intent.kind === 'resume')) {
-      const auth = authorizePrivileged(intent.kind === 'resume' ? 'approve' : intent.kind, req?.token);
-      if ('refused' in auth) return { decision: { allow: false, ask: false, reason: `privileged action refused: ${auth.refused}` }, applied: false };
-      const by = auth.operator;
-      if ((intent.kind === 'approve' || intent.kind === 'deny') && intent.decisionId) {
-        const d = broker.get(intent.decisionId);
-        const r = broker.resolve(intent.decisionId, intent.kind === 'approve' ? 'approve' : 'deny', by, [by]);
-        if (r.ok && intent.kind === 'approve' && d?.kind === 'capability' && d.refId) g.capabilities.approve(d.refId, by);  // side-effect: enable the consented capability
-        return { decision: { allow: r.ok && intent.kind === 'approve', ask: false, reason: r.reason }, applied: r.ok };
-      }
-      if (intent.kind === 'resume' && intent.agentId) {
-        g.tokens.resume(intent.agentId, by);
-        return { decision: { allow: true, ask: false, reason: `resumed ${intent.agentId}` }, applied: true };
-      }
+    // F28: approve / deny / resume are PRIVILEGED. Delegated to the unit-tested privileged*() logic —
+    // token required, operator main-assigned, broker operator-set enforced.
+    if (intent.kind === 'approve' || intent.kind === 'deny') {
+      const r = privilegedApproveOrDeny(privilegedDeps(), { decisionId: intent.decisionId, kind: intent.kind, token: req?.token });
+      return { decision: { allow: r.ok && intent.kind === 'approve', ask: false, reason: r.reason }, applied: r.ok };
+    }
+    if (intent.kind === 'resume') {
+      const r = privilegedResume(privilegedDeps(), { agentId: intent.agentId, token: req?.token });
+      return { decision: { allow: r.ok, ask: false, reason: r.reason }, applied: r.ok };
     }
     // COMM order / PADD skill -> a governed agent run. Asks during the run land in the broker and appear
     // in 'Needs your go/no-go'; approve/deny there resolves them and the run continues.
@@ -369,13 +382,11 @@ function registerIpc(): void {
   ipcMain.handle('sys:getRiskTolerance', () => ({ value: tolStore?.get() ?? 'low' }));
   ipcMain.handle('sys:setRiskTolerance', (_e, arg: { next: 'low' | 'medium'; confirmed?: boolean; token?: unknown }) => {
     if (!host || !tolStore) return { ok: false, value: 'low' as const, reason: 'governance not booted' };
-    // F28: raising risk tolerance is privileged (it widens what auto-runs). Require the capability token
-    // and a verified renderer; the `confirmed` flag alone — which the renderer controls — is not authority.
-    const auth = authorizePrivileged('setRiskTolerance', arg?.token);
-    if ('refused' in auth) return { ok: false, value: tolStore.get(), reason: `refused: ${auth.refused}` };
-    const r = tolStore.set(arg?.next, auth.operator, { confirmed: arg?.confirmed });
-    if (r.ok) { host.governor.pdp.setRiskTolerance(r.value); persistTolerance(); }
-    return r;
+    // F28: raising risk tolerance is privileged (widens what auto-runs). Delegated to the tested logic —
+    // token + verified renderer required; the renderer-controlled `confirmed` flag alone is not authority.
+    const r = privilegedSetTolerance(privilegedDeps(), { next: arg?.next, confirmed: arg?.confirmed, token: arg?.token });
+    if (r.ok) persistTolerance();
+    return { ok: r.ok, value: r.value ?? tolStore.get(), reason: r.reason };
   });
 
   // ---- readiness: the 'total stop' issues that block real work. Surfaced in the Ready Room + a forced
@@ -455,28 +466,18 @@ function registerIpc(): void {
 
   ipcMain.handle('delete:file', (_e, { path, recursive, approved, token }: { path: string; recursive?: boolean; approved?: boolean; token?: unknown }) => {
     if (!host) return { ok: false, reason: 'governance not booted', impact: impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)) };
-    // F28: a delete that carries `approved:true` is a privileged self-approval — require the capability
-    // token + verified renderer. The core gate (hard rules + PDP) still applies underneath.
-    if (approved) {
-      const auth = authorizePrivileged('delete', token);
-      if ('refused' in auth) return { ok: false, reason: `delete refused: ${auth.refused}`, impact: impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)) };
-    }
-    const r = governedCustodianDelete(host.governor.pdp, { agentId: 'custodian', tool: 'fs.delete', input: { path, recursive: !!recursive } }, custodianBoundary,
-      { cfg: delCfg(), store: store(), trashDir: trashDir(), audit: host.governor.audit, approved: !!approved });
-    return { ok: r.ok, reason: r.reason, impact: impactView(r.impact), trashedTo: r.trashedTo };
+    // F28/F29 — delegated: an `approved` (destructive) delete requires token + trusted confirmation; the
+    // core gate (hard rules + PDP) still applies underneath via doDelete.
+    const r = privilegedDelete(privilegedDeps(), { path, recursive, approved, token });
+    const v = (r.value ?? {}) as { impact?: unknown; trashedTo?: string };
+    return { ok: r.ok, reason: r.reason, impact: v.impact ?? impactView(assessDeletion({ path }, delCfg(), realFsProbe(), custodianBoundary)), trashedTo: v.trashedTo };
   });
 
   ipcMain.handle('delete:trash:list', () => store().list());
   ipcMain.handle('delete:trash:restore', (_e, { id }: { id: string }) => store().restore(id));
-  ipcMain.handle('delete:trash:purge', (_e, { id, confirm, token }: { id: string; confirm: boolean; token?: unknown }) => {
-    // F29: a permanent purge is irreversible. The renderer-supplied `confirm` boolean is NOT authority —
-    // require the capability token + a verified renderer bundle.
-    const auth = authorizePrivileged('purge', token);
-    if ('refused' in auth) return { ok: false, reason: `purge refused: ${auth.refused}` };
-    if (confirm !== true) return { ok: false };
-    host?.governor.audit.append({ actor: auth.operator, domain: 'governance', action: 'trash-purge', target: id, decision: 'allow', reason: 'permanent removal (token-authorized, renderer verified)' });
-    return { ok: store().purge(id) };
-  });
+  ipcMain.handle('delete:trash:purge', (_e, { id, confirm, token }: { id: string; confirm: boolean; token?: unknown }) =>
+    // F29 — delegated: token + MANDATORY trusted-path confirmation (the renderer-RCE residual closure).
+    privilegedPurge(privilegedDeps(), { id, confirm, token }));
 
   // ---- onboarding ----
   ipcMain.handle('onboarding:get', () => { const o = readOnb(); return { done: !!o.done, operator: o.operator, theme: o.theme }; });
