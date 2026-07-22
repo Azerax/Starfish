@@ -7,12 +7,13 @@ import { Onboarding } from './screens/Onboarding';
 import { Settings } from './screens/Settings';
 import { Padd } from './screens/Padd';
 import { Comm } from './screens/Comm';
+import { Home } from './screens/Home';
 import { ReadyRoom } from './screens/ReadyRoom';
 import { Activity } from './screens/Activity';
 import { getBridge } from './bridge/useBridge';
 import type { ReadinessBlocker } from './bridge/types';
 
-type View = 'loading' | 'onboard' | 'bridge' | 'padd' | 'comm' | 'settings' | 'readyroom' | 'activity';
+type View = 'loading' | 'onboard' | 'home' | 'bridge' | 'padd' | 'comm' | 'settings' | 'readyroom' | 'activity';
 
 function Clock() {
   const [t, setT] = useState(() => new Date().toTimeString().slice(0, 8));
@@ -105,7 +106,7 @@ function Shell() {
   const [dismissed, setDismissed] = useState(false);
   const sigRef = useRef('');
 
-  useEffect(() => { getBridge().getOnboarding().then((s) => setView(s.done ? 'bridge' : 'onboard')).catch(() => setView('onboard')); }, []);
+  useEffect(() => { getBridge().getOnboarding().then((s) => setView(s.done ? 'home' : 'onboard')).catch(() => setView('onboard')); }, []);
 
   useEffect(() => {
     let live = true;
@@ -124,14 +125,15 @@ function Shell() {
   }, []);
 
   if (view === 'loading') return null;
-  if (view === 'onboard') return <Onboarding onDone={() => setView('bridge')} />;
+  if (view === 'onboard') return <Onboarding onDone={() => setView('home')} />;
 
   const stops = blockers.filter((b) => b.severity === 'stop');
   const showModal = stops.length > 0 && !dismissed;
   const resolve = (v: string) => { setDismissed(true); setView(v as View); };
 
   let screen;
-  if (view === 'settings') screen = <Settings onBack={() => setView('bridge')} />;
+  if (view === 'home') screen = <Home go={setView} />;   // the calm landing surface (no cockpit chrome)
+  else if (view === 'settings') screen = <Settings onBack={() => setView('bridge')} />;
   else if (view === 'padd') screen = <Padd onBack={() => setView('bridge')} />;
   else if (view === 'comm') screen = <Comm onBack={() => setView('bridge')} />;
   else if (view === 'readyroom') screen = <><Header go={setView} alerts={blockers.length} /><ReadyRoom blockers={blockers} onBack={() => setView('bridge')} go={resolve} /></>;
