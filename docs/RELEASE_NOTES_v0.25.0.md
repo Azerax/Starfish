@@ -9,12 +9,12 @@
 
 **Date:** 2026-07-20 (draft) · **Theme:** we turned the audit on ourselves. A systematic adversarial
 self-audit of Starfish's own governance core — comparing every stated guarantee against the code that
-should enforce it — surfaced a batch of real gaps. This release closes nineteen of them, each with a
+should enforce it — surfaced a batch of real gaps. This release closes twenty-six of them, each with a
 regression test that plants the actual attack.
 
 The honest framing up front: **finding these is the system working, not failing.** A governance product
 that cannot show you where its own edges were is not one to trust with a boundary. Every fix below ships
-with a test that would have caught the gap, and the suite grew from 602 to 632 passing as a result.
+with a test that would have caught the gap, and the suite grew from 602 to 656 passing as a result.
 
 ---
 
@@ -104,16 +104,43 @@ empty result for "file absent" and "file corrupt." Truncating a state file silen
 quarantine/rejection disposition with no signal — a censorship primitive. Corrupt or wrong-shape state now
 drops the system into **safe mode** with a critical audit entry; absent state is still a normal fresh boot.
 
+### Per-agent capability allowlists are now enforced
+An agent's own `allowedTools` list was declared, shown in the UI as "deny-by-default otherwise", and
+**never checked** — only the inverse (does the *tool* allow this agent). So a read-only agent could call
+any `*`-granted tool, and "this agent reads memory only" was cosmetic. The agent's allowlist is now
+enforced deny-by-default; an agent that declares no list stays unrestricted (backward-compatible), and
+the seed's own agents were reconciled so their lists cover what they legitimately call.
+
+### Policy adjudicates the declared path, not a decoy
+The policy resource was resolved as the *first string-valued input in JSON order*, not the tool's
+declared path parameter — so a call could carry a benign decoy first (`{note:'/ok', path:'/etc/passwd'}`)
+and be judged against a rule scoped to the decoy. It now resolves from the declared path parameter.
+
+### Integrity fails closed on a stripped manifest
+A registered capability whose per-file hash manifest was removed (a tamper to *disable* tamper-detection
+by deleting data rather than forging it) passed integrity unconditionally. It now fails closed and
+auto-quarantines — intake always writes a manifest, so its absence is an anomaly, not a valid state.
+
+### Enforcement posture is explicit and audited
+The optional enforcement gates (verify-before-invoke, task-binding, scope non-deviation) could be off
+**silently** — an operator could believe a control was enforced when it was dead code. Boot now records
+the actual posture, emits it on the audit chain, and exposes it on the governor. Verify-before-invoke is
+now on by default in the shipped roots (it only fires on calls that claim a capability). Scope
+non-deviation is honestly reported **off** — nothing issues a scope contract at runtime yet, so it is
+displayed off rather than pretended on; a contract issuer is the tracked path to enabling it.
+
 ### Smaller correctness fixes
 The evidence gate now matches recorded artifacts **exactly** (a claim about `config.ts` is no longer
 "backed" by a write to `myconfig.ts`); a signed source-revocation is stored in the same normalized form
-all lookups use, so a "remote kill" that reported success actually blocks the source.
+all lookups use, so a "remote kill" that reported success actually blocks the source; the
+catastrophic-shell denylist gained the interpreter, disk-device, and cwd-wipe bypasses it was missing;
+and an absent HTTP Host header on the sidecar now fails closed.
 
 ---
 
 ## How to verify
 `npm run ci` (typecheck + unit + conformance + determinism + dependency-direction lint + secret/IP scans +
-SBOM). This batch: **99 test files, 632 passed, 3 skipped** — including the new self-audit regression
+SBOM). This batch: **99 test files, 656 passed, 3 skipped** — including the new self-audit regression
 tests (`selfaudit-fixes.conformance.test.ts` plus additions to the netguard, sources, memory, wiki,
 boundary, pdp-risk, and boot-persistence suites). Every fix above has a test that plants the actual
 attack it refuses.
