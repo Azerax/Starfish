@@ -154,6 +154,47 @@ describe('D7 / T2 — injection is screened on the WRITE path', () => {
   });
 });
 
+describe('F15 — recordDecision is sole-writer guarded and cannot cite non-existent evidence', () => {
+  it('a foreign actor cannot record a decision when a sole writer is configured', () => {
+    const m = new GovernedMemory(
+      new AuditLog(join(mkdtempSync(join(tmpdir(), 'sf-mem-')), 'a.jsonl')),
+      new PolicyEngine([]), { soleWriter: 'herodotus' },
+    );
+    expect(() => m.recordDecision({ decision: 'x', reason: 'r', alternatives: [], status: 'accepted', provenance: { evidence: [] } }, 'agent.rogue'))
+      .toThrow(GovernanceError);
+  });
+  it('a decision citing evidence that does not exist is refused (invariant 2 — no self-declared provenance)', () => {
+    const m = mem();
+    expect(() => m.recordDecision({ decision: 'Grant net egress', reason: 'approved by Scott', alternatives: [], status: 'accepted', provenance: { evidence: ['ev_does_not_exist'] } }))
+      .toThrow(GovernanceError);
+  });
+  it('a decision citing real evidence is recorded', () => {
+    const m = mem();
+    const e = m.addEvidence({ source: 'meeting', author: 'herodotus', statement: 'need ACID', confidence: 0.9 });
+    const d = m.recordDecision({ decision: 'Use PostgreSQL', reason: 'ACID', alternatives: [], status: 'accepted', provenance: { evidence: [e.id] } });
+    expect(m.getDecision(d.id)?.decision).toContain('PostgreSQL');
+  });
+});
+
+describe('F18 — promote and addConflictingEvidence are sole-writer guarded', () => {
+  it('a foreign actor cannot promote or add conflicts under a sole writer', () => {
+    const audit = new AuditLog(join(mkdtempSync(join(tmpdir(), 'sf-mem-')), 'a.jsonl'));
+    const allowHerodotus = { id: 'p', subject: 'agent:herodotus', action: 'tool:memory.promote', resource: '*', effect: 'allow' as const };
+    const m = new GovernedMemory(audit, new PolicyEngine([allowHerodotus]), { soleWriter: 'herodotus' });
+    const ids = [
+      m.addEvidence({ source: 'u', author: 'herodotus', statement: 's', confidence: 0.96, trust: 'trusted', sourceId: 's1' }),
+      m.addEvidence({ source: 'd', author: 'herodotus', statement: 's2', confidence: 0.95, trust: 'trusted', sourceId: 's2' }),
+      m.addEvidence({ source: 'c', author: 'herodotus', statement: 's3', confidence: 0.95, trust: 'trusted', sourceId: 's3' }),
+    ].map((e) => e.id);
+    const c = m.proposeClaim('s', ids, 'herodotus');
+    m.evaluateClaim(c.id, 'low');
+    expect(() => m.promote(c.id, { type: 't', name: 'n', properties: {} }, 'agent.rogue')).toThrow(GovernanceError);
+    expect(() => m.addConflictingEvidence(c.id, ids[0], 'agent.rogue')).toThrow(GovernanceError);
+    // The designated writer still works.
+    expect(m.promote(c.id, { type: 't', name: 'n', properties: {} }, 'herodotus').id).toBeTruthy();
+  });
+});
+
 describe('T9 — approval binds a content hash; a post-approval swap is caught at promotion', () => {
   it('adding conflicting evidence after approval voids the approval', () => {
     const m = mem([ALLOW]);

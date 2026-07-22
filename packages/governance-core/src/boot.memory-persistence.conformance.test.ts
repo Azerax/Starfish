@@ -117,3 +117,22 @@ describe('self-integrity covers the memory store', () => {
     expect(governanceArtifacts(dir, state).map((a) => a.rel)).toContain('state/memory.snapshot.json');
   });
 });
+
+describe('F11 — corrupt tasks/capabilities/services restore into safe mode, not silent empty', () => {
+  it('a truncated capabilities.json enters safe mode instead of erasing quarantine dispositions', () => {
+    const { dir, state } = gdir();
+    const audit = join(dir, 'audit.jsonl');
+    const g1 = loadGovernor(dir, audit, { stateDir: state });
+    persistGovernor(g1, state);
+    // Corrupt the persisted capabilities ledger the way a tamper/torn-write would.
+    writeFileSync(join(state, 'capabilities.json'), '[{"id":"x", not valid json');
+    const g2 = loadGovernor(dir, audit, { stateDir: state });
+    expect(g2.safeMode).toBe(true);
+    expect(g2.audit.recent(50).some((e) => e.action === 'state-corrupt')).toBe(true);
+  });
+  it('absent state files remain a normal fresh boot', () => {
+    const { dir, state } = gdir();
+    const g = loadGovernor(dir, join(dir, 'audit.jsonl'), { stateDir: state });
+    expect(g.safeMode).toBe(false);
+  });
+});

@@ -224,14 +224,15 @@ export class GovernedMemory {
 
   /** Conflicting evidence weakens a candidate claim (defeasible). The penalty is capped inside the
    *  aggregation so a flood of conflicts cannot assassinate a true claim (T8). */
-  addConflictingEvidence(claimId: string, evidenceId: string): void {
+  addConflictingEvidence(claimId: string, evidenceId: string, actor = 'system'): void {
+    this.guardWriter(actor, 'claim:conflict');   // F18 — was an unguarded write path
     const c = this.claims.get(claimId);
     const e = this.evidence.get(evidenceId);
     if (!c || !e) return;
     if (!c.conflictedBy.includes(evidenceId)) c.conflictedBy.push(evidenceId);
     this.recompute(c);
     this.audit.append({
-      actor: 'system', domain: 'memory', action: 'claim:conflict', target: claimId,
+      actor, domain: 'memory', action: 'claim:conflict', target: claimId,
       reason: `confidence->${c.confidence.toFixed(2)}`,
     });
   }
@@ -316,7 +317,8 @@ export class GovernedMemory {
   /** Layer 4 — only an APPROVED claim becomes canonical knowledge, carrying provenance.
    *  T9 — the approval binding is re-verified here: if the evidence changed between approval and
    *  promotion, the approval is void and the claim returns to candidate for re-gating. */
-  promote(claimId: string, entity: { type: string; name: string; properties: Record<string, unknown> }): Entity {
+  promote(claimId: string, entity: { type: string; name: string; properties: Record<string, unknown> }, actor = 'herodotus'): Entity {
+    this.guardWriter(actor, 'knowledge:promote');   // F18 — was an unguarded write path
     const c = this.claims.get(claimId);
     if (!c || c.status !== 'approved') throw new Error('cannot promote a non-approved claim');
 
@@ -338,11 +340,25 @@ export class GovernedMemory {
     return frozenCopy(ent);
   }
 
-  /** Layer 7 — Decision Registry: governed decisions with rationale + provenance ("why X?"). */
-  recordDecision(d: Omit<DecisionRecord, 'id'>): DecisionRecord {
+  /** Layer 7 — Decision Registry: governed decisions with rationale + provenance ("why X?").
+   *  F15 — a decision is an ALWAYS-high-stakes entity. This was an unguarded, actor-less write with
+   *  self-declared provenance: a caller could forge a canonical decision citing evidence that does not
+   *  exist. Now sole-writer-guarded, actor-attributed, and every cited evidence id is verified to exist
+   *  (invariant 2 — provenance is never self-declared). */
+  recordDecision(d: Omit<DecisionRecord, 'id'>, actor = 'herodotus'): DecisionRecord {
+    this.guardWriter(actor, 'decision:record');
+    const cited = d.provenance?.evidence ?? [];
+    const missing = cited.filter((id) => !this.evidence.has(id));
+    if (missing.length) {
+      this.audit.append({
+        actor, domain: 'memory', action: 'decision:reject', decision: 'deny', riskTier: 'high',
+        reason: `decision cites non-existent evidence: ${missing.join(', ')}`,
+      });
+      throw new GovernanceError(`decision provenance references unknown evidence: ${missing.join(', ')}`);
+    }
     const dec: DecisionRecord = { ...d, id: sid('dec') };
     this.decisions.set(dec.id, dec);
-    this.audit.append({ actor: 'governance', domain: 'memory', action: 'decision:record', target: dec.id, reason: d.decision });
+    this.audit.append({ actor, domain: 'memory', action: 'decision:record', target: dec.id, reason: d.decision });
     return frozenCopy(dec);
   }
 

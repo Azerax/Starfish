@@ -39,6 +39,13 @@ export function estimateTokens(s: string): number {
   return Math.ceil(s.length / 4);
 }
 
+// F22: fold any literal envelope marker in served content so an attacker cannot forge our fence.
+// Case-insensitive, tolerant of internal whitespace, and covers the external-data fence taint.ts uses.
+const MARKER_RE = /<<\s*(?:END\s+)?UNTRUSTED\s+(?:MEMORY|EXTERNAL\s+DATA)[^>]*>>/gi;
+function neutralizeMarkers(s: string): string {
+  return s.replace(MARKER_RE, '[neutralized marker]');
+}
+
 function rankOfPage(c: unknown): number {
   return (typeof c === 'string' && c in CONFIDENTIALITY_RANK)
     ? CONFIDENTIALITY_RANK[c as Confidentiality]
@@ -128,10 +135,16 @@ function serve(
       .join('\n');
     reasons.push(...screen.reasons);
   }
+  // F22: neutralize any occurrence of the envelope delimiters INSIDE the body. Without this, a page
+  // containing a literal `<<END UNTRUSTED MEMORY>>` line closes the envelope early, placing whatever
+  // follows OUTSIDE the "treat as data only / inert" fence from the consumer's parse view — defeating
+  // the whole point of the delimiter. Fold the markers so they can only appear as our real fence.
+  const fenced = neutralizeMarkers(body);
+  if (fenced !== body) { body = fenced; reasons.push('embedded memory delimiter neutralized'); }
   return {
     withheld: false,
     body: `${MEMORY_DATA_OPEN}\n${body}\n${MEMORY_DATA_CLOSE}`,
-    redacted: !screen.ok,
+    redacted: !screen.ok || fenced !== v.body,
     reasons,
   };
 }

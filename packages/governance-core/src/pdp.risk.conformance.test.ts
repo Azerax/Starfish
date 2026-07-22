@@ -71,3 +71,30 @@ describe('TC-2.6 — egress containment', () => {
     expect(d.allow).toBe(false); expect(d.reason).toContain('egress-blocked');
   });
 });
+
+describe('self-audit fixes — F8 / F9 / F10', () => {
+  it('F8: an explicit ask policy on a LOW tool is honoured (not silently auto-allowed)', () => {
+    const p = pdp([{ id: 'r', category: 'read', pathParams: ['path'], allowedAgents: '*' }],
+      [{ id: 'p', subject: 'agent:a', action: 'tool:r', resource: '*', effect: 'ask' }] as never);
+    const d = p.decide('ingress', { agentId: 'a', tool: 'r', input: { path: '/tmp/x' } }, BS);
+    expect(d.allow).toBe(false);
+    expect(d.ask).toBe(true);
+  });
+
+  it('F10: a tool with an UNKNOWN category and no riskTier fails safe to critical (human), not low', () => {
+    const p = pdp([{ id: 'weird', category: 'teleport' as never, pathParams: [], allowedAgents: '*' }]);
+    const d = p.decide('ingress', { agentId: 'a', tool: 'weird', input: {} }, BS);
+    expect(d.allow).toBe(false);          // was: auto-allowed as low
+    expect(d.riskTier).toBe('critical');
+  });
+
+  it('F9: a meta tool that declares a path gets a boundary check (no null-mode skip)', () => {
+    const p = pdp([{ id: 'm', category: 'meta', pathParams: ['path'], allowedAgents: '*' }],
+      [{ id: 'p', subject: 'agent:a', action: 'tool:m', resource: '*', effect: 'allow' }] as never);
+    // a path OUTSIDE the boundary must be denied even for a meta tool
+    const d = p.decide('ingress', { agentId: 'a', tool: 'm', input: { path: '/etc/shadow' } },
+      { visibility: ['/tmp'], write: ['/tmp'] });
+    expect(d.allow).toBe(false);
+    expect(d.reason).toContain('boundary');
+  });
+});

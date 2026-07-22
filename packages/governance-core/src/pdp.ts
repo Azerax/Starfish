@@ -126,7 +126,11 @@ export class PDP {
         const sv = this.scopeGate.provider.check(call, paths);
         if (!sv.ok) return { allow: false, riskTier: 'high', reason: `scope-deviation${sv.deviation ? ` (${sv.deviation})` : ''}: ${sv.reason}` };
       }
-      const mode = tool.category === 'read' ? 'read' : tool.category === 'meta' ? null : 'write';
+      // F9: 'meta' previously skipped containment + secret checks entirely (mode=null). Harmless while
+      // every meta tool declares pathParams:[], but a future meta tool that takes a path would get zero
+      // boundary/secret checking. Treat any path a meta tool DOES declare as a write (the strict, fail-
+      // safe direction); tools with no pathParams are unaffected because the loop never runs.
+      const mode = tool.category === 'read' ? 'read' : 'write';
       if (mode) {
         for (const key of tool.pathParams) {
           const v = call.input[key];
@@ -164,6 +168,9 @@ export class PDP {
     if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier, score };
     if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier, score };
     if (tier === 'critical') return { allow: false, ask: true, reason: 'critical — human approval required (no auto-allow)', riskTier: tier, score };
+    // F8: an explicit operator 'ask' rule must be honoured even for a low-tier tool. Previously the
+    // low-tier auto-allow below returned first, silently discarding an operator's request for review.
+    if (pol === 'ask') return { allow: false, ask: true, reason: 'policy requires human review (ask)', riskTier: tier, score };
     if (tier === 'low') return { allow: true, reason: 'low-risk auto-allow', riskTier: tier, score };
     if (pol === 'allow') return { allow: true, reason: `${tier}-risk allowed by policy`, riskTier: tier, score };
     const ceiling = this.riskTolerance === 'medium' ? 70 : 30;

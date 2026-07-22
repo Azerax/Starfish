@@ -26,8 +26,11 @@ export interface ClaimVerdict { ok: boolean; findings: ClaimFinding[]; }
 const norm = (s: string) => s.trim().toLowerCase();
 const base = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p;
 const hasArtifact = (ev: TurnEvidence, subj: string) => {
+  // F25: an evidence gate must match EXACTLY, never by substring. `n.includes(s)` let a claim of
+  // "created config.ts" be backed by a recorded write to "myconfig.ts" — a different file. Match on
+  // full path, basename equality, or a path-suffix on a separator boundary; nothing looser.
   const s = norm(subj);
-  return ev.artifacts.some((a) => { const n = norm(a); return n === s || norm(base(a)) === s || n.endsWith('/' + s) || n.includes(s); });
+  return ev.artifacts.some((a) => { const n = norm(a); return n === s || norm(base(a)) === s || norm(base(a)) === norm(base(s)) || n.endsWith('/' + s); });
 };
 
 /** Conservative, deterministic extraction. Fires only on clear claim shapes (low false-positive). */

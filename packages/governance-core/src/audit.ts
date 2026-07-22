@@ -9,6 +9,21 @@ import { sha256 } from './hash';
 import { redactSecrets } from './secrets';
 import type { AuditDomain, AuditEvent, RiskTier } from './types';
 
+// F26: recursively redact secret material from any string value inside an audit `detail` object,
+// so a caller cannot leak a token by placing it in `detail` instead of `reason`/`target`. Bounded
+// depth to avoid pathological nesting.
+function redactDeep(v: unknown, depth = 0): unknown {
+  if (depth > 6) return v;
+  if (typeof v === 'string') return redactSecrets(v).redacted;
+  if (Array.isArray(v)) return v.map((x) => redactDeep(x, depth + 1));
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = redactDeep(val, depth + 1);
+    return out;
+  }
+  return v;
+}
+
 type NewEvent = {
   actor: string; domain: AuditDomain; action: string;
   target?: string; decision?: 'allow' | 'deny'; reason?: string;
@@ -92,6 +107,9 @@ export class AuditLog {
     const safe: NewEvent = { ...e };   // risk 37: never write secret material into the audit
     if (typeof safe.reason === 'string') safe.reason = redactSecrets(safe.reason).redacted;
     if (typeof safe.target === 'string') safe.target = redactSecrets(safe.target).redacted;
+    // F26: `detail` is a free-form Record that many callers populate; it was written verbatim, so a
+    // secret placed there bypassed redaction. Redact every string value (recursively) too.
+    if (safe.detail && typeof safe.detail === 'object') safe.detail = redactDeep(safe.detail) as Record<string, unknown>;
     const base = { ts: new Date().toISOString(), seq: this.seq, prevHash: this.prevHash, ...safe };
     const hash = sha256(this.prevHash + JSON.stringify(base));
     const ev = { ...base, hash } as AuditEvent;

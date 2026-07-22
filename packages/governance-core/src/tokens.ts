@@ -12,8 +12,15 @@ export class TokenGovernor {
   setBudget(agentId: string, b: Budget): void { this.budgets.set(agentId, b); }
 
   record(agentId: string, addUsd: number, addTokens: number): BudgetStatus {
+    // F20: usage may only ever INCREASE. A provider (or a redirected/compromised endpoint) that
+    // reports negative or non-finite usage must not be able to subtract from the meter and walk an
+    // agent back below its hard limit — that would defeat the pause-at-hard-limit control entirely.
+    // Clamp to a finite, non-negative delta. This mirrors score.ts's NaN discipline, which this
+    // module previously lacked.
+    const safeUsd = Number.isFinite(addUsd) && addUsd > 0 ? addUsd : 0;
+    const safeTokens = Number.isFinite(addTokens) && addTokens > 0 ? addTokens : 0;
     const u = this.usage.get(agentId) ?? { usd: 0, tokens: 0 };
-    u.usd += addUsd; u.tokens += addTokens; this.usage.set(agentId, u);
+    u.usd += safeUsd; u.tokens += safeTokens; this.usage.set(agentId, u);
     const b = this.budgets.get(agentId);
     if (!b) return 'ok';
     const hard = (b.hardUsd !== undefined && u.usd >= b.hardUsd) || (b.hardTokens !== undefined && u.tokens >= b.hardTokens);
