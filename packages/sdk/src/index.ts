@@ -45,7 +45,10 @@ export function createGovernance(opts: GovernanceOptions): Governance {
   assertSafeRoot(opts.root);                                            // risk 15
   ensureRootSchema(opts.root);                                          // risk 80
   const stateDir = join(opts.root, 'state');
-  const governor = loadGovernor(join(opts.root, 'governance'), join(opts.root, 'audit.jsonl'), { stateDir }); // fail-closed on bad config
+  // F0 phase 2: wire verify-before-invoke ON by default (skillsRoot). It only fires on calls that carry
+  // a capabilityId, so ordinary tool calls are unaffected — but a call that CLAIMS a capability is now
+  // re-verified against its vetted manifest at decide-time in the shipped sidecar path.
+  const governor = loadGovernor(join(opts.root, 'governance'), join(opts.root, 'audit.jsonl'), { stateDir, skillsRoot: join(opts.root, 'skills') }); // fail-closed on bad config
   restoreGovernor(governor, stateDir);
   const broker = new DecisionBroker(governor.audit, join(stateDir, 'decisions.json'));
   if (!governor.audit.verify()) governor.pdp.setSafeMode(true, 'audit chain integrity check failed (tamper-evident)');   // risk 8: fail closed on tamper

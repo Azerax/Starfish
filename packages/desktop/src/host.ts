@@ -9,7 +9,9 @@ export interface Host { governor: Governor; daemon: PdpDaemon; persist(): void; 
 export interface HostOptions { governanceDir: string; auditPath: string; stateDir: string; projectRoot: string; listenPath: string; }
 
 export async function createHost(opts: HostOptions): Promise<Host> {
-  const governor = loadGovernor(opts.governanceDir, opts.auditPath, { stateDir: opts.stateDir }); // throws on bad config (fail-closed boot)
+  // F0 phase 2: verify-before-invoke ON by default (skillsRoot). Fires only on calls carrying a
+  // capabilityId, so ordinary agent tool calls are unaffected.
+  const governor = loadGovernor(opts.governanceDir, opts.auditPath, { stateDir: opts.stateDir, skillsRoot: join(opts.projectRoot, 'skills') }); // throws on bad config (fail-closed boot)
   const boundaryFor = (agentId: string): BoundarySet => boundaryForAgent({
     projectRoot: opts.projectRoot,
     workspace: join(opts.projectRoot, 'agents', agentId, 'workspace'),

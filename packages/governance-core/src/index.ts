@@ -65,4 +65,4 @@ export { screenIngress, egressTaintGate, taintPropagate, taintedSignal, type Sig
 export { SourceRegistry, normalizeSource, defaultVerifier, blocklistPayloadHash, type SignedBlocklist, type SourceRef, type SourceKind, type SourceStatus, type SourceRecord, type SourceVerification, type SourceVerifier } from './sources';
 export { merkleRoot, auditRoot, Anchorer, NoopAnchor, fileAnchor, customAnchor, makeAnchorAdapter, type AnchorAdapter, type AnchorRecord, type AnchorReceipt, type AnchorConfig } from './anchor';
 export { loadGovernor, persistGovernor, restoreGovernor, anchorAudit } from './boot';
-export type { Governor } from './boot';
+export type { Governor, EnforcementPosture } from './boot';

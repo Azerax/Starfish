@@ -24,10 +24,22 @@ import { readFileSync, existsSync } from 'node:fs';
 import type { AuditEvent } from './types';
 import type { ToolDef, AgentDef } from './types';
 
+// F0 (phase 1): the actual enforcement posture, recorded so it is never SILENT. The optional gates can
+// legitimately be off (e.g. scope non-deviation has no contract issuer yet), but "off" must be a
+// visible, audited fact an operator can read — not an invisible absence that reads as "enforced".
+export interface EnforcementPosture {
+  integrity: boolean;            // verify-before-invoke wired (needs skillsRoot)
+  taskBinding: boolean;          // "no task, no tool" wired
+  scopeNonDeviation: boolean;    // D1–D4 scope contract enforcement wired (needs a contract issuer)
+  selfIntegrity: boolean;        // operator-signed self-integrity manifest verified at boot
+  secretGatekeeper: string;      // the identity that may write secret files
+}
+
 export interface Governor {
   pdp: PDP; tools: Registry<ToolDef>; agents: Registry<AgentDef>; audit: AuditLog;
   tasks: TaskLedger; tokens: TokenGovernor; memory: GovernedMemory; wiki: EvidenceWiki; router: MessageRouter;
-  capabilities: CapabilityLedger; monitor: SecurityMonitor; services: ServiceRegistry; anchorer: Anchorer; safeMode: boolean;
+  capabilities: CapabilityLedger; monitor: SecurityMonitor; services: ServiceRegistry; anchorer: Anchorer;
+  posture: EnforcementPosture; safeMode: boolean;
 }
 
 export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number } }): Governor {
@@ -51,7 +63,16 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
   const anchorer = opts?.anchor
     ? new Anchorer(makeAnchorAdapter({ backend: opts.anchor.backend ?? 'noop', filePath: opts.anchor.filePath }), { enabled: opts.anchor.enabled, everyNEvents: opts.anchor.everyNEvents }, audit)
     : new Anchorer(NoopAnchor, { enabled: false }, audit);   // OFF by default — zero overhead for personal use
-  const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, wiki, router, capabilities, monitor, services, anchorer, safeMode: false };
+  // F0 phase 1: record the ACTUAL enforcement posture and audit it, so an off gate is a visible fact.
+  const posture: EnforcementPosture = {
+    integrity: !!integrity,
+    taskBinding: !!taskBinding,
+    scopeNonDeviation: false,          // no runtime contract issuer yet — honestly OFF (F0 phase 4)
+    selfIntegrity: !!opts?.selfIntegrity,
+    secretGatekeeper: opts?.secretGatekeeper ?? 'toby',
+  };
+  audit.append({ actor: 'system', domain: 'governance', action: 'enforcement-posture', reason: 'active enforcement gates at boot', detail: { ...posture } });
+  const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, wiki, router, capabilities, monitor, services, anchorer, posture, safeMode: false };
   // A16/A17: a torn/corrupt/truncated audit is a deliberate safe-mode, not a crash.
   if (!audit.integrity.ok) {
     g.safeMode = true;
