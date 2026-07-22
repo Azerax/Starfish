@@ -6,6 +6,7 @@ export { WorktreeRunner, type AgentRunner, type AgentRunSpec, type RunPlan } fro
 export { realFsProbe, TrashStore, trashOps, governedCustodianDelete, type TrashEntry } from './fsdelete';
 export { IpcAuthority, type PrivilegedOp, type AuthorityRequest, type AuthorityVerdict, type IpcAuthorityDeps } from './ipcauthority';
 export { buildRendererManifest, verifyRenderer, guardRenderer, rendererAssets, type RendererManifest, type IntegrityResult } from './rendererintegrity';
+export { privilegedApproveOrDeny, privilegedResume, privilegedSetTolerance, privilegedDelete, privilegedPurge, type PrivilegedDeps, type PrivilegedResult } from './privilegedipc';
 export { CALM, FLEET, OPS, ThemeRegistry, displayName, label, type Theme, type ThemeAssets } from './theme';
 export type {
   CrewMemberView, DecisionLogEntry, Verdict, BudgetView, MonitorView, CapabilityView, TaskView,
