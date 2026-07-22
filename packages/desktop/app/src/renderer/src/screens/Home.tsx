@@ -20,18 +20,20 @@ function greeting(d = new Date()): string {
   return 'Good evening.';
 }
 
-// Turn a governed decision into a plain past-tense line — "Drafted the Q3 summary", not "ingress:fs.write".
-function humanize(d: DecisionLogEntry): string {
+// Turn a REAL tool action into a plain past-tense line — "Wrote notes.md", not "ingress:fs.write".
+// Returns null for governance-internal bookkeeping (monitor sweeps, auto-approvals) so the calm feed
+// shows what the agent DID for you, not the machinery. The full record is one click away in the cockpit.
+function humanize(d: DecisionLogEntry): string | null {
   const t = (d.tool || '').toLowerCase();
   const name = d.target ? d.target.split(/[\\/]/).pop() : undefined;
-  if (t.includes('fs.write') || t.includes('write')) return name ? `Wrote ${name}` : 'Wrote a file';
-  if (t.includes('fs.read') || t.includes('read')) return name ? `Read ${name}` : 'Read a file';
+  if (t.includes('fs.write') || t.endsWith(':write') || t === 'write') return name ? `Wrote ${name}` : 'Wrote a file';
+  if (t.includes('fs.read') || t.endsWith(':read') || t === 'read') return name ? `Read ${name}` : 'Read a file';
   if (t.includes('fs.list') || t.includes('list')) return 'Listed a directory';
   if (t.includes('git')) return 'Committed changes';
-  if (t.includes('run_tests') || t.includes('test')) return 'Ran the tests';
+  if (t.includes('run_tests') || t === 'test') return 'Ran the tests';
   if (t.includes('net')) return 'Fetched from the network';
   if (t.includes('shell')) return 'Ran a command';
-  return d.reason ? d.reason.slice(0, 60) : d.tool || 'Did some work';
+  return null;   // not a user-facing tool action — omit from the calm feed
 }
 
 export function Home({ go }: { go: (v: 'bridge' | 'activity' | 'comm') => void }) {
@@ -39,7 +41,7 @@ export function Home({ go }: { go: (v: 'bridge' | 'activity' | 'comm') => void }
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<ActionResult | null>(null);
-  const [recent, setRecent] = useState<DecisionLogEntry[]>([]);
+  const [recent, setRecent] = useState<{ id: string; ts: string; text: string }[]>([]);
   const [awaiting, setAwaiting] = useState<DecisionLogEntry[]>([]);
 
   async function start() {
@@ -56,8 +58,10 @@ export function Home({ go }: { go: (v: 'bridge' | 'activity' | 'comm') => void }
 
   async function refresh() {
     try {
-      const ds = await bridge.getDecisions(12);
-      setRecent(ds.filter((d) => d.verdict === 'allow').slice(0, 6));
+      const ds = await bridge.getDecisions(30);
+      setRecent(ds.filter((d) => d.verdict === 'allow')
+        .map((d) => { const text = humanize(d); return text ? { id: d.id, ts: d.ts, text } : null; })
+        .filter((x): x is { id: string; ts: string; text: string } => x !== null).slice(0, 6));
       setAwaiting(ds.filter((d) => d.verdict === 'ask' && !String(d.tool || '').startsWith('capability')));
     } catch { /* pre-boot / transient */ }
   }
@@ -148,7 +152,7 @@ export function Home({ go }: { go: (v: 'bridge' | 'activity' | 'comm') => void }
             {recent.map((d) => (
               <div key={d.id} style={S.actItem}>
                 <span style={S.actTime}>{(d.ts || '').slice(0, 5)}</span>
-                <span style={S.actText}>{humanize(d)}</span>
+                <span style={S.actText}>{d.text}</span>
               </div>
             ))}
           </div>

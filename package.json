@@ -9,6 +9,8 @@
   ],
   "type": "module",
   "scripts": {
+    "dev": "npm --prefix packages/desktop/app run dev",
+    "dev:web": "npm --prefix packages/desktop/app run dev:web",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:conformance": "vitest run conformance",
