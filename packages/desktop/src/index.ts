@@ -4,6 +4,8 @@ export const VERSION = '0.9.0';
 export { createHost, type Host, type HostOptions } from './host';
 export { WorktreeRunner, type AgentRunner, type AgentRunSpec, type RunPlan } from './runner';
 export { realFsProbe, TrashStore, trashOps, governedCustodianDelete, type TrashEntry } from './fsdelete';
+export { IpcAuthority, type PrivilegedOp, type AuthorityRequest, type AuthorityVerdict, type IpcAuthorityDeps } from './ipcauthority';
+export { buildRendererManifest, verifyRenderer, guardRenderer, rendererAssets, type RendererManifest, type IntegrityResult } from './rendererintegrity';
 export { CALM, FLEET, OPS, ThemeRegistry, displayName, label, type Theme, type ThemeAssets } from './theme';
 export type {
   CrewMemberView, DecisionLogEntry, Verdict, BudgetView, MonitorView, CapabilityView, TaskView,
