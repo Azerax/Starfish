@@ -1,6 +1,11 @@
-# Project Starfish - Roadmap (next 10 releases)
+# Project Starfish - Roadmap (next 10 releases) — SUPERSEDED, historical
 
-Directional plan from the current `v0.12.0` (Starfish External shipped) to a `1.0` candidate. Sequenced
+> **This plan is complete.** It covered v0.13 → v0.22 and every release in it shipped; the repo is now
+> on **v0.24.0**. It is kept as the record of what was planned and delivered during the hardening line.
+>
+> **The current roadmap is [`ROADMAP.md`](../ROADMAP.md) at the repo root.** Do not plan from this file.
+
+Directional plan from the then-current `v0.12.0` (Starfish External shipped) to a `1.0` candidate. Sequenced
 by dependency, not date. Each release is grounded in existing analysis (docs/CODE_AUDIT.md,
 docs/THREAT_CLASSES_AND_MITIGATIONS.md, docs/GA_CHECKLIST.md, docs/EMBED_IMPLEMENTATION_PLAN.md) plus
 natural product growth. Every release ships only when `skills/starfish-verify` is green (typecheck +

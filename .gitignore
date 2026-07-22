@@ -23,6 +23,15 @@ build/
 *.log
 npm-debug.log*
 
+# deprecated / not-Starfish material — kept on disk for history, out of the tracked tree.
+# See DEPRECATED.md for what lives here and what supersedes each item.
+deprecated/
+_not-starfish/
+
+# private security audit — UNPATCHED findings against Starfish itself. NEVER commit: publishing
+# live vulnerabilities in a security product before they are fixed is the whole risk. Local only.
+audit/
+
 # art raw intermediates
 art/fleet/_raw/
 
