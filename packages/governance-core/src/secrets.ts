@@ -59,6 +59,25 @@ const SECRET_VALUE: { re: RegExp; label: string }[] = [
 /** True if the text appears to contain secret material. */
 export function containsSecret(text: string): boolean { return SECRET_VALUE.some((s) => { s.re.lastIndex = 0; return s.re.test(text); }); }
 
+// F1: a raw shell command that READS or COPIES a secret path. exec/shell tools declare no pathParams,
+// so the PDP's containment/secret loop never inspects them — `cat ~/.ssh/id_rsa` got zero secret
+// screening and, at Medium tolerance, auto-allowed silently. This detects the read/copy/redirect of a
+// secret path so the PDP can force it to ASK (a human, tolerance-independent) — never a silent allow.
+// Deliberately conservative to avoid breaking legitimate shell: it requires a READ/COPY verb (or an
+// input redirect) AND a token that classifies as a secret path, so `git commit -m "note about .env"`
+// (no read verb applied to a path token) does not trip it.
+const SECRET_READ_VERB = /\b(?:cat|less|more|head|tail|nl|tac|xxd|od|strings|base64|cp|scp|rsync|install|source|dd|gpg|openssl|hexdump|bat)\b/i;
+export function commandReadsSecret(command: string): boolean {
+  if (typeof command !== 'string' || command.trim() === '') return false;
+  const hasReadVerb = SECRET_READ_VERB.test(command);
+  const hasInputRedirect = /(^|\s)<\s*\S/.test(command);            // `cmd < secretfile`
+  if (!hasReadVerb && !hasInputRedirect) return false;
+  // Tokenize on shell separators and strip surrounding quotes; check each token as a path. `~` is
+  // normalized to a home-relative form so `~/.ssh/id_rsa` classifies like `/home/u/.ssh/id_rsa`.
+  const tokens = command.split(/[\s='";:|&()<>]+/).map((t) => t.replace(/^['"]|['"]$/g, '')).filter(Boolean);
+  return tokens.some((t) => isSecretPath(t.replace(/^~(?=\/)/, '/home/u')));
+}
+
 /** Redact secret values in place — for audit/egress/context. Returns the redacted text + what was hit. */
 export function redactSecrets(text: string): { redacted: string; hits: string[] } {
   const hits: string[] = [];
