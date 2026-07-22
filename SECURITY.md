@@ -25,6 +25,16 @@ Starfish is a **deny-by-default reference monitor**: an agent is a guest inside 
 - **Proposer ≠ approver.** No agent authorizes its own privileged action; a human is the final approver.
 - **Local-first, no data egress by default.** Tainted data cannot leave to a foreign destination; API keys live in the OS keychain, never in code or `.env`.
 
+**Who this defends (and who it doesn't).** Starfish provides **reasonable, advanced governance — not a
+guarantee against an operator who dismantles their own protection.** It defends against a misbehaving or
+hijacked **agent** and against **external/injected content** (poisoned skills, prompt injection, tampered
+memory); it **trusts the operator, their machine, and their OS.** Editing the source to disable a gate,
+or asking an agent to open a hole in your *own* install, is not a bypass — it is removing your own
+safeguards. A fully compromised host (native code already executing as the operator, including a browser
+0-day in the desktop UI) is beneath the layer Starfish operates at and is out of scope. The full
+statement — in scope, out of scope, trust assumptions, and how a deployment raises the boundary to defend
+against its own users — is in **[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md)**.
+
 **What it does not claim:** Starfish is not a sandbox escape guarantee against a fully compromised host, does not vouch for the safety of third-party skills you force-approve past a warning, and (pre-1.0) has not yet completed an independent external security review — that review is a 1.0 exit item. The governance guarantees hold to the enforcement seam (Claude Code hooks / the PDP daemon); OS-level process isolation is a planned hardening (T-25).
 
 ## Hardening you can enable
