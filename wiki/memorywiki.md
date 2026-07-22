@@ -197,6 +197,28 @@ getter. 2 (mandatory provenance) — `wiki.conformance` "invariant 2". 3 (propos
 retrieval) — T15 row. 8 (only Herodotus writes) — T6 row. 9 (deletion soft + hard-ruled) — T12/T19.
 10 (audited + deterministic scoring) — `confidence.determinism`, `retrieval.determinism`.
 
+### Post-implementation self-audit (2026-07-20)
+
+After Phase 1 landed, a four-sweep adversarial self-audit (the "our words vs our code" seam) was run
+across the whole codebase. The full private register is in `audit/` (gitignored — unpatched findings
+in a security product stay local). **Five findings land on the memory subsystem specifically:**
+
+| # | Memory finding | Status |
+|---|---|---|
+| **F22** | The untrusted-memory envelope could be escaped: a page body containing a literal `<<END UNTRUSTED MEMORY>>` line closed the fence early, placing attacker text outside the "inert" boundary. | ✅ **Fixed** — `retrieval.ts` neutralizes any embedded open/close marker before wrapping; regression in `selfaudit-fixes.conformance` (F22). |
+| **F15** | `recordDecision()` wrote a canonical `DecisionRecord` (always-high-stakes) with no gate, no sole-writer guard, no actor, unverified provenance. | ✅ **Fixed** — now sole-writer guarded, actor-attributed, and every cited evidence id is verified to exist (a decision citing `ev_does_not_exist` is refused). `memory.conformance` (F15). |
+| **F16** | `reverseMerge` / `reverseSplit` mutated the graph with only `guardWriter` — a second write path + unapproved retire/un-merge usable by the least-privileged scribe. | ✅ **Fixed** — reversal now routes through the gate with dual-control (proposer≠approver, 2-of-N); a single-actor reversal is refused. `wiki.conformance` (F16). |
+| **F17** | "No ungoverned read path" was false: public `getPage`/`allPages`/`currentVersion` returned full bodies (incl. quarantined). | ✅ **Fixed** — quarantined bodies are withheld from the raw accessors too (T2 "never served" now holds unconditionally); invariant-6 wording corrected: these are the *substrate* Thucydides reads, available only to the in-process governor holder (same trust boundary as `governor.memory`), not the agent read path. Per-requester clearance genuinely lives in `retrieve()`. `wiki.conformance` (F17). |
+| **F18** | `promote()` and `addConflictingEvidence()` skipped `guardWriter`. | ✅ **Fixed** — both sole-writer guarded. `memory.conformance` (F18). |
+
+The honest read: **the memory-wiki controls were real and tested, but guard coverage was incomplete** —
+three write methods and the reversal pair sat outside the sole-writer/gate net, and the public accessors
+were a read path the design doc claimed didn't exist. All five are now closed with regression tests, and
+the invariant-6 wording was corrected to be precise (substrate-vs-agent-path) rather than overstated.
+One nuance recorded honestly: full *gating* of `recordDecision` through the WikiGate (vs the sole-writer
++ evidence-verification it now has) would require wiring the gate into `GovernedMemory`; the current fix
+closes the forge-with-fake-evidence exploit, which was the exploitable core.
+
 ### End-to-end verification
 
 `npm run verify:memory-wiki` boots a real governed root and prints eight watchable checks. Step 4

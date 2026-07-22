@@ -15,8 +15,12 @@ const TIER_BASE: Record<Exclude<RiskTier, 'injection'>, number> = { low: 2, medi
 
 export class RiskEngine {
   classify(call: ToolCall, tool: ToolDef): RiskTier {
-    const base: RiskTier = tool.riskTier
-      ?? ({ read: 'low', meta: 'low', write: 'medium', exec: 'high' } as const)[tool.category];
+    // F10: an unknown tool category is the LEAST understood case and must fail-safe to the strictest
+    // outcome, not the most permissive. Previously an unrecognised category with no explicit riskTier
+    // produced `undefined` → composite 10 → low → auto-allow. Now it defaults to 'critical' (always
+    // requires a human), and any category not in the map is treated the same way.
+    const CATEGORY_TIER: Record<string, RiskTier> = { read: 'low', meta: 'low', write: 'medium', exec: 'high' };
+    const base: RiskTier = tool.riskTier ?? CATEGORY_TIER[tool.category] ?? 'critical';
     const text = JSON.stringify(call.input ?? {});
     if (CRITICAL.test(text)) return 'critical';
     if (HIGH.test(text)) return max(base, 'high');

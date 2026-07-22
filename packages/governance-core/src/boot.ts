@@ -95,9 +95,24 @@ export function persistGovernor(g: Governor, stateDir: string): void {
   saveJson(join(stateDir, 'wiki.snapshot.json'), g.wiki.snapshot());
 }
 export function restoreGovernor(g: Governor, stateDir: string): void {
-  g.tasks.restore(loadJson(join(stateDir, 'tasks.snapshot.json'), []));
-  g.capabilities.restore(loadJson(join(stateDir, 'capabilities.json'), []));
-  g.services.restore(loadJson(join(stateDir, 'services.json'), []));
+  // F11: tasks/capabilities/services previously used loadJson(path, []), which returns the SAME empty
+  // array for "absent" and "corrupt" — truncating capabilities.json silently erased every quarantined/
+  // rejected disposition with no signal (the T19 censorship primitive). Read directly so a corrupt file
+  // enters safe mode instead of coming back as a clean-looking empty store.
+  const restoreArray = (file: string, restore: (a: unknown[]) => void, label: string): void => {
+    const raw = readSnapshot(join(stateDir, file));
+    if (raw === null) { restore([]); return; }                     // absent — normal fresh install
+    if (typeof raw === 'symbol' || !Array.isArray(raw)) {          // corrupt / wrong shape — do NOT restore
+      g.safeMode = true;
+      g.pdp.setSafeMode(true, `state file corrupt: ${file}`);
+      g.audit.append({ actor: 'system', domain: 'governance', action: 'state-corrupt', target: label, decision: 'deny', riskTier: 'critical', reason: `${file} present but unreadable/wrong-shape` });
+      return;
+    }
+    restore(raw);
+  };
+  restoreArray('tasks.snapshot.json', (a) => g.tasks.restore(a as never), 'tasks');
+  restoreArray('capabilities.json', (a) => g.capabilities.restore(a as never), 'capabilities');
+  restoreArray('services.json', (a) => g.services.restore(a as never), 'services');
 
   // Memory does NOT use loadJson. loadJson swallows a parse error and returns its fallback, so an
   // absent file and a corrupt one are indistinguishable to the caller — for memory that is a

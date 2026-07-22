@@ -371,7 +371,11 @@ function registerIpc(): void {
   // ---- governed deletion: the app's ONLY delete path. Soft (recoverable trash), hard-rule-gated,
   // Custodian-only. Hard rules (no system files / no skills / no folders) are enforced in the core gate. ----
   const delCfg = (): DeletionConfig => ({ projectRoot: root, homeDir: homedir(), skillsRoot: join(root, 'skills') });
-  const custodianBoundary: BoundarySet = { visibility: [root], write: [root] };   // cleanup scope = the project tree
+  // F27: the custodian delete boundary must deny governance/audit/state exactly like the agent boundary
+  // (:356). Without `deny`, `containCheck` let the IPC delete path trash `audit.jsonl` / `governance/*` /
+  // `state/*` — files under `root` but under no protected tree — breaking the tamper-evident chain. The
+  // agent path was already fenced; this keeps the second (IPC) path in sync.
+  const custodianBoundary: BoundarySet = { visibility: [root], write: [root], deny: forbidList() };
   const trashDir = () => join(root, 'state', 'trash');
   let trash: TrashStore | null = null;
   const store = () => (trash ??= new TrashStore(trashDir()));

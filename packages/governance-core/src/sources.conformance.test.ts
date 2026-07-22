@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SourceRegistry, normalizeSource, AuditLog, type SourceRef, type SourceVerifier } from './index';
+import { SourceRegistry, normalizeSource, AuditLog, blocklistPayloadHash, generatePublisherKeypair, signManifest, type SourceRef, type SourceVerifier } from './index';
 
 const reg = (verifier?: SourceVerifier, path?: string) => {
   const p = path ?? join(mkdtempSync(join(tmpdir(), 'sf-src-')), 'a.jsonl');
@@ -82,5 +82,24 @@ describe('SourceRegistry — deny by default', () => {
     const { r: r2 } = reg();
     r2.restore(snap);
     expect(r2.isAdmitted(http('https://keep.test'))).toBe(true);
+  });
+});
+
+
+describe('F24 — a signed revocation is stored in normalized form so it actually blocks', () => {
+  it('a blocklist key that is not pre-normalized still blocks the source at admit()', () => {
+    const audit = new AuditLog(join(mkdtempSync(join(tmpdir(), 'sf-f24-')), 'a.jsonl'));
+    const registry = new SourceRegistry(audit);
+    const kp = generatePublisherKeypair();
+    const issuedAt = '2026-07-20T00:00:00.000Z';
+    // Issuer's key is NOT in canonical form: capitalized host + trailing slash.
+    const keys = ['http:https://Evil.com/'];
+    const bl = { keys, issuedAt, signature: signManifest(blocklistPayloadHash(keys, issuedAt), kp.privateKeyPem) };
+    const res = registry.applyBlocklist(bl, kp.publicKeyPem);
+    expect(res.ok).toBe(true);
+    expect(res.applied).toBe(1);
+    // The source, referenced in ordinary (differently-cased, no-trailing-slash) form, must be revoked.
+    expect(registry.status({ kind: 'http', id: 'https://evil.com' })).toBe('revoked');
+    expect(registry.isAdmitted({ kind: 'http', id: 'https://evil.com/some/path' })).toBe(false);
   });
 });

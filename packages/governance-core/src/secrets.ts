@@ -100,6 +100,11 @@ const DANGEROUS_ENV_KEY: { re: RegExp; why: string }[] = [
   { re: /^[ \t]*(?:export[ \t]+)?(?:PROMPT_COMMAND|BASH_ENV|ENV)[ \t]*=/im, why: 'shell init hook' },
   { re: /^[ \t]*(?:export[ \t]+)?PATH[ \t]*=/im, why: 'PATH override' },
   { re: /^[ \t]*(?:export[ \t]+)?(?:ANTHROPIC_BASE_URL|OPENAI_BASE_URL|OPENAI_API_BASE|GOOGLE_[A-Z_]*URL)[ \t]*=/im, why: 'provider endpoint redirect' },
+  // F21: proxy + TLS-trust keys are strictly broader than a single provider redirect — they route or
+  // MITM ALL outbound egress and can silently exfiltrate every key the process holds.
+  { re: /^[ \t]*(?:export[ \t]+)?(?:HTTPS?_PROXY|ALL_PROXY|NO_PROXY)[ \t]*=/im, why: 'proxy override (MITM/exfil of all egress)' },
+  { re: /^[ \t]*(?:export[ \t]+)?NODE_EXTRA_CA_CERTS[ \t]*=/im, why: 'NODE_EXTRA_CA_CERTS (attacker CA — silent TLS MITM)' },
+  { re: /^[ \t]*(?:export[ \t]+)?NODE_TLS_REJECT_UNAUTHORIZED[ \t]*=/im, why: 'NODE_TLS_REJECT_UNAUTHORIZED (disables TLS verification)' },
   { re: /^[ \t]*(?:export[ \t]+)?STARFISH_[A-Z0-9_]*[ \t]*=/im, why: 'attempt to set a Starfish governance flag from .env' },
   { re: /--require\b/i, why: '--require injection' },
 ];

@@ -322,47 +322,77 @@ export class EvidenceWiki implements WikiView {
     return { ok: true, verdict, value: frozenCopy(rec) };
   }
 
-  /** T14 — merges are reversible. Conflation must not be a one-way door. */
-  reverseMerge(mergeId: string, by: string): MergeRecord {
-    this.guardWriter(by, 'entity:merge-reverse');
+  /** T14 — merges are reversible. Conflation must not be a one-way door. F16: reversal is the same
+   *  class of high-stakes structural change as the merge itself, so it routes through the gate with
+   *  dual control (proposer≠approver, N-of-M) — not a single-actor `guardWriter`-only call. Undoing a
+   *  governed merge without approval was a second write path a prompt-injected scribe could use to
+   *  un-merge entities at will. */
+  reverseMerge(mergeId: string, proposer: string, approvers: string[] = []): MergeRecord {
+    this.guardWriter(proposer, 'entity:merge');
     const rec = this.merges.get(mergeId);
     if (!rec) throw new GovernanceError(`unknown merge ${mergeId}`);
     if (rec.reversedAt) throw new GovernanceError('merge already reversed');
+    const verdict = this.gate.evaluate({ op: 'entity:merge', proposer, contentHash: sha256(`reverse-merge:${mergeId}`), confidence: aggregateConfidence([]), approvers });
+    if (verdict.outcome !== 'approved') throw new GovernanceError(`merge reversal not approved: ${verdict.reason}`);
     const from = this.pages.get(rec.fromPageId);
     if (from) from.mergedInto = undefined;
     rec.reversedAt = new Date().toISOString();
-    rec.reversedBy = by;
-    this.audit.append({ actor: by, domain: 'memory', action: 'wiki:merge-reversed', target: mergeId, decision: 'allow', reason: 'reversed' });
+    rec.reversedBy = approvers.join(',');
+    this.audit.append({ actor: proposer, domain: 'memory', action: 'wiki:merge-reversed', target: mergeId, decision: 'allow', reason: `reversed by ${approvers.join(', ')}` });
     return frozenCopy(rec);
   }
 
-  reverseSplit(splitId: string, by: string): SplitRecord {
-    this.guardWriter(by, 'entity:split-reverse');
+  reverseSplit(splitId: string, proposer: string, approvers: string[] = []): SplitRecord {
+    this.guardWriter(proposer, 'entity:split');
     const rec = this.splits.get(splitId);
     if (!rec) throw new GovernanceError(`unknown split ${splitId}`);
     if (rec.reversedAt) throw new GovernanceError('split already reversed');
+    // F16: reversal RETIRES the produced pages, so it is high-stakes + dual-controlled like retire.
+    const verdict = this.gate.evaluate({ op: 'entity:split', proposer, contentHash: sha256(`reverse-split:${splitId}`), confidence: aggregateConfidence([]), approvers });
+    if (verdict.outcome !== 'approved') throw new GovernanceError(`split reversal not approved: ${verdict.reason}`);
     // The produced pages are RETIRED, never deleted — reversal must not become a deletion primitive.
     for (const id of rec.intoPageIds) {
       const p = this.pages.get(id);
-      if (p && !p.retired) p.retired = { at: new Date().toISOString(), by, reason: `split ${splitId} reversed` };
+      if (p && !p.retired) p.retired = { at: new Date().toISOString(), by: approvers.join(','), reason: `split ${splitId} reversed` };
     }
     rec.reversedAt = new Date().toISOString();
-    rec.reversedBy = by;
-    this.audit.append({ actor: by, domain: 'memory', action: 'wiki:split-reversed', target: splitId, decision: 'allow', reason: 'reversed' });
+    rec.reversedBy = approvers.join(',');
+    this.audit.append({ actor: proposer, domain: 'memory', action: 'wiki:split-reversed', target: splitId, decision: 'allow', reason: `reversed by ${approvers.join(', ')}` });
     return frozenCopy(rec);
   }
 
   // ---------------------------------------------------------------- reads (WikiView)
+  //
+  // F17 — these are the raw SUBSTRATE that Thucydides (`retrieval.retrieve`) reads to do its job. They
+  // are NOT the agent read path: invariant 6 ("no ungoverned read path, audited, need-to-know") governs
+  // reads BY AGENTS, which must go through `retrieve()`. These accessors are available only to the
+  // in-process holder of the governor — the same trust boundary as `governor.memory` — and carry no
+  // requester identity, so per-requester clearance/redaction cannot live here; it lives in `retrieve()`.
+  // What DOES hold unconditionally, even here: a quarantined revision's body is never handed out (T2 —
+  // "quarantined content is never served"), so no accessor can leak screened-positive content.
 
-  getPage(id: string): Page | undefined { const p = this.pages.get(id); return p && frozenCopy(p); }
-  allPages(): Page[] { return [...this.pages.values()].map(frozenCopy); }
+  /** Replace a quarantined version's body with a marker — T2 holds even on the raw substrate. */
+  private safeVersion(v: PageVersion): PageVersion {
+    return v.quarantined ? { ...v, body: '[quarantined: screened-positive content withheld]' } : v;
+  }
+  private safePage(p: Page): Page {
+    return { ...p, versions: p.versions.map((v) => this.safeVersion(v)) };
+  }
+
+  getPage(id: string): Page | undefined { const p = this.pages.get(id); return p && frozenCopy(this.safePage(p)); }
+  allPages(): Page[] { return [...this.pages.values()].map((p) => frozenCopy(this.safePage(p))); }
   linksFrom(pageId: string): Link[] { return [...this.links.values()].filter((l) => l.from === pageId && !l.retired).map(frozenCopy); }
   linksTo(pageId: string): Link[] { return [...this.links.values()].filter((l) => l.to === pageId && !l.retired).map(frozenCopy); }
   /** Includes tombstoned edges — for history and audit views, never for retrieval. */
   allLinks(includeRetired = false): Link[] { return [...this.links.values()].filter((l) => includeRetired || !l.retired).map(frozenCopy); }
   currentVersion(pageId: string): PageVersion | undefined {
     const p = this.pages.get(pageId);
-    return p && frozenCopy(p.versions[p.current - 1]);
+    return p && frozenCopy(this.safeVersion(p.versions[p.current - 1]));
+  }
+  /** Quarantine status of the current version — for callers that need to KNOW without reading the body. */
+  isQuarantined(pageId: string): boolean {
+    const p = this.pages.get(pageId);
+    return !!p && !!p.versions[p.current - 1]?.quarantined;
   }
   getMerge(id: string): MergeRecord | undefined { const m = this.merges.get(id); return m && frozenCopy(m); }
   getSplit(id: string): SplitRecord | undefined { const s = this.splits.get(id); return s && frozenCopy(s); }

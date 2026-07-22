@@ -81,7 +81,11 @@ export function boundaryForAgent(spec: AgentBoundarySpec): BoundarySet {
   const visibility = [spec.projectRoot, spec.agentDir, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
   const write = [spec.workspace, spec.agentDir].filter((r) => !inForbid(r));
   if (write.length === 0) throw new GovernanceError('boundaryForAgent: no writable root after applying forbid list');
-  return { visibility, write };
+  // F4: dropping a root only helps when the forbidden path IS a root. governance/audit/state usually
+  // sit UNDER an allowed root (projectRoot), so they must also be carried as an explicit `deny` subtree
+  // list — otherwise containCheck admits reads of them. The desktop agent path set `deny` by hand
+  // (main/index.ts:356); every consumer of boundaryForAgent gets it here by construction.
+  return { visibility, write, deny: forbid.length ? forbid : undefined };
 }
 
 // Per-skill confinement: each skill gets a UNIQUE workspace. visibility = [source, workspace];
@@ -97,5 +101,5 @@ export function boundaryForSkill(spec: SkillBoundarySpec): BoundarySet {
   const visibility = [source, workspace, ...(spec.sharedReads ?? [])].filter((r) => !inForbid(r));
   const write = [workspace].filter((r) => !inForbid(r));
   if (write.length === 0) throw new GovernanceError('boundaryForSkill: workspace is forbidden - cannot derive a writable root');
-  return { visibility, write };
+  return { visibility, write, deny: forbid.length ? forbid : undefined };   // F4 — see boundaryForAgent
 }

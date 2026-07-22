@@ -19,3 +19,25 @@ describe('containCheck — deny subtree (write project EXCEPT governance)', () =
   it('still denies outside the project', () => { expect(containCheck(join(proj,'..','evil.txt'),'write',bs).allowed).toBe(false); });
   it('no deny = backward compatible', () => { expect(containCheck(join(proj,'src','app.ts'),'write',{visibility:[proj],write:[proj]}).allowed).toBe(true); });
 });
+
+describe('F4 — boundaryForAgent / boundaryForSkill carry forbid through as a deny subtree', () => {
+  it('governance/audit/state under an allowed root are denied by construction', async () => {
+    const { boundaryForAgent, boundaryForSkill, containCheck } = await import('./index');
+    const proj = mkdtempSync(join(tmpdir(), 'sf-f4-'));
+    mkdirSync(join(proj, '.starfish', 'governance'), { recursive: true });
+    writeFileSync(join(proj, '.starfish', 'governance', 'policies.json'), '[]');
+    writeFileSync(join(proj, 'audit.jsonl'), '');
+    const forbid = [join(proj, '.starfish'), join(proj, 'audit.jsonl')];
+
+    const bs = boundaryForAgent({ projectRoot: proj, workspace: proj, agentDir: join(proj, 'agent'), forbid });
+    expect(bs.deny).toBeDefined();
+    // projectRoot is readable, but governance + audit under it are NOT.
+    expect(containCheck(join(proj, 'notes.md'), 'read', bs).allowed).toBe(true);
+    expect(containCheck(join(proj, '.starfish', 'governance', 'policies.json'), 'read', bs).allowed).toBe(false);
+    expect(containCheck(join(proj, 'audit.jsonl'), 'read', bs).allowed).toBe(false);
+
+    const sk = boundaryForSkill({ skillsRoot: join(proj, 'skills'), skillId: 's1', sharedReads: [proj], forbid });
+    expect(sk.deny).toBeDefined();
+    expect(containCheck(join(proj, '.starfish', 'governance', 'policies.json'), 'read', sk).allowed).toBe(false);
+  });
+});

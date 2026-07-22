@@ -97,9 +97,15 @@ export class SourceRegistry {
     const v = verifyPublisherSignature(blocklistPayloadHash(bl.keys, bl.issuedAt), bl.signature, publicKeyPem);
     if (!v.verified) { this.audit?.append({ actor: 'system', domain: 'governance', action: 'blocklist-rejected', decision: 'deny', reason: `signature invalid (${v.reason})` }); return { ok: false, applied: 0, reason: `blocklist signature invalid (${v.reason})` }; }
     let applied = 0;
-    for (const key of bl.keys) {
-      const kind = (key.split(':')[0] as SourceKind) || 'http';
-      this.map.set(key, { ref: { kind, id: key }, key, status: 'revoked', tier: 'critical', reason, at: new Date().toISOString() });
+    for (const rawKey of bl.keys) {
+      // F24: normalize the issuer's key to the SAME canonical form all lookups use, or a revocation
+      // for `http:https://Evil.com/` (capitalized, trailing slash) would be stored verbatim and never
+      // match `normalizeSource(ref)` at admit() time — reporting `applied` while silently not blocking.
+      const idx = rawKey.indexOf(':');
+      const kind = (idx > 0 ? rawKey.slice(0, idx) : 'http') as SourceKind;
+      const id = idx > 0 ? rawKey.slice(idx + 1) : rawKey;
+      const key = normalizeSource({ kind, id });
+      this.map.set(key, { ref: { kind, id }, key, status: 'revoked', tier: 'critical', reason, at: new Date().toISOString() });
       this.audit?.append({ actor: 'system', domain: 'governance', action: 'source-revoked', target: key, decision: 'deny', riskTier: 'critical', reason });
       applied++;
     }
