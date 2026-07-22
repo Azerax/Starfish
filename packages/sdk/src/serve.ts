@@ -36,7 +36,8 @@ const tokenEq = (a: string, b: string): boolean => { const ab = Buffer.from(a), 
 const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const hostOk = (req: IncomingMessage): boolean => {
   const hh = String(req.headers['host'] ?? '');
-  if (!hh) return true;
+  if (!hh) return false;   // F13: an absent Host header fails CLOSED (was: allowed). HTTP/1.1 requires
+                           // one; its absence is anomalous. Defence-in-depth atop the loopback check.
   const hn = hh.replace(/^\[/, '').split(/[:\]]/)[0];
   return hn === '127.0.0.1' || hn === 'localhost' || hn === '::1';
 };

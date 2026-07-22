@@ -184,7 +184,16 @@ export class CapabilityLedger {
     const c = this.caps.get(id);
     if (!c) return { ok: false, reason: 'capability not registered' };
     if (c.status === 'rejected') return { ok: false, reason: 'capability rejected' };
-    if (!c.manifest) return { ok: true };
+    // F5: intake ALWAYS sets a manifest (fileManifest — `{}` even for a no-file capability), so a
+    // registered capability with `manifest: undefined` is an anomaly: the key was stripped (tampering
+    // to disable tamper-detection) or the store was malformed. Fail CLOSED — an unverifiable capability
+    // is not a verified one. Previously this returned ok:true, letting an attacker turn integrity off
+    // by DELETING data rather than forging it.
+    if (!c.manifest) {
+      c.status = 'quarantined';
+      this.audit.append({ actor: 'system', domain: 'governance', action: 'capability:tamper', target: id, decision: 'deny', riskTier: 'critical', reason: 'integrity manifest missing — cannot verify; auto-quarantined' });
+      return { ok: false, reason: 'integrity manifest missing — cannot verify (fail-closed)' };
+    }
     const changed = diffManifest(c.manifest, currentFiles);
     if (changed.length === 0) return { ok: true };
     c.status = 'quarantined';

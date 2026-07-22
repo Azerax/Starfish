@@ -139,3 +139,48 @@ describe('F1 — a shell command reading a secret path can never silently auto-a
     }
   });
 });
+
+describe('F6 — policy resource is the DECLARED path, not the first string input', () => {
+  it('a benign decoy input cannot steer adjudication to a rule scoped to the decoy', () => {
+    // deny writes to /etc/*; a rule that would allow /project/* must NOT be reached via a decoy.
+    const rules = [
+      { id: 'd', subject: 'agent:a', action: 'tool:w', resource: '/etc/*', effect: 'deny' },
+      { id: 'a', subject: 'agent:a', action: 'tool:w', resource: '/project/*', effect: 'allow' },
+    ];
+    const p = pdp([{ id: 'w', category: 'write', pathParams: ['path'], allowedAgents: '*' }], rules as never);
+    // `note` is first in JSON order (the decoy), but `path` is the declared pathParam.
+    const d = p.decide('ingress',
+      { agentId: 'a', tool: 'w', input: { note: '/project/ok', path: '/etc/passwd' } },
+      { visibility: ['/'], write: ['/'] });
+    expect(d.reason).not.toContain('allowed by policy');   // must not match the /project allow via the decoy
+  });
+});
+
+describe('F7 — an agent’s own capability allowlist is enforced (not only tool.allowedAgents)', () => {
+  function pdpWithAgents(tools: unknown[], agents: unknown[]) {
+    const d = mkdtempSync(join(tmpdir(), 'sf-f7-'));
+    writeFileSync(join(d, 'tools.json'), JSON.stringify(tools));
+    writeFileSync(join(d, 'agents.json'), JSON.stringify(agents));
+    const tr = new Registry<ToolDef>(join(d, 'tools.json'), (t) => t.id);
+    const ar = new Registry<AgentDef>(join(d, 'agents.json'), (a) => a.id);
+    return new PDP(tr, ar, new AuditLog(join(d, 'audit.jsonl')), new RiskEngine(), new PolicyEngine([]));
+  }
+  const fsRead = { id: 'fs.read', category: 'read', pathParams: ['path'], allowedAgents: '*' };
+
+  it('a read-only agent cannot call a *-granted tool outside its allowlist (Thucydides invariant)', () => {
+    const p = pdpWithAgents([fsRead], [{ id: 'thucydides', allowedTools: ['memory.read'] }]);
+    const d = p.decide('ingress', { agentId: 'thucydides', tool: 'fs.read', input: { path: '/tmp/x' } }, BS);
+    expect(d.allow).toBe(false);
+    expect(d.reason).toContain('allowlist');
+  });
+
+  it('an agent that declares NO allowlist is unrestricted (backward-compatible)', () => {
+    const p = pdpWithAgents([fsRead], [{ id: 'michael' }]);   // no allowedTools
+    expect(p.decide('ingress', { agentId: 'michael', tool: 'fs.read', input: { path: '/tmp/x' } }, BS).allow).toBe(true);
+  });
+
+  it('an agent may call a tool that IS in its allowlist', () => {
+    const p = pdpWithAgents([fsRead], [{ id: 'thucydides', allowedTools: ['memory.read', 'fs.read'] }]);
+    expect(p.decide('ingress', { agentId: 'thucydides', tool: 'fs.read', input: { path: '/tmp/x' } }, BS).allow).toBe(true);
+  });
+});

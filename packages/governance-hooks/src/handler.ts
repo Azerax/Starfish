@@ -32,11 +32,16 @@ const CATASTROPHIC: RegExp[] = [
   String.raw`\bmkfs`,
   String.raw`\bdd\b[^\n]*\bof=/dev/`,
   String.raw`:\s*\(\s*\)\s*\{[^}]*\}\s*;`,
-  String.raw`\b(?:curl|wget|fetch)\b[^\n]*\|\s*(?:sh|bash|zsh|dash|python3?|perl|ruby|node)\b`,
+  // F23: pipe-to-interpreter — added powershell/pwsh/php/deno/bun/lua/Rscript/awk to the list.
+  String.raw`\b(?:curl|wget|fetch)\b[^\n]*\|\s*(?:sh|bash|zsh|dash|python3?|perl|ruby|node|powershell|pwsh|php|deno|bun|lua|Rscript|awk)\b`,
   String.raw`\bchmod\b[^\n]*(?:-R\s+)?0?777\b[^\n]*\s(?:/|~)`,
-  String.raw`>\s*/dev/sd[a-z]`,
-  String.raw`\bfind\s+/\S*\s[^\n]*-delete\b`,
+  // F23: any write to a raw disk device, not just sd[a-z] — covers NVMe, virtio, mmc, xvd, hd.
+  String.raw`>\s*/dev/(?:sd[a-z]|nvme\d|vd[a-z]|mmcblk\d|xvd[a-z]|hd[a-z])`,
+  String.raw`\bfind\s+/\S*\s[^\n]*-(?:delete|exec\s+rm)\b`,   // F23: find … -exec rm, not only -delete
   String.raw`\btruncate\b[^\n]*-s\s*0[^\n]*/dev/`,
+  // F23: rm -rf targeting the cwd/project ITSELF — `.` or `./` as a complete token, or $PWD — wipes the
+  // whole working tree. `./build` (a subdirectory) is deliberately NOT matched (legitimate).
+  String.raw`\brm\b(?=[^\n]*(?:\s-\w*[rf]\w*|--recursive|--force))(?=[^\n]*(?:\s(?:\.|\./)(?:\s|;|$)|\$\{?PWD))`,
 ].map((p) => new RegExp(p, 'i'));
 export function isCatastrophicShell(cmd: string): boolean { return CATASTROPHIC.some((re) => re.test(cmd)); }
 

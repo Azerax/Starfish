@@ -66,3 +66,22 @@ describe('TC-5.2 — hash-on-vet: post-vet mutation is caught', () => {
     expect(v.ok).toBe(false); expect(v.reason).toContain('hash mismatch');
   });
 });
+
+describe('F5 — a capability whose manifest was stripped fails integrity CLOSED', () => {
+  it('enforceIntegrity denies (and quarantines) a registered capability with no manifest', () => {
+    const led = new CapabilityLedger(audit());
+    led.intake(vet(benign));
+    // Simulate a tamper/restore that removes the manifest key from the stored entry.
+    const entry = led.get('keyword-research') as { manifest?: unknown };
+    delete entry.manifest;
+    const r = led.enforceIntegrity('keyword-research', benign.files);
+    expect(r.ok).toBe(false);                       // was: ok:true (integrity silently disabled)
+    expect(r.reason).toContain('manifest');
+    expect(led.isEnabled('keyword-research')).toBe(false);   // auto-quarantined
+  });
+  it('a normally-intaken capability with an intact manifest still verifies', () => {
+    const led = new CapabilityLedger(audit());
+    led.intake(vet(benign));
+    expect(led.enforceIntegrity('keyword-research', benign.files).ok).toBe(true);
+  });
+});
