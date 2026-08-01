@@ -4,7 +4,7 @@ All notable changes to Project Starfish are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/). Dates are YYYY-MM-DD.
 
-## [Unreleased]
+## [0.26.0] - 2026-08-01
 
 ### Added
 - **Threat Immunity Fabric — TIF-0/1(partial)/3/4.** Governed Threat Evidence lifecycle
@@ -19,6 +19,41 @@ All notable changes to Project Starfish are recorded here. The format follows
   Verified: `tsc --noEmit` clean; 23 new tests (16 lifecycle + 7 detector conformance), full suite
   504/505 passing (1 pre-existing unrelated skip), run against a scratch Linux install since this
   repo's local `node_modules` has Windows-only native bindings.
+
+## [0.25.0] - 2026-08-01
+
+### Security
+- **Adversarial self-audit — 26 findings closed, each with a regression test that plants the actual
+  attack.** Four sweeps over `packages/*/src`: fail-open defaults, claimed-but-unenforced guarantees,
+  gameable defensive logic, and the desktop/IPC surface being less governed than the agent path. Full
+  writeup: `docs/RELEASE_NOTES_v0.25.0.md`. Highlights: IPv6-aware `netguard` (SSRF via loopback/
+  link-local/unique-local/cloud-metadata in hex form); the token/budget meter can no longer be walked
+  backward with negative usage; `.env` screening now blocks proxy and TLS-trust poisoning
+  (`HTTPS_PROXY`/`NODE_EXTRA_CA_CERTS`/`NODE_TLS_REJECT_UNAUTHORIZED`); agent/skill boundaries now deny
+  `.starfish/governance`, `audit.jsonl`, and `state/` by construction instead of merely dropping forbidden
+  roots; the raw `shell` tool now escalates a secret-path read/copy to a human, tolerance-independent;
+  three risk/policy correctness gaps fixed (discarded `ask` rules, an unchecked `meta`-tool path, an
+  unrecognised category defaulting to auto-allow instead of failing safe); the Linked Evidence Wiki's
+  decision registry, merge/split reversal, and untrusted-content envelope are now fully gated; corrupt
+  persisted state now drops into safe mode instead of silently reading as empty; per-agent capability
+  allowlists are now enforced, not just declared; policy adjudicates the tool's declared path instead of
+  the first string in JSON order; a stripped integrity manifest now fails closed.
+- **Desktop IPC authority is main-owned, and renderer tampering can't reach it.** Electron IPC has no
+  caller authentication; the desktop app was trusting renderer-supplied `req.actor` and
+  `confirmed`/`confirm` booleans outright, letting any renderer-side code self-approve a governed
+  decision, widen risk tolerance, or purge the trash. Closed with `IpcAuthority` (main-assigned operator
+  principal, a per-session capability token that never reaches raw page JS), renderer-bundle integrity
+  hashing with tamper latching into safe mode, `sandbox:true` + a strict CSP, and — closing the one
+  residual the first pass left open — a main-process `trustedConfirm` dialog gating permanent purge and
+  destructive approved-deletes, so a renderer RCE with a valid token still cannot click through an
+  irreversible action for the human. 21 new tests (`ipc-authority.conformance`,
+  `privilegedipc.conformance`).
+- `docs/THREAT_MODEL.md` added — makes the trust boundary explicit (defends against a misbehaving/
+  hijacked agent and injected content; trusts the operator and their machine) so findings are triaged by
+  scope instead of chased into an unbounded "very secure" claim.
+
+### Verify
+- `npm run ci`: 101 test files, 677 passed, 3 skipped.
 
 ## [0.24.0] - 2026-07-19
 
