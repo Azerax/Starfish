@@ -56,3 +56,8 @@ site/site.zip
 *.gz
 docs/planning/*.zip
 site/*.zip
+
+# safe-to-delete scratch — device_bash (the sandbox's on-device shell) can't unlink files inside a
+# mounted folder, so anything it needs to remove gets moved here instead of deleted. Review and
+# delete this folder by hand whenever it's non-empty; nothing in it is ever repo content.
+_to_delete/

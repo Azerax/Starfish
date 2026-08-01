@@ -30,7 +30,10 @@ export interface ToolCall {
   memoryDerived?: boolean;
 }
 
-export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure'] as const;
+// 'threat' (TIF-4, docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md) — the Threat Evidence lifecycle's own
+// domain (evidence.ts's EvidenceLifecycle: evidence:observe/reproduce/corroborate/approve/publish/
+// deploy/retire/revoke/expire). Additive: existing domains and every existing consumer are unchanged.
+export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure','threat'] as const;
 export type AuditDomain = typeof AUDIT_DOMAINS[number];
 
 export interface AuditEvent {

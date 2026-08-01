@@ -66,3 +66,20 @@ export { SourceRegistry, normalizeSource, defaultVerifier, blocklistPayloadHash,
 export { merkleRoot, auditRoot, Anchorer, NoopAnchor, fileAnchor, customAnchor, makeAnchorAdapter, type AnchorAdapter, type AnchorRecord, type AnchorReceipt, type AnchorConfig } from './anchor';
 export { loadGovernor, persistGovernor, restoreGovernor, anchorAudit } from './boot';
 export type { Governor, EnforcementPosture } from './boot';
+
+// ---- Threat Immunity Fabric (docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md) — TIF-0/TIF-1/TIF-3/TIF-4 ----
+export {
+  THREAT_FAMILIES, DETECTOR_CLASSES, FABRIC_ACTIONS, PUBLICATION_SCOPES, EVIDENCE_STAGES,
+  TERMINAL_STAGES, ALLOWED_TRANSITIONS, CORROBORATION_MIN_VALIDATORS,
+  APPROVAL_REQUIRES_DISTINCT_FROM_PUBLISHER, STRUCTURAL_FEATURES, UNEXPECTED_CATEGORIES_FOR_SOURCE,
+  type ThreatFamily, type ThreatSeverity, type DetectorClass, type DetectorFinding, type FabricAction,
+  type PublicationScope, type EvidenceStage, type StructuralFeature, type SourceKindForBehaviour,
+} from './evidencetypes';
+export {
+  EvidenceLifecycle, sealEnvelope, verifyEnvelopeSeal, contentCommitment, buildDecisionReceipt,
+  type ThreatEvidenceEnvelope, type ThreatIndicators, type DecisionReceipt, type ObserveInput,
+} from './evidence';
+export {
+  classifyBehaviour, classifyStructuralFeature, classifyStructuralFeatures,
+  type BehaviouralCheck, type BehaviouralFinding,
+} from './detectors';
