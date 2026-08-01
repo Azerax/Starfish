@@ -1,13 +1,6 @@
 # Project Starfish v0.26.0 — release notes
 
-> **STATUS: DRAFT — not shippable yet.** This documents new functionality (Threat Immunity Fabric,
-> TIF-0/1/3/4) that is coded, typechecked, and test-verified, but **not yet committed to git** as of
-> this draft. It must not be tagged or published until (a) it's actually committed and pushed, and
-> (b) Scott has decided whether this ships before or after the still-draft `v0.25.0` hardening release
-> (see "Sequencing note" below) — the two are independent efforts and this note takes no position on
-> their order.
-
-**Date:** 2026-08-01 (draft) · **Theme:** threats stop being handled ad hoc and start being handled
+**Date:** 2026-08-01 · **Theme:** threats stop being handled ad hoc and start being handled
 like everything else in Starfish — as governed, auditable, dual-controlled evidence with a lifecycle,
 not a flat signature list you either trust or don't.
 
@@ -80,12 +73,16 @@ conformance test.
 ## Verification
 
 - `tsc --noEmit` clean against the real `tsconfig` chain.
-- 23 new tests (16 lifecycle conformance, 7 detector conformance) covering every invariant above,
-  including the tamper-detection and dual-control cases.
-- Full suite: 63 test files, 504 passed / 1 pre-existing unrelated skip.
-- Run in a scratch Linux environment in addition to a native Windows `npm run ci` pass, since this
-  repo's local `node_modules` carries Windows-only native bindings that can't run the test runner
-  directly on the development machine's Linux tooling.
+- The 23 tests specific to this work (16 lifecycle conformance, 7 detector conformance) pass in
+  isolation, covering every invariant above including the tamper-detection and dual-control cases.
+- Whole-repo suite (this TIF work plus everything else on the branch, including the unrelated v0.25.0
+  hardening and desktop UI work): **104 test files, 704 passed, 1 skipped.** The earlier number in this
+  doc (63 files / 504 passed) was from a narrower scratch run scoped to `governance-core` only, taken
+  before the rest of the branch's work — including v0.25.0's desktop IPC-authority tests — was in the
+  same tree; it undercounted what's actually on this branch, not a regression.
+- Verified twice: once via `tsc --noEmit` + a scratch Linux install in the cloud sandbox (the repo's
+  local `node_modules` on Windows carries native bindings that can't run the test runner directly), and
+  again natively via `npm run ci` on Windows before the TIF commit landed.
 
 ## What's next
 
@@ -104,7 +101,6 @@ conformance test.
 
 ## Sequencing note
 
-This is independent of, and unrelated to, the still-draft `v0.25.0` release (the adversarial
-self-audit hardening pass, 26 findings closed). Whether v0.26.0 ships before, after, or alongside
-v0.25.0 is an open call — nothing here depends on that release, and nothing in v0.25.0 depends on this
-one.
+This is independent of, and unrelated to, `v0.25.0` (the adversarial self-audit hardening pass, 26
+findings closed) — nothing here depends on that release, and nothing in v0.25.0 depends on this one.
+v0.25.0 ships first since it's already mid-release; v0.26.0 follows it as its own numbered release.

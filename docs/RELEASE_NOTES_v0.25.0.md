@@ -1,16 +1,10 @@
 # Project Starfish v0.25.0 — release notes
 
-> **STATUS: DRAFT — not shippable yet.** This documents the hardening that has landed and been
-> regression-tested. It must NOT be tagged or published until the remaining in-flight hardening items
-> are closed (see "Still in progress" below) — a release that leads with "hardening" while a known
-> enforcement gap is still open would overclaim, which is exactly the failure this release is about.
-> The specific open items are tracked privately (unpatched findings in a security product are not
-> published); this note describes only what is *fixed*.
-
-**Date:** 2026-07-20 (draft) · **Theme:** we turned the audit on ourselves. A systematic adversarial
+**Date:** 2026-08-01 · **Theme:** we turned the audit on ourselves. A systematic adversarial
 self-audit of Starfish's own governance core — comparing every stated guarantee against the code that
 should enforce it — surfaced a batch of real gaps. This release closes twenty-six of them, each with a
-regression test that plants the actual attack.
+regression test that plants the actual attack, plus the desktop IPC-authority hardening that followed
+from the same audit.
 
 The honest framing up front: **finding these is the system working, not failing.** A governance product
 that cannot show you where its own edges were is not one to trust with a boundary. Every fix below ships
@@ -139,6 +133,30 @@ now on by default in the shipped roots (it only fires on calls that claim a capa
 non-deviation is honestly reported **off** — nothing issues a scope contract at runtime yet, so it is
 displayed off rather than pretended on; a contract issuer is the tracked path to enabling it.
 
+### The desktop app can no longer trust the renderer to say who's asking
+Electron IPC has no caller authentication, and the desktop app was trusting renderer-supplied authority
+outright: `req.actor` on approvals, and a `confirmed`/`confirm` boolean on tolerance changes and
+permanent deletes. Any code running in the renderer — including injected code — could self-approve a
+governed decision, raise risk tolerance to widen auto-run, or purge the trash. Closed in two passes:
+
+- **`IpcAuthority` + renderer integrity.** The operator principal is now assigned by the main process,
+  never read from the IPC payload. Privileged operations require a per-session capability token that
+  reaches the renderer only through the preload closure — a foreign frame or webview can't present it.
+  The shipped renderer bundle is hashed on load, on every filesystem change, and on a periodic sweep; a
+  modified, injected, or removed asset latches tamper and drops the system into safe mode. `sandbox:true`
+  and a strict CSP (no inline/remote scripts) close the injection vector those checks depend on.
+- **A trusted-path confirmation for irreversible operations.** The first pass left one residual stated
+  openly: a Chromium RCE in the renderer runs beneath the JS layer entirely, where the token, CSP, and
+  integrity check all live — it could still forge a privileged call. The one thing an RCE cannot forge is
+  a main-process modal, so permanent purge and destructive `approved` deletes now require
+  `dialog.showMessageBoxSync` in main before they proceed. An RCE'd renderer with a valid token and a
+  pristine on-disk bundle still cannot click that dialog for the human.
+
+The authorize-then-act logic was also extracted into dependency-injected functions and unit-tested
+directly (21 desktop IPC-authority tests) rather than only asserted through integration coverage — proving
+properties like "no token → the underlying action is never called" and "tampered renderer → every
+privileged op refused even with a valid token."
+
 ### Smaller correctness fixes
 The evidence gate now matches recorded artifacts **exactly** (a claim about `config.ts` is no longer
 "backed" by a write to `myconfig.ts`); a signed source-revocation is stored in the same normalized form
@@ -150,31 +168,35 @@ and an absent HTTP Host header on the sidecar now fails closed.
 
 ## How to verify
 `npm run ci` (typecheck + unit + conformance + determinism + dependency-direction lint + secret/IP scans +
-SBOM). This batch: **99 test files, 656 passed, 3 skipped** — including the new self-audit regression
-tests (`selfaudit-fixes.conformance.test.ts` plus additions to the netguard, sources, memory, wiki,
-boundary, pdp-risk, and boot-persistence suites). Every fix above has a test that plants the actual
-attack it refuses.
+SBOM). The self-audit findings alone: **99 test files, 656 passed, 3 skipped** — including the new
+self-audit regression tests (`selfaudit-fixes.conformance.test.ts` plus additions to the netguard,
+sources, memory, wiki, boundary, pdp-risk, and boot-persistence suites). With the desktop IPC-authority
+work folded in: **101 test files, 677 passed, 3 skipped** (21 desktop IPC-authority tests across
+`ipc-authority.conformance` and `privilegedipc.conformance`). Every fix in this release has a test that
+plants the actual attack it refuses. Reconfirmed clean with a full native `npm run ci` pass immediately
+before this release was finalized.
 
 ---
 
-## Still in progress (not in this release, and why the version is a draft)
+## Known residuals (tracked, not blocking this release)
 
-Hardening is continuous. Some findings from the same self-audit require larger, higher-risk changes and
-are being done with care rather than on momentum — a fix that breaks the golden path (an ordinary
-governed session, the zero-change demo, first governed creation) is not a fix. These are tracked
-privately until they land, and this release is not tagged until the highest-severity ones are closed.
-
-Also still tracked, and stated rather than hidden:
+Per `docs/THREAT_MODEL.md`'s trust ladder, an accepted residual within a stated boundary is not the same
+as an open in-scope gap — these are the former, and hardening against them continues independently of
+this release:
 - **H1 — OS-level isolation (T-25)** remains the single biggest residual. Untrusted tasks run to the
-  enforcement seam, not a container/microVM/namespace boundary. `SECURITY.md` states this.
-- **The optional enforcement gates** (verify-before-invoke, task-binding, scope non-deviation) are built
-  and tested but not yet wired on by default in the shipped composition roots; making that posture
-  explicit and safe-to-enable is in progress.
+  enforcement seam, not a container/microVM/namespace boundary. `SECURITY.md` states this; a Chromium RCE
+  defeating the trusted-path dialog itself (fakes the click via the compositor) sits in the same
+  OS-sandbox territory.
 - Signed auto-update + blocklist enforcement (H2), eval-mode/production-target guard (H3), and the OpenSSF
   Scorecard remediation (currently 3.7/10) remain tracked in `HARDENING_BACKLOG.md` and `ROADMAP.md`.
 
-## Deferred to the owner (release mechanics)
-Do not tag or publish until the in-flight items above are closed and the golden-path gate is green. Then:
-`git commit` + push (PR against `master`, required `verify` CI check); update `CHANGELOG.md`; tag
-`v0.25.0`; `npm publish` with provenance/SBOM; independent external security review; rotate the live
-`.env` key.
+The optional enforcement gates (verify-before-invoke, task-binding, scope non-deviation) are no longer on
+this list — verify-before-invoke is on by default in the shipped roots as of this release (see
+"Enforcement posture is explicit and audited" above); scope non-deviation is honestly reported off, since
+nothing issues a scope contract at runtime yet.
+
+## Release mechanics (owner-tracked, separate from the hardening work itself)
+Independent external security review and rotating the live `.env` key are standing items on Scott's own
+list, not automatable from here — this release does not wait on either to be tagged, but they stay
+tracked. Git tag, push, and `npm publish` are plain commands at this point; see the session's reply for
+the exact sequence.
