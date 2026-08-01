@@ -4,6 +4,22 @@ All notable changes to Project Starfish are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/). Dates are YYYY-MM-DD.
 
+## [Unreleased]
+
+### Added
+- **Threat Immunity Fabric — TIF-0/1(partial)/3/4.** Governed Threat Evidence lifecycle
+  (`packages/governance-core/src/evidence.ts`, `evidencetypes.ts`): `OBSERVED -> REPRODUCED ->
+  CORROBORATED -> APPROVED -> PUBLISHED -> DEPLOYED -> RETIRED | REVOKED`, tamper-evident sealed
+  envelopes, `CORROBORATION_MIN_VALIDATORS = 2` distinct validators, and the proposer≠approver
+  invariant (dual control, same pattern as `wikigate.ts`/`scope.ts`). Behavioural + structural
+  detector inputs (`detectors.ts`). Every lifecycle transition is audited under a new `'threat'`
+  `AuditDomain`. Additive only — advisory `fabricAction`, no change to `pdp.ts` or `score.ts`'s
+  `combine()`. Semantic detector, reproduction sandbox (TIF-2), and cross-org broker (TIF-5+) are
+  explicitly out of scope for this pass — see `docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md` §11.
+  Verified: `tsc --noEmit` clean; 23 new tests (16 lifecycle + 7 detector conformance), full suite
+  504/505 passing (1 pre-existing unrelated skip), run against a scratch Linux install since this
+  repo's local `node_modules` has Windows-only native bindings.
+
 ## [0.24.0] - 2026-07-19
 
 ### Added
