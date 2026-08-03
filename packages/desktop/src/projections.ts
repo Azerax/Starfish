@@ -61,10 +61,20 @@ export function agentDetail(g: Governor, id: string, projectRoot: string, forbid
 }
 
 export function decisionLog(g: Governor, limit = 12): DecisionLogEntry[] {
-  const evs = g.audit.recent(limit * 3).filter((e: AuditEvent) => e.decision !== undefined || e.domain === 'tool');
+  // Found on review, same anti-pattern as the sidecar's own verdict-handling bug (packages/sdk/src/
+  // serve.ts): this used to filter on `e.decision !== undefined || e.domain === 'tool'` and then map with
+  // `e.decision === 'deny' ? 'deny' : 'allow'` -- so a domain:'tool' audit event with NO `decision` field
+  // (nothing in this repo currently writes one that way, but `audit.append()` is a public API any future
+  // caller, including a third-party integration, can call directly -- confirmed reachable, not
+  // theoretical: a hand-appended `{ domain: 'tool', action: 'tool-started:x' }` event with no `decision`
+  // rendered here as `"verdict": "allow"`) would show the human operator reviewing this log an ALLOW for
+  // something that was never actually adjudicated at all. `decisionLog` should only ever show real
+  // decisions, so it now only includes events that HAVE one, and reads the actual value instead of
+  // defaulting the permissive way for anything else.
+  const evs = g.audit.recent(limit * 3).filter((e: AuditEvent) => e.decision === 'allow' || e.decision === 'deny');
   const mapped = evs.map((e): DecisionLogEntry => ({
     id: `a${e.seq}`, ts: hhmmss(e.ts), actor: e.actor, tool: e.action, target: e.target,
-    verdict: (e.decision === 'deny' ? 'deny' : 'allow') as Verdict, reason: e.reason ?? '', riskTier: e.riskTier,
+    verdict: e.decision as Verdict, reason: e.reason ?? '', riskTier: e.riskTier,
     ...band(e.riskTier),
   }));
   return mapped.reverse().slice(0, limit);   // newest first

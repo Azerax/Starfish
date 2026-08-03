@@ -7,11 +7,24 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { assertEnum, clampEnum, InvalidEnumValueError } from '@starfish/governance-core';
 import type { Governance } from './index';
 
 export const WIRE_VERSION = 1;
 export const MAX_BODY_BYTES = 256 * 1024;
-const RISK_TIERS = ['low', 'medium', 'high', 'critical'];
+const RISK_TIERS = ['low', 'medium', 'high', 'critical'] as const;
+// F-verdict: `verdict` is not an operational tier like riskTier above, which always needs SOME value and
+// so clamps an unrecognized one to the strict default ('high'). A decision verdict has zero ambiguity
+// tolerance -- it is exactly a human's approve/deny answer, and there is no safe way to guess what an
+// unrecognized string meant. Found the hard way (not by inspection): this endpoint used to do
+// `body.verdict === 'deny' ? 'deny' : 'approve'`, treating ANY non-"deny" string -- including the
+// perfectly natural, plausible "denied" -- as a silent APPROVAL, the opposite of this project's own
+// fail-closed principle everywhere else. Reject anything that isn't the exact literal below outright
+// (400) instead of defaulting either way. Both this and RISK_TIERS' clamp now go through
+// governance-core's assertEnum/clampEnum (see validate.ts) rather than a hand-rolled ternary -- the same
+// shape of bug (checking for the safe literal, defaulting everything else to the dangerous one) turned up
+// independently in packages/desktop/src/projections.ts, which is what prompted centralizing this.
+const VERDICTS = ['approve', 'deny'] as const;
 export interface SidecarIdentity { token: string; actor: string }
 export interface SidecarOptions { governance: Governance; identities: SidecarIdentity[]; host?: string; port?: number }
 /** A governed root exposed by a multi-tenant sidecar. `operators` restricts who may approve (A20); if
@@ -108,7 +121,7 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
             tool: str(raw.tool, 120) ?? 'unknown',
             target: str(raw.target, 1024),
             reason: str(raw.reason, 2000) ?? '',
-            riskTier: RISK_TIERS.includes(String(raw.riskTier)) ? String(raw.riskTier) : 'high',
+            riskTier: clampEnum(raw.riskTier, RISK_TIERS, 'high'),
             refId: ctx.actor + ':' + (str(raw.refId, 120) ?? randomUUID()),
           };
           const rec = gov.broker.file(dec as Parameters<typeof gov.broker.file>[0]);
@@ -129,7 +142,9 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
         }
         if (method === 'POST' && url.startsWith('/v1/decisions/')) {
           const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));
-          const verdict = body.verdict === 'deny' ? 'deny' : 'approve';
+          let verdict: 'approve' | 'deny';
+          try { verdict = assertEnum(body.verdict, VERDICTS, 'verdict'); }
+          catch (e) { return send(400, { error: (e as InvalidEnumValueError).message }); }
           const r = gov.broker.resolve(decId, verdict, ctx.actor, ctx.operators);
           if (r.ok) ctx.resolved.set(decId, verdict);
           return send(r.ok ? 200 : 409, { ok: r.ok, reason: r.reason });
