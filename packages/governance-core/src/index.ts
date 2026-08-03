@@ -3,6 +3,7 @@ export const VERSION = '0.9.0';
 export const RING = 1 as const;
 
 export * from './types';
+export { assertEnum, clampEnum, InvalidEnumValueError } from './validate';
 export { AuditLog } from './audit';
 export { Registry } from './registry';
 export { containCheck, caseFold, sameOrUnder, boundaryForAgent, boundaryForSkill, skillWorkspaceLayout, type AgentBoundarySpec, type SkillBoundarySpec } from './boundary';

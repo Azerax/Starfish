@@ -112,4 +112,40 @@ describe('sidecar input hardening (audit A6, A11, A12)', () => {
       expect(pend.length).toBe(2);
     } finally { await sc.close(); }
   });
+
+  it('rejects an unrecognized verdict (400) instead of silently treating it as an approval', async () => {
+    // Regression test: this endpoint used to do `body.verdict === 'deny' ? 'deny' : 'approve'`, so any
+    // string other than the exact literal "deny" -- including the perfectly plausible "denied" -- was
+    // silently APPROVED. Confirmed nothing executes and nothing is left pending-forever: the decision
+    // stays pending, resolvable by a correct follow-up call, rather than being consumed by the bad one.
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'w', actor: 'worker' }, { token: 'o', actor: 'operator' }] });
+    const h = (t: string): Record<string, string> => ({ 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer ' + t, 'content-type': 'application/json' });
+    try {
+      const rec = gov.broker.file({ actor: 'worker', kind: 'tool', tool: 'fs.write', target: 't', riskTier: 'high', reason: 'r', refId: 'verd1' });
+      const bad = await fetch(sc.url + '/v1/decisions/' + rec.id, { method: 'POST', headers: h('o'), body: JSON.stringify({ verdict: 'denied' }) });
+      expect(bad.status).toBe(400);
+      const s1 = await (await fetch(sc.url + '/v1/decisions/' + rec.id, { headers: h('w') })).json();
+      expect(s1.status).toBe('pending');   // NOT silently approved, NOT silently denied -- still awaiting a real verdict
+      const good = await fetch(sc.url + '/v1/decisions/' + rec.id, { method: 'POST', headers: h('o'), body: JSON.stringify({ verdict: 'deny' }) });
+      expect(good.status).toBe(200);
+      const s2 = await (await fetch(sc.url + '/v1/decisions/' + rec.id, { headers: h('w') })).json();
+      expect(s2.status).toBe('denied');   // the correct follow-up call still resolves it normally
+    } finally { await sc.close(); }
+  });
+
+  it('rejects a missing verdict field (400), not a silent approval', async () => {
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'w', actor: 'worker' }, { token: 'o', actor: 'operator' }] });
+    const h = (t: string): Record<string, string> => ({ 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer ' + t, 'content-type': 'application/json' });
+    try {
+      const rec = gov.broker.file({ actor: 'worker', kind: 'tool', tool: 'fs.write', target: 't', riskTier: 'high', reason: 'r', refId: 'verd2' });
+      const bad = await fetch(sc.url + '/v1/decisions/' + rec.id, { method: 'POST', headers: h('o'), body: JSON.stringify({}) });
+      expect(bad.status).toBe(400);
+      const s1 = await (await fetch(sc.url + '/v1/decisions/' + rec.id, { headers: h('w') })).json();
+      expect(s1.status).toBe('pending');
+    } finally { await sc.close(); }
+  });
 });

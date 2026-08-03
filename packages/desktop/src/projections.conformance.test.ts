@@ -65,4 +65,14 @@ describe('projections — live Governor -> Bridge views', () => {
   it('bufferView reflects the capability ledger', () => {
     expect(Array.isArray(bufferView(h.g))).toBe(true);
   });
+
+  it('decisionLog never shows "allow" for an audit event that was never actually adjudicated', () => {
+    // Regression: `audit.append` is a public API -- any caller (a future telemetry marker, a third-party
+    // integration) can append a domain:'tool' event with no `decision` field at all. decisionLog used to
+    // default anything without an exact 'deny' to 'allow', which would show the operator an ALLOW for a
+    // call that was never actually decided one way or the other. It must be excluded entirely instead.
+    h.g.audit.append({ actor: 'worker', domain: 'tool', action: 'tool-started:no-verdict-here', reason: 'a progress marker, not a governance decision' });
+    const log = decisionLog(h.g, 12);
+    expect(log.some((e) => e.tool === 'tool-started:no-verdict-here')).toBe(false);
+  });
 });
