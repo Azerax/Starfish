@@ -4,6 +4,211 @@ All notable changes to Project Starfish are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/). Dates are YYYY-MM-DD.
 
+## [0.27.0] - 2026-08-20
+
+External adversarial review. Twelve questions posed publicly by **u/WillowEmberly** asked, of each
+control, not "does it exist" but "what happens when it is absent, disabled, failed, or lying." Ten
+findings; four were defects that a fully green test suite had never caught. Full analysis in
+`ADVERSARIAL-QA.md`, dev-log entry in `docs/PHASE_BUILD_LOG.md`, and the matching marketing sweep in
+`docs/SITE_CLAIMS_AUDIT.md`.
+
+**The structural lesson, recorded because it caused three of the ten:** our conformance suite
+instantiates subsystems directly, so it proves a module *works* — it cannot prove a module *runs*.
+`scope.ts` had 7 green tests and no production caller. `monitor.sweep()` and
+`Registry.verifyIntegrity()` were each invoked only by their own tests. Green tests are not evidence
+of an enforced control. `packages/governance-core/src/reachability.conformance.test.ts` now asserts,
+against source, that each enforcement control is referenced from a non-test file.
+
+### Security
+- **F-1 — a deleted audit log is no longer indistinguishable from a fresh install.** `AuditLog`
+  recovery was gated on the log or segment index existing (`audit.ts:62`), so deleting `audit.jsonl`
+  skipped recovery entirely and the head anchor — the one artifact proving events existed — was never
+  read. Integrity reported `clean`, `verify()` returned `true`, and `seq` restarted at 0. Recovery now
+  always runs; an anchor with no log present reports `audit-deleted` and the governor boots into safe
+  mode. *Telemetry that vanishes is now at least as loud as telemetry that reports failure.*
+- **F-2 — the monitor can no longer report "all clear" over a missing audit.** An absent log yielded
+  an empty window, all-zero counters and zero findings, and `reconcile({allClear:true})` *passed* —
+  so deleting the audit defeated both the watcher and its invigilator in one move. A log that existed
+  and is now gone is a `critical` `audit-vanished` finding, and `reconcile()` refuses any report it
+  cannot corroborate.
+- **F-3 — a friction profile can no longer override an explicit operator policy.** `Decision` now
+  carries `askOrigin: 'risk' | 'policy' | 'floor'`. Previously a routine risk escalation and an
+  operator's own `ask` rule were both an indistinguishable `{allow:false, ask:true}`, so
+  `writeProfile:'auto'` silently voided a rule the operator had written by name. Only `'risk'` is
+  relaxable; `'policy'` and `'floor'` outrank the profile.
+- **F-4 — a failed pre-image backup no longer buys an auto-allow.** `snapshotBackup` returned a bare
+  boolean where `false` meant *both* "no existing file" and "the backup threw", and the caller
+  rendered it as `'new file'` — so an unrecoverable overwrite was audited as a safe creation. Now a
+  tri-state (`'backed-up' | 'not-applicable' | 'failed'`); `'failed'` escalates to the operator
+  instead of auto-allowing, and the audit says so.
+- **F-5 — Glob/Grep patterns are governed.** `ccToGoverned` discarded the pattern and substituted
+  `'.'`, so `Glob{pattern:'/etc/**'}` was adjudicated as a read of the cwd and **allowed**. The
+  literal root of an absolute or escaping pattern is now extracted and boundary-checked; ordinary
+  relative patterns are unchanged.
+- **F-6 — write content reaches the PDP.** `content` was dropped in translation, making the
+  poisoned-`.env` screening (`screenEnv`) unreachable from the overlay. Now carried through.
+- **F-7 / F-8 — two dormant controls are now driven from production.** `monitor.sweep()` (and with it
+  every monitor rule) and `Registry.verifyIntegrity()` had no production caller. Both now run on the
+  sidecar's live tick, so an out-of-band edit to `tools.json` trips safe mode within a second instead
+  of never. New `GET /v1/integrity` endpoint; `GET /v1/monitor` performs a real sweep.
+- **F-9 — `startSidecar` no longer permits agent-to-agent approval.** It passed
+  `operators: undefined`, which makes `broker.resolve` skip the operator check: proposer≠approver
+  still held, but any other authenticated identity could approve someone else's decision. Defaults to
+  `['operator']`, overridable via the new `operators` option.
+- **F-11 (new, found during the site-claims sweep) — the shell and network floors are enforced in the
+  PDP.** `isCatastrophicShell` and `isBlockedHost` ran only in `@starfish/governance-hooks`, so SDK
+  and `starfish serve` consumers inherited neither, while the docs described both as floors "enforced
+  independently of any policy or tolerance". Moved to `governance-core/src/shellguard.ts` and enforced
+  inside `PDP.ingress`, ahead of policy and tolerance, on every surface. The hooks package re-exports
+  and still pre-filters, so overlay behaviour is unchanged.
+- **Q8 — the rings now agree on audit failure.** The PDP failed closed when the audit could not be
+  written; the PEP (ring 3) swallowed the same failure and carried on, so an unwritable audit denied
+  every future decision while still executing already-authorized work, unrecorded. `peps.ts` now
+  audits **before** acting on every mutating operation and aborts if the record cannot be written.
+
+### Changed
+- **BREAKING (behaviour): a catastrophic shell command is now DENIED, not escalated.** Previously
+  `rm -rf /` reached the risk scorer as `critical` and was offered to a human for approval; it is now
+  refused outright by the PDP floor and is not approvable. The hooks overlay already behaved this way;
+  the core now matches. Critical-but-legitimate destructive work (e.g. `rm -rf ./build`) still
+  escalates to a human exactly as before.
+- **The Evidence Gate is ON by default** in `@starfish/sdk` (`enforceClaims` defaulted to `false`
+  while the site advertised it as blocking). An unbacked closing claim now ends the run as
+  `claim-unbacked` after a correction retry, rather than being believed. Opt out with
+  `createGovernance({ enforceClaims: false })`.
+- `ToolCategory` gains `'network'`, which the seeded `net` tool already used but the union did not
+  declare. Deliberately given no `CATEGORY_TIER` entry, so a network tool with no explicit `riskTier`
+  still falls to `critical`.
+
+### Documentation
+- `ADVERSARIAL-QA.md` — all twelve questions answered against source with file:line citations and
+  probe transcripts, including the shortest verified chain from model output to irreversible host
+  effect (two hops at Medium tolerance; gated by one operator setting).
+- `docs/SITE_CLAIMS_AUDIT.md` — every marketing claim on `site/` mapped to evidence. Corrected: the
+  Arena (design-only) and non-deviation enforcement (F-10, unwired) were asserted in the present tense
+  on `starfish-vs-hermes`, two of them inside `FAQPage` schema. Now roadmap-labelled. Task-binding,
+  self-integrity and keychain-fallback claims qualified to match shipped defaults.
+
+### Closed after the first pass — F-10 and the CI blind spot
+- **F-10 — scope non-deviation is now WIRED. All ten findings are closed.** New
+  `governance-core/src/scopeissuer.ts` supplies the contract issuer that `scope.ts` always needed:
+  `ScopeContractLedger.check()` fails closed when a task has no contract, and nothing issued
+  contracts, so switching the gate on would have denied every call in the system. That is why it
+  shipped inert, and why the fix is an issuer rather than a flag flip.
+  - **Applicability policy** (`ScopeMode`): `contracted` (default) — a call carrying a `taskId` must
+    have a contract or it is denied; a call with no `taskId` has no mission to deviate from and falls
+    through to the agent's standing grants, boundary and floors. `strict` additionally requires a
+    `taskId` on every call. `off` restores the exact pre-v0.27 behaviour.
+    That second rule is a scope statement, not a loophole: "no task, no tool" is a *different*
+    control (`enforceTaskBinding`) that already exists and composes with this one.
+  - **Auto-derivation** from what governance already knows, so no caller authors a contract: D1 from
+    the agent's declared `allowedTools`, D2 from the boundary roots, D4 from `scopeCallBudget`. D3 is
+    the one place derivation **tightens** — an auto-derived contract permits **no** commands until the
+    task names them.
+  - `posture.scopeNonDeviation` is now **derived from the live gate** (`scope.enforce`) and a new
+    `posture.scopeMode` reports *which* policy is active. The hardcoded `false` was the original
+    defect: it read as an honest disclosure while being unfalsifiable.
+  - Contracts persist to `state/scope.contracts.json` and restore on boot — without that, an
+    in-flight task would come back contract-less and have every call denied.
+- **The CI blind spot that hid F-7/F-8/F-10 also covered the whole Azure surface.** Every gate
+  (`tsconfig.json`, `vitest.config.ts`, `dep-direction-lint`, `ip-denylist-scan`) scoped to
+  `packages/`, so 22 files of Marketplace-facing TypeScript — sidecar, metering, tier2 gateway, tier3
+  policy/telemetry — were checked by nothing at all. Added `tsconfig.azure.json`
+  (`npm run typecheck:azure`), `scripts/smoke-azure.mjs` (`npm run smoke:azure`, runs the five
+  `azure/**/*.smoketest.mjs` that nothing had ever executed), and extended the IP denylist scan to
+  `azure/`. All three are wired into `npm run ci`. Everything passed on first run — the code was fine,
+  it was simply unguarded.
+
+### Round two — the gaps the twelve questions exposed that no F-number covered
+- **Q12 — the two-hop chain is closed.** New `governance-core/src/execprovenance.ts` adds
+  **self-authored execution**: within one task, if the agent wrote a file the exec tool it is now
+  asking to run would execute, that call requires a human and **risk tolerance cannot satisfy it**.
+  The reviewed chain (write `evil.test.js` → `run_tests`, both auto-allowed at Medium) now stops at
+  hop two. Deliberately an escalation, not a denial — writing a test and running it is legitimate
+  work; what is removed is the ability to close the loop with nobody watching. Same floor pattern as
+  the existing secret-read check. Targeted, not blanket: ordinary source writes don't gate the
+  runner, a test write doesn't gate `git_commit`, another task's write doesn't taint this one, and a
+  *denied* write never taints at all.
+- **Q5 — the recovery store is now governed like the forward path.** `TrashStore.purge` /
+  `purgeAll` took no PDP and no audit — raw `rmSync(recursive, force)` with the guarantee living
+  entirely in the caller. `purge` now **requires** an audit sink and records *before* destroying;
+  an unauditable purge is refused rather than performed quietly. `purgeAll` additionally demands a
+  literal `'PURGE-ALL'` confirmation. `privilegedPurge` was already a correct caller — but a class
+  cannot assume every future caller will be.
+- **Q4 — authority granted by absence is now visible, and optionally denied.** An agent that declares
+  no `allowedTools` is unrestricted: adding an allowlist restricts, omitting one grants. Kept for
+  backward compatibility, but the grant is now **audited once per agent**, and the new
+  `strictAgentAllowlist` option turns the absence into a denial. Reported in the boot posture.
+- **Q9 — two more failed-vs-not-applicable conflations closed.** An unwritable audit anchor was
+  swallowed as "best effort", silently ending tail-truncation detection while the chain kept
+  verifying — now recorded on the log and surfaced at boot as an `anchor-degraded` finding. A broker
+  that cannot persist was also silent, so a restart made a pending high-risk decision *vanish* rather
+  than be re-offered, contradicting the class's own fail-closed promise — now audited.
+- **Q2 — `resourceOf` is no longer steerable by key order.** F6 fixed the decoy weakness for tools
+  that declare `pathParams`; it survived for tools that declare none, where policy, risk scoring and
+  the audit `target` all consume the "first string in JSON order". Conventionally-named fields are
+  now preferred over positional order.
+
+### Documentation honesty
+- `README.md`, `packages/cli/README.md` and `SECURITY.md` all asserted *"No task, no tool"*
+  unconditionally while `enforceTaskBinding` ships off. Reworded to say what is actually enforced,
+  and `SECURITY.md` now points at the boot posture as the source of truth for which gates are live.
+- `site/starfish-vs-hermes` non-deviation copy **restored to a direct claim** — with F-10 wired it is
+  now literally true and covered by `scopeissuer.conformance.test.ts`. The Arena stays
+  roadmap-labelled; it is still design-only.
+- Dated update notes added to `blog/toby-and-hank.html` (F-2/F-8) and `blog/the-1.0-candidate.html`
+  (F-1), in the style of `mosaic-and-the-unwired-fix` — noting what the post got wrong rather than
+  editing it away.
+
+### Repo hygiene
+- File audit swept six superseded items into `_to_delete/2026-08-20-audit/` with a manifest: three
+  `.bak-20260803` pre-patch copies, the `serve_ts_verdict_fix…` delivery zip and its one-shot applier
+  (payload already committed in 65b3974), and the generated `azure/.local-seed-root/`. Nothing
+  deleted; the folder is gitignored and recoverable.
+- `.gitignore` now also covers the generated `azure/.local-*` artifacts, `*.bak-<timestamp>` files and
+  the spent delivery zip. `azure/.local-test-tokens.json` was already ignored — it holds live
+  `worker` **and** `operator` bearer tokens, and committing the operator one would hand a reader the
+  authority to approve governed decisions (F-9 with credentials attached).
+- **`DEPRECATED.md` §3 corrected.** It listed the non-deviation implementation plan as "Implemented;
+  plan is now historical" — the exact mistake F-10 is about, "module exists and is green" read as
+  "feature shipped".
+### Known gaps
+- **T-25 / H1 — no OS-level isolation.** Unchanged and now the only headline residual. Self-authored
+  execution closes the *specific* two-hop chain the review found, but it is a control on a sequence,
+  not a boundary: once code executes as the user, every in-process control is moot. **Starfish governs
+  a cooperative process; it does not contain a hostile one.** That sentence is still the honest
+  ceiling and no amount of in-process work moves it.
+- **Heuristic-layer controls remain probability-reducing** (Q10): the risk regexes,
+  `isCatastrophicShell`, `scanEgress` and the runner predicates are denylists, and an adversary who
+  has read them can phrase around them. The authority-reducing controls — boundary containment,
+  default-deny, memory-cannot-authorise, deletion hard rules, exec templates, scope contracts — are
+  the ones that survive a reader.
+
+### Verified
+- **First pass:** `108 test files, 743 passed, 1 skipped` (from 105/714) under a full vitest run on a
+  scratch Linux install.
+- **F-10 + Azure pass:** the scratch vitest environment degraded mid-session (this repo's
+  `node_modules` carries Windows-only native bindings and the workspace links do not resolve through
+  the Linux mount), so the second pass was verified by compiling `governance-core` under
+  `strict: true` and executing the conformance + determinism suites through a compile-and-run harness:
+  **516 assertions passing, 0 real failures, 29 async tests not exercised by the harness.** The single
+  apparent failure is a harness artifact — `deletion.conformance` uses `expect.arrayContaining`, which
+  the harness stubs as identity, turning a "contains" assertion into a strict compare. A dedicated
+  25-check runtime probe of the F-10 gate (all D1–D4 branches, every `ScopeMode`, restart durability,
+  seal tamper) passes end to end through the real PDP.
+- **Natively green against the repo:** `typecheck:azure`, `smoke:azure` (5/5), `lint:deps`, `scan:ip`
+  (now including `azure/`), SBOM + license check.
+- **Round two:** `governance-core` compiles clean under `strict: true`; `adversarial-round2.conformance.test.ts`
+  is **12/12** through the real PDP (the reviewed Q12 chain, its four targeting checks, Q4's four
+  branches, Q2's decoy, Q9's two swallow sites), and a standalone 22-check probe covers the runner
+  predicates end to end. All five native gates re-run green afterwards.
+- 48 new tests total across `adversarial`, `adversarial-round2`, `reachability`,
+  `writeprofile.hardening`, `scopeissuer` and `fsdelete` conformance suites, each reproducing the
+  original defect so a regression fails loudly.
+
+**Run `npm run ci` on Windows before tagging.** The full vitest suite and the git-based secret scan
+were not re-run end to end after the F-10 work; `starfish-v0.27.0-release.ps1` step 5 is that gate.
+
 ## [0.26.0] - 2026-08-01
 
 ### Added
@@ -16,9 +221,13 @@ All notable changes to Project Starfish are recorded here. The format follows
   `AuditDomain`. Additive only — advisory `fabricAction`, no change to `pdp.ts` or `score.ts`'s
   `combine()`. Semantic detector, reproduction sandbox (TIF-2), and cross-org broker (TIF-5+) are
   explicitly out of scope for this pass — see `docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md` §11.
-  Verified: `tsc --noEmit` clean; 23 new tests (16 lifecycle + 7 detector conformance), full suite
-  504/505 passing (1 pre-existing unrelated skip), run against a scratch Linux install since this
-  repo's local `node_modules` has Windows-only native bindings.
+  Verified: `tsc --noEmit` clean; 23 new tests (16 lifecycle + 7 detector conformance) pass in
+  isolation. Whole-repo suite (this work plus the unrelated v0.25.0 hardening and desktop IPC-authority
+  work already on the branch): **104 test files, 704 passed, 1 skipped** — run against a scratch Linux
+  install (this repo's local `node_modules` has Windows-only native bindings) and confirmed again via
+  `npm run ci` on Windows before the commit landed. An earlier, narrower run (63 files / 504 passed,
+  scoped to `governance-core` only, before the rest of the branch was in the same tree) undercounted
+  what's actually on this branch — see `docs/RELEASE_NOTES_v0.26.0.md`.
 
 ## [0.25.0] - 2026-08-01
 

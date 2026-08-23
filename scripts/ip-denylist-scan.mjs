@@ -6,7 +6,11 @@ import { join } from 'node:path';
 
 const TOKENS = ['LCARS', 'Starfleet', 'U.S.S.', 'NCC-', 'Vulcan', 'Spock', 'Spokk',
   'Odo', "O'Brien", 'Munder', 'Difflin', 'Dunder', 'Mifflin'];
-const ROOTS = ['packages'];
+// `azure` added 2026-08-20. The Azure/Foundry tree is at least as shippable as packages/ — it is the
+// Marketplace listing and the container image customers actually run — but sat outside every CI gate,
+// so a trademarked token in the listing copy or a sidecar string would have shipped unchallenged.
+// Same omission shape as adversarial findings F-7/F-8/F-10: real code that no gate touches.
+const ROOTS = ['packages', 'azure'];
 const SKIP = new Set(['node_modules', 'dist', 'out', '.git']);
 const BIN = /\.(png|jpe?g|gif|ico|icns|woff2?|ttf|webp|mp4|zip)$/i;
 const TEST = /\.(test|conformance\.test)\.[tj]sx?$/i;  // tests are not shipped — don't scan them

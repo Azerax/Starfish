@@ -15,6 +15,7 @@ export { TokenGovernor, type Budget, type BudgetStatus } from './tokens';
 export { intakeRoute, ingestExternal, type IntakeRoute } from './intake';
 export { PDP, type IntegrityGate, type TaskBinding, type ScopeBinding } from './pdp';
 export { ScopeContractLedger, type ScopeContract, type ScopeContractInput, type ScopeVerdict, type DeviationClass } from './scope';
+export { ScopeIssuer, type ScopeMode, type ScopeIssuerOptions, type DerivationInput } from './scopeissuer';   // F-10
 export { CATEGORIES, CATEGORY_COUNT, FLOOR_IDS, HARD_DENY_IDS, FLOOR_TRIGGER, RISK_BANDS, type RiskCategory, type CategoryId, type RiskBand } from './riskmatrix';
 export { assessRisk, composite, bandOf, tierOf, descriptorOf, verdictFor, assessmentFromTier, type RiskAssessment, type CategoryScores, type RiskTolerance, type Verdict as RiskVerdict } from './score';
 export { RiskToleranceStore, type ToleranceConfig } from './tolerance';
@@ -49,6 +50,8 @@ export { SecurityMonitor, type Finding, type Severity, type SweepCounters } from
 export { isSecretPath, classifyPath, containsSecret, redactSecrets, secretReadGate, screenEnv, secretWriteGate, commandReadsSecret, type SecretPolicy, type EnvScreen } from './secrets';
 export { scanEgress } from './containment';
 export { isBlockedHost } from './netguard';
+export { isCatastrophicShell, commandStrings } from './shellguard';   // F-11: floors now live in core
+export { ExecProvenance, isRunnerExecutable, isRunnerTool } from './execprovenance';   // Q12
 export { sha256 } from './hash';
 export { ServiceRegistry, type ServiceInfo } from './services';
 export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind } from './broker';

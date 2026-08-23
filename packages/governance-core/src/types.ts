@@ -1,9 +1,18 @@
 // Shared types for governance-core (ring 1).
 export type Face = 'ingress' | 'egress';
 export type RiskTier = 'low' | 'medium' | 'high' | 'critical' | 'injection';
-export type ToolCategory = 'read' | 'write' | 'exec' | 'meta';
+// 'network' was already used by the seeded `net` tool but was missing from this union, so the
+// declared type did not describe the shipped registry (SeedTool types `category` as a bare string,
+// which hid it). Added for honesty. Deliberately NOT given an entry in risk.ts CATEGORY_TIER, so a
+// network tool that declares no explicit riskTier still falls to 'critical' — the fail-safe default.
+export type ToolCategory = 'read' | 'write' | 'exec' | 'meta' | 'network';
 
-export interface Decision { allow: boolean; ask?: boolean; reason: string; riskTier?: RiskTier; score?: number; }
+// `askOrigin` records WHY a decision became an ask, so a downstream friction profile can tell a
+// routine risk-tier escalation ('risk') from an operator who explicitly demanded review ('policy')
+// or a hard floor that must never be auto-satisfied ('floor'). Without it every ask looks identical
+// and a relaxation profile silently overrides operator intent (adversarial review F-3).
+export type AskOrigin = 'risk' | 'policy' | 'floor';
+export interface Decision { allow: boolean; ask?: boolean; reason: string; riskTier?: RiskTier; score?: number; askOrigin?: AskOrigin; }
 
 export interface ToolDef {
   id: string;

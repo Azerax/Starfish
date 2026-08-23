@@ -64,7 +64,7 @@ built product and the docs below are the source of truth. Do not plan or quote f
 | `Project Starfish GOVERNANCE FRAMEWORK.txt`, `Project Starfish GOVERNANCE HANDOFF.md` | `GOVERNANCE.md` (constitutional source of truth) |
 | `PROJECT_UNDERSTANDING.md` | `README.md` + the project memory wiki |
 | `Registry Hierarchy Information.txt` | governance-core registries + the `README.md` architecture/rings table |
-| `Governed Execution — Non-Deviation Enforcement (Implementation Plan).md` | **Implemented** (scope contract / non-deviation shipped). Plan is now historical. |
+| ~~`Governed Execution — Non-Deviation Enforcement (Implementation Plan).md`~~ | **CORRECTED 2026-08-20 — this row was wrong.** It said "Implemented (scope contract / non-deviation shipped); plan is now historical". Adversarial finding **F-10** established that `scope.ts` is built and tested (D1–D4, seal verification, budget metering, 7 green tests) but **never wired** — `boot.ts` passed no `scopeGate` and hardcoded `scopeNonDeviation: false`. "Module exists and is green" was mistaken for "feature shipped". The plan stayed the live reference until the wiring landed. See `ADVERSARIAL-QA.md` §4 and `docs/PHASE_BUILD_LOG.md`. |
 
 ## 4. KEEP — still-live design references (do NOT deprecate)
 

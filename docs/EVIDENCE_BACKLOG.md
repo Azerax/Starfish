@@ -110,6 +110,13 @@ Three different numbers appear across the repo (307 in `README.md:21`, 359 in `S
 Unverified numbers in a trust product are a liability in either direction. **Fix:** replace the prose
 count with a CI badge so it cannot drift again.
 
+**Update (2026-08-01, docs audit):** it drifted again, as predicted. `README.md` still said 307;
+`CHANGELOG.md`'s new v0.26.0 entry briefly stated 504/505 (a scratch run scoped to `governance-core`
+only, taken before the rest of the branch's work was in the same tree — an undercount, not a
+regression). Both corrected to the real number as of this date: **104 test files, 704 passed, 1
+skipped.** Same lesson each time it's hand-typed instead of pulled live: a prose count is a liability,
+not a proof — the CI-badge fix above is still open.
+
 ---
 
 ## How to use this file

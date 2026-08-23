@@ -237,7 +237,10 @@ function registerIpc(): void {
         { cfg: delCfg(), store: store(), trashDir: trashDir(), audit: host!.governor.audit, approved });
       return { ok: r.ok, reason: r.reason, value: { impact: impactView(r.impact), trashedTo: r.trashedTo } };
     },
-    doPurge: (id) => store().purge(id),
+    // Q5: purge now REQUIRES an audit sink — the class refuses to destroy an unrecordable item
+    // rather than trusting the caller to have logged it afterwards (which main/index.ts used to do
+    // through a swallowing try/catch, so a failed audit left an irreversible purge with no record).
+    doPurge: (id) => store().purge(id, host!.governor.audit, 'operator'),
   });
   ipcMain.handle('gov:getCrew', () => { const g = G(); return g ? crewView(g) : DEV.crew; });
   ipcMain.handle('gov:getDecisions', (_e, limit?: number) => {

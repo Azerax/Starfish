@@ -14,10 +14,23 @@ export interface SweepCounters { denials: number; boundaryEscapes: number; hashM
 
 export class SecurityMonitor {
   private cursor = 0;
-  constructor(private auditPath: string, private audit: AuditLog) {}
+  constructor(private auditPath: string, private audit: AuditLog) {
+    // The governor appends a boot event before the monitor is built, so in a healthy install the log
+    // exists right now. Remember that, so a later disappearance is provably destruction and not a
+    // never-configured path (F-2).
+    this.sawAudit = existsSync(auditPath);
+  }
+
+  /** F-2: has the audit VANISHED beneath us? An absent file used to yield an empty window, which the
+   *  counters then reported as zero concerning events — i.e. deleting the log disarmed the watcher
+   *  whose whole job is to notice tampering. A log that existed and no longer does is a critical
+   *  finding, and (below) it also makes reconcile() refuse an "all clear". */
+  private auditVanished(): boolean { return this.sawAudit && !existsSync(this.auditPath); }
+  private sawAudit = false;
 
   private window(): AuditEvent[] {
     if (!existsSync(this.auditPath)) return [];
+    this.sawAudit = true;
     const all = parseAuditLines(readFileSync(this.auditPath, 'utf8')).events;
     const since = all.filter((e) => e.seq >= this.cursor);
     if (all.length) this.cursor = all[all.length - 1].seq + 1;
@@ -47,6 +60,14 @@ export class SecurityMonitor {
     const c = this.count(events);
     const f: Finding[] = [];
     const mk = (severity: Severity, kind: string, detail: string): Finding => ({ id: 'find_' + randomUUID().slice(0, 8), severity, kind, detail, at: new Date().toISOString() });
+    // F-2: the log we were watching is GONE. Report it before anything else — every other counter in
+    // this sweep is zero precisely because there is nothing left to count, and a zero must never be
+    // allowed to read as "clean".
+    if (this.auditVanished()) {
+      const vanished = mk('critical', 'audit-vanished', `audit log ${this.auditPath} existed and is now absent — counters below are meaningless`);
+      this.file(vanished);
+      f.push(vanished);
+    }
     if (c.hashMismatches > 0) f.push(mk('high', 'capability-tampering', `${c.hashMismatches} hash mismatch(es) since last sweep`));
     if (c.boundaryEscapes > 0) f.push(mk('high', 'boundary-escape-attempt', `${c.boundaryEscapes} boundary denial(s)`));
     if (c.orphanPosts > 0) f.push(mk('high', 'possible-silent-execution', `${c.orphanPosts} orphan PostToolUse`));
@@ -76,6 +97,14 @@ export class SecurityMonitor {
   /** Reconcile a (possibly compromised) semantic report against deterministic counters.
    *  Reported "all clear" while concerning events exist => Critical discrepancy alarm. */
   reconcile(report: { allClear: boolean }): { ok: boolean; alarm?: Finding } {
+    // F-2: if the ground truth itself is missing, an "all clear" cannot be corroborated and must be
+    // refused. Previously the deterministic counters came back all-zero and AGREED with the watcher —
+    // so deleting the audit was the single move that defeated both the watcher and its invigilator.
+    if (this.auditVanished()) {
+      const alarm: Finding = { id: 'find_' + randomUUID().slice(0, 8), severity: 'critical', kind: 'audit-vanished', detail: 'cannot corroborate any report — the audit log existed and is now absent', at: new Date().toISOString() };
+      this.file(alarm);
+      return { ok: false, alarm };
+    }
     const c = this.count(this.peek());
     if (report.allClear && c.concerning > 0) {
       const alarm: Finding = { id: 'find_' + randomUUID().slice(0, 8), severity: 'critical', kind: 'watcher-discrepancy', detail: `reported all-clear but ${c.concerning} governance event(s) present in audit`, at: new Date().toISOString() };

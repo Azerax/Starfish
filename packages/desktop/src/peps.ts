@@ -30,8 +30,18 @@ function snapshot(absPath: string, backupDir: string, projectRoot: string, keep:
 
 export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<ToolExecResult> {
   const max = opts.maxReadBytes ?? 100_000;
-  const audit = (action: string, target: string | undefined, decision: 'allow' | 'deny', reason: string) =>
-    { try { opts.audit?.append({ actor: 'worker', domain: decision === 'allow' ? 'tool' : 'governance', action: `exec:${action}`, target, decision, reason }); } catch { /* noop */ } };
+  // Q8 (adversarial review): ring 1 (the PDP) fails CLOSED when the audit cannot be written, but this
+  // — ring 3, the layer that actually performs the effect — swallowed the failure and carried on. So
+  // an unwritable audit denied every future decision while still executing the work already
+  // authorized, with no record. The rings now agree: a failed audit write aborts the action.
+  // Returns true when the event was recorded; callers must treat false as fail-closed.
+  const audit = (action: string, target: string | undefined, decision: 'allow' | 'deny', reason: string): boolean => {
+    try {
+      opts.audit?.append({ actor: 'worker', domain: decision === 'allow' ? 'tool' : 'governance', action: `exec:${action}`, target, decision, reason });
+      return true;
+    } catch { return false; }
+  };
+  const UNAUDITABLE: ToolExecResult = { ok: false, content: '[denied: audit-write-failed (fail-closed) — action not performed]' };
 
   return async (call: ToolCall): Promise<ToolExecResult> => {
     const p = typeof call.input.path === 'string' ? call.input.path : undefined;
@@ -58,15 +68,20 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
           const c = containCheck(p, 'write', opts.boundary);
           if (!c.allowed) { audit('fs.write', p, 'deny', c.reason); return { ok: false, content: `[denied write: ${c.reason}]` }; }
           const abs = resolve(p);
+          // Q8: audit-BEFORE-act. The record must exist before the filesystem changes, so an
+          // unwritable audit stops the write instead of producing an unrecorded mutation.
+          if (!audit('fs.write', p, 'allow', 'write authorized (pre-image backed up)')) return UNAUDITABLE;
           if (opts.backupDir) snapshot(abs, opts.backupDir, opts.projectRoot, opts.backups ?? 3);
           mkdirSync(dirname(abs), { recursive: true });
-          writeFileSync(abs, String(call.input.content ?? '')); audit('fs.write', p, 'allow', 'written (backed up)');
+          writeFileSync(abs, String(call.input.content ?? ''));
           return { ok: true, content: `wrote ${p}` };
         }
         case 'run_tests': {
           // Routed through governance-core's `node_test` command template (threat model T-05):
           // always the runner binary directly (`node --test`), never `npm test` / `npm run <script>`,
           // so an in-worktree package.json can't smuggle in arbitrary code as the "test" entry point.
+          // Q8: the intent is recorded before execution; the outcome is appended after.
+          if (!audit('run_tests', undefined, 'allow', 'test run authorized')) return UNAUDITABLE;
           try {
             const args = typeof call.input.args === 'string' ? call.input.args : '';
             const { code, out } = runTemplate('node_test', { args }, opts.projectRoot);
@@ -79,6 +94,8 @@ export function makeExecutor(opts: PepOptions): (call: ToolCall) => Promise<Tool
           // hooks disabled (core.hooksPath=/dev/null) + --no-verify + scrubbed global/system git config,
           // so a malicious .git/hooks/pre-commit (or hooksPath redirect) planted in the worktree can't fire.
           const msg = typeof call.input.message === 'string' ? call.input.message : 'starfish: governed commit';
+          // Q8: `git add -A` already mutates the index, so the record must precede it.
+          if (!audit('git_commit', undefined, 'allow', `commit authorized: ${msg}`)) return UNAUDITABLE;
           try {
             execFileSync('git', ['add', '-A'], { cwd: opts.projectRoot, stdio: 'ignore' });
             const { code, out } = runTemplate('git_commit', { message: msg }, opts.projectRoot);

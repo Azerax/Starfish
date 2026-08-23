@@ -11,6 +11,9 @@ import { containCheck } from './boundary';
 import { RiskEngine } from './risk';
 import { PolicyEngine, type Effect } from './policy';
 import { scanEgress } from './containment';
+import { isCatastrophicShell, commandStrings } from './shellguard';
+import { isBlockedHost } from './netguard';
+import { ExecProvenance } from './execprovenance';
 
 export interface TaskBinding { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean }; }
 // verify-before-invoke: re-checks a skill's integrity at call time (tamper → not ok).
@@ -27,6 +30,11 @@ export class PDP {
   private secretPolicy?: SecretPolicy;
   private secretGatekeeper?: string;
   private scopeGate?: ScopeBinding;
+  /** Q12: per-task record of writes a test runner would later execute. See execprovenance.ts. */
+  readonly execProvenance = new ExecProvenance();
+  /** Q4: deny agents that declare no capability allowlist, instead of granting them everything. */
+  private strictAgentAllowlist = false;
+  private unrestrictedNoted = new Set<string>();
   private riskTolerance: 'low' | 'medium' = 'low';   // operator setting; default Low (deny-by-default posture)
   private safeMode = false;
   private safeModeReason = '';
@@ -55,6 +63,11 @@ export class PDP {
    *  re-attests integrity and clears it. Used when boot self-integrity verification fails. */
   setSafeMode(on: boolean, reason = ''): void { this.safeMode = on; this.safeModeReason = on ? reason : ''; }
   isSafeMode(): boolean { return this.safeMode; }
+
+  /** Q4: when on, an agent that declares no `allowedTools` is denied rather than granted everything.
+   *  Off by default for backward compatibility; the permissive case is audited either way. */
+  setStrictAgentAllowlist(on: boolean): void { this.strictAgentAllowlist = on; }
+  isStrictAgentAllowlist(): boolean { return this.strictAgentAllowlist; }
 
   /** Operator Risk Tolerance. Low (default): only low-tier auto-runs. Medium: composite ≤70 auto-runs.
    *  Hard floors, injection, and critical are unaffected (checked before the tolerance widening). */
@@ -125,8 +138,49 @@ export class PDP {
       // that declares NO allowedTools is unrestricted (unchanged); only a declared, non-empty allowlist
       // is enforced. The seed's own agents were reconciled so their lists cover what they legitimately call.
       const agentDef = this.agents.get(call.agentId);
-      if (agentDef?.allowedTools && agentDef.allowedTools.length > 0 && !agentDef.allowedTools.includes(call.tool)) {
+      const hasAllowlist = !!agentDef?.allowedTools && agentDef.allowedTools.length > 0;
+      if (hasAllowlist && !agentDef!.allowedTools!.includes(call.tool)) {
         return { allow: false, reason: `tool not in ${call.agentId}'s capability allowlist (deny-by-default)` };
+      }
+      // Q4 — "what authority increases when configuration is absent?" An agent that declares NO
+      // allowedTools is UNRESTRICTED here: adding an allowlist restricts, omitting one grants. That
+      // asymmetry is deliberate backward compatibility (declared on AgentDef long before it was
+      // enforced), but it was also invisible — exactly the "absence reads as configured" shape that
+      // F-1, F-4 and F-10 all turned out to be.
+      // Two changes, no breakage: `strictAgentAllowlist` makes an undeclared allowlist deny-by-
+      // default for operators who want it, and otherwise the grant is AUDITED ONCE per agent so it
+      // is a visible fact an operator can read rather than an unexamined default.
+      if (!hasAllowlist) {
+        if (this.strictAgentAllowlist) {
+          return { allow: false, reason: `${call.agentId} declares no capability allowlist and strict mode is on (deny-by-default)` };
+        }
+        if (!this.unrestrictedNoted.has(call.agentId)) {
+          this.unrestrictedNoted.add(call.agentId);
+          try {
+            this.audit.append({
+              actor: call.agentId, domain: 'governance', action: 'agent-unrestricted', target: call.agentId, riskTier: 'medium',
+              reason: `${call.agentId} declares no allowedTools, so every registered tool is permitted to it — declare an allowlist, or set strictAgentAllowlist`,
+            });
+          } catch { /* the decision's own audit below fails closed independently */ }
+        }
+      }
+      // F-11 — HARD FLOORS, enforced here so EVERY surface inherits them, not just the Claude Code
+      // overlay. These ran only in @starfish/governance-hooks, so an SDK or `starfish serve` consumer
+      // got neither. They sit ahead of risk scoring, policy and tolerance: nothing downstream can lift
+      // them. The hooks package still pre-filters, so overlay behaviour is unchanged.
+      if (tool.category === 'exec') {
+        for (const s of commandStrings(call.input)) {
+          if (isCatastrophicShell(s)) {
+            return { allow: false, riskTier: 'critical', reason: 'catastrophic shell command blocked (hard floor)' };
+          }
+        }
+      }
+      if (tool.category === 'network') {
+        for (const s of commandStrings(call.input)) {
+          if (isBlockedHost(s)) {
+            return { allow: false, riskTier: 'critical', reason: 'blocked internal/loopback/metadata destination (hard floor)' };
+          }
+        }
       }
       // non-deviation: the task's Scope Contract narrows the agent's general grants (D1 tool, D2 path,
       // D3 command, D4 budget). A deviation is denied; the monitor treats it as a trust-revoking event.
@@ -169,8 +223,24 @@ export class PDP {
       if (tool.category === 'exec') {
         for (const v of Object.values(call.input)) {
           if (typeof v === 'string' && commandReadsSecret(v)) {
-            return { allow: false, ask: true, riskTier: 'critical', reason: 'shell command reads a secret path — human approval required (no auto-allow)' };
+            return { allow: false, ask: true, askOrigin: 'floor', riskTier: 'critical', reason: 'shell command reads a secret path — human approval required (no auto-allow)' };
           }
+        }
+        // Q12 — SELF-AUTHORED EXECUTION. The shortest verified chain from model output to an
+        // irreversible host effect was two hops with no human: write `evil.test.js` (medium, auto-
+        // allowed at Medium tolerance), then `run_tests` (high, also auto-allowed) — and `node --test`
+        // executes whatever it discovers, including the file just written. Neither hop subverts
+        // anything; only the SEQUENCE is the attack, which is why per-call scoring never caught it.
+        // If this task authored code the runner would execute, a human must see it. Same floor
+        // pattern as the secret-read check above: not a denial (writing a test then running it is
+        // legitimate work), but tolerance can no longer close the loop unattended.
+        const selfAuthored = this.execProvenance.selfAuthored(call.taskId, call.tool);
+        if (selfAuthored.length) {
+          const shown = selfAuthored.slice(0, 3).join(', ');
+          return {
+            allow: false, ask: true, askOrigin: 'floor', riskTier: 'critical',
+            reason: `self-authored execution: this task wrote ${selfAuthored.length} file(s) the runner would execute (${shown}${selfAuthored.length > 3 ? ', …' : ''}) — human approval required (no auto-allow)`,
+          };
         }
       }
     } catch {
@@ -179,7 +249,17 @@ export class PDP {
     const tier = this.risk.classify(call, tool);
     const assessment = this.risk.assess(call, tool);
     const pol = this.policy.evaluate(`agent:${call.agentId}`, `tool:${call.tool}`, this.resourceOf(call, tool) ?? '*');
-    return this.combine(tier, pol, assessment);
+    const decision = this.combine(tier, pol, assessment);
+    // Q12: record an ALLOWED write of a runner-executable file against this task, so a later exec by
+    // the same task is recognised as self-authored. Recorded only on allow — a denied write never
+    // reached disk and must not taint the task. See execprovenance.ts.
+    if (decision.allow && tool.category !== 'read') {
+      for (const key of tool.pathParams) {
+        const v = call.input[key];
+        if (typeof v === 'string') this.execProvenance.note(call.taskId, v);
+      }
+    }
+    return decision;
   }
 
   // Risk Tolerance widening only ever turns an ASK into an ALLOW for mid-risk work, and only when no hard
@@ -190,17 +270,21 @@ export class PDP {
     const score = assessment?.score;
     if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier, score };
     if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier, score };
-    if (tier === 'critical') return { allow: false, ask: true, reason: 'critical — human approval required (no auto-allow)', riskTier: tier, score };
+    // F-3: a critical ask is a FLOOR — no downstream friction profile may satisfy it automatically.
+    if (tier === 'critical') return { allow: false, ask: true, askOrigin: 'floor', reason: 'critical — human approval required (no auto-allow)', riskTier: tier, score };
     // F8: an explicit operator 'ask' rule must be honoured even for a low-tier tool. Previously the
     // low-tier auto-allow below returned first, silently discarding an operator's request for review.
-    if (pol === 'ask') return { allow: false, ask: true, reason: 'policy requires human review (ask)', riskTier: tier, score };
+    // F-3: tagged 'policy' — this is the operator asking BY NAME and must outrank any relaxation.
+    if (pol === 'ask') return { allow: false, ask: true, askOrigin: 'policy', reason: 'policy requires human review (ask)', riskTier: tier, score };
     if (tier === 'low') return { allow: true, reason: 'low-risk auto-allow', riskTier: tier, score };
     if (pol === 'allow') return { allow: true, reason: `${tier}-risk allowed by policy`, riskTier: tier, score };
     const ceiling = this.riskTolerance === 'medium' ? 70 : 30;
     if (assessment && !assessment.hardDeny && assessment.floors.length === 0 && assessment.score <= ceiling) {
       return { allow: true, reason: `${tier}-risk auto-allowed under ${this.riskTolerance} risk tolerance (score ${assessment.score})`, riskTier: tier, score };
     }
-    return { allow: false, ask: true, reason: `${tier}-risk escalated (no allow policy)`, riskTier: tier, score };
+    // F-3: a plain tier escalation with a floor tripped is still a floor; otherwise it is routine risk.
+    const origin: 'risk' | 'floor' = assessment && (assessment.hardDeny || assessment.floors.length > 0) ? 'floor' : 'risk';
+    return { allow: false, ask: true, askOrigin: origin, reason: `${tier}-risk escalated (no allow policy)`, riskTier: tier, score };
   }
 
   private egress(call: ToolCall): Decision {
@@ -219,6 +303,15 @@ export class PDP {
       for (const key of tool.pathParams) { const v = call.input[key]; if (typeof v === 'string') return v; }
       return undefined;   // tool declares paths but none supplied → no resource (matches '*' rules only)
     }
+    // Q2 (adversarial review): the fallback below is "first string-valued input in JSON order", which
+    // is the decoy weakness F6 fixed for tools that DECLARE pathParams — but it survived here for
+    // tools that declare none. Policy, risk scoring and the audit `target` all consume this one
+    // value, so a wrong pick is wrong in three places at once AND they agree with each other, which
+    // is worse than disagreeing. When the tool is known and declares no paths, prefer a
+    // conventionally-named field over positional order so an attacker cannot steer adjudication by
+    // reordering keys; fall back to first-string only when nothing recognisable is present.
+    const PREFERRED = ['url', 'target', 'resource', 'command', 'cmd', 'path'];
+    for (const key of PREFERRED) { const v = call.input[key]; if (typeof v === 'string' && v) return v; }
     for (const v of Object.values(call.input)) if (typeof v === 'string') return v;
     return undefined;
   }

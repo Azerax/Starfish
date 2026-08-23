@@ -30,6 +30,7 @@
 
 <h2>Freezing 1.0</h2>
 <p>Release engineering moved to CI: a secret scan and the full gate run on every push, and a tagged release publishes with npm provenance and an SBOM. The public API and the wire protocol are frozen behind conformance tests that act as the semver gate, documented alongside a control mapping to SOC 2, ISO 27001, and the EU AI Act. What remains for 1.0 is an independent security review and counsel sign-off on the commercial and trademark terms - deliberately the parts a machine shouldn't rubber-stamp.</p>
-<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div>  <p style="margin-top:26px;padding:14px 16px;border-left:3px solid #e0a339;background:rgba(224,163,57,.06);border-radius:0 8px 8px 0;font-size:14px;line-height:1.65"><strong style="color:#e0a339">Update, 2026-08-20.</strong> The head anchor described above did catch tail truncation, but not the simplest attack of all: <em>deleting the log outright</em>. Recovery was gated on the log existing, so with the file gone the anchor - the one artifact proving events had existed - was never read. Integrity reported clean and the sequence restarted at zero. Fixed in v0.27.0 (finding F-1): recovery always runs, and an anchor with no log is reported as <code>audit-deleted</code> with the governor entering safe mode. Absence should never have been quieter than corruption.</p>
+  </article></div>
 <div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a build journal reconstructed from the project history.</div></div>
 </body></html>
