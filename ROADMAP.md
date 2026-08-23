@@ -1,6 +1,6 @@
 # Project Starfish — Roadmap
 
-> **Current release: v0.24.0.** Pre-1.0. Sequenced by dependency, not by date — no ship dates are
+> **Current release: v0.26.0.** Pre-1.0. Sequenced by dependency, not by date — no ship dates are
 > promised here, and nothing on this page lowers the deny-by-default / fail-closed floor.
 >
 > Track progress on the [milestones](https://github.com/Azerax/Starfish/milestones).
@@ -19,6 +19,8 @@ things being built on that core:
 
 | Version | What landed |
 |---|---|
+| **v0.26.0** | **Threat Immunity Fabric — TIF-0/1(partial)/3/4.** Governed Threat Evidence lifecycle (observe→reproduce→corroborate→approve→publish→deploy→retire/revoke), tamper-evident sealed envelopes, behavioural + structural detector inputs. Additive only — advisory only, no second risk engine. See `docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md`. |
+| **v0.25.0** | **Adversarial self-audit — 26 findings closed.** IPv6-aware `netguard`, non-negative budget clamping, `.env` proxy/TLS-trust poisoning coverage, governance-state-denied-by-construction boundaries, tolerance-independent secret-path shell escalation, three risk/policy correctness fixes, fully-gated Memory Wiki guarantees, safe-mode on corrupt state, enforced per-agent allowlists, and desktop IPC authority (main-owned operator principal, renderer integrity, trusted-path confirmation for irreversible ops). `docs/THREAT_MODEL.md` added. See `docs/RELEASE_NOTES_v0.25.0.md`. |
 | **v0.24.0** | **Memory Wiki Phase 1** — linked evidence wiki, governed read path, robust confidence aggregation. **T-05 command-composition fix** — `git_commit` / `run_tests` routed through hardened templates. `starfish audit` read-only chain viewer. Daemon auto-start (fail-closed). |
 | **v0.23.0** | 0–100 composite risk model + Risk Tolerance store. Scope-contract non-deviation. Split Cockpit UI + Calm default theme. Windows path-separator boundary hardening. |
 | **v0.22.0** | 1.0-candidate freeze: wire protocol + public API surface locked behind semver gates; compliance control mappings. |
@@ -39,14 +41,17 @@ by dependency; each milestone is only reachable once the one before it lands.
 |---|---|---|---|
 | **M0** | Publishable & self-starting | `npm i -g project-starfish` → govern a real Claude Code project, no daemon babysitting | Mostly done — daemon auto-start and `starfish audit` shipped; npm publish + an end-to-end proof capture remain |
 | **M1** | The app boots on the real governor | Desktop app launches showing live governor state, not mocks | ✅ Done |
-| **M2** | Human-in-the-loop control | Operator Approve / Deny / Resume actually moves an agent | Built; runtime behaviour unverified |
-| **M3** | Dispatch — talk to it and it runs | Type a brief → a governed agent runs it with a real model call | Built; **this is the next open gate** |
-| **M4** | Real tools / self-hosting | The agent produces real files and code, every tool call gated and evidence-checked | Built; runtime behaviour unverified |
+| **M2** | Human-in-the-loop control | Operator Approve / Deny / Resume actually moves an agent | Built (`DecisionBroker` persists pending decisions fail-closed); runtime behaviour unverified |
+| **M3** | Dispatch — talk to it and it runs | Type a brief → a governed agent runs it with a real model call | Built and wired end-to-end (`Home` → `gov:requestAction` → `AgentLoop`) as of a 2026-08-01 code read; **needs one live run to close** — see `docs/design/M3_DISPATCH_VERIFICATION_PLAN.md` |
+| **M4** | Real tools / self-hosting | The agent produces real files and code, every tool call gated and evidence-checked | Built — `peps.ts`'s `fs.read/list/write`, `run_tests`, `git_commit` are real, boundary-checked, T-05-hardened executors, not stubs; rides the same unverified-at-runtime gap as M3 |
 | **M5** | Creator ergonomics | First governed creation in under 15 minutes without reading source | Partly shipped via the v0.23 risk-tolerance work |
 | **M6** | Packaged + distributable | Install a signed build and create, no clone or dev server | Blocked on signing certificates |
 
 M2–M4 are constructed but not yet proven at runtime. The honest next question is behavioural, not
-architectural: *does typing a brief actually dispatch a governed run that produces an artifact?*
+architectural: *does typing a brief actually dispatch a governed run that produces an artifact?* A
+2026-08-01 code read confirmed the wiring is real (not a stub) end-to-end through M3 and M4's tool
+execution — the one confirmed remaining gap is Bridge Phase 5 (live push events; the UI still polls).
+`docs/design/M3_DISPATCH_VERIFICATION_PLAN.md` has the concrete next step: one real dogfood run.
 
 ---
 

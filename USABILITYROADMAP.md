@@ -25,8 +25,12 @@ maturity:
 
 - **Track B — you build *inside* Starfish.** You open GCS Starfish, type a brief, and a governed agent
   plans, runs, and produces artifacts under the PDP — with you as the human approver. This is the
-  "connect and talk to it" product. **This does not run yet**: dispatch (`BRIDGE_LIVE_PLAN` Phase 3) is
-  unwired, so an order in the app executes nothing (3/10).
+  "connect and talk to it" product. **Correction (2026-08-01):** the line below — "dispatch is unwired,
+  so an order in the app executes nothing" — is stale as of this date. A code read confirmed `Home`'s
+  brief box already calls through `gov:requestAction` to a real `AgentLoop` run with real tool execution
+  (`peps.ts`); the wiring is real, not a stub. What's actually missing is a **live, verified run** —
+  see `docs/design/M3_DISPATCH_VERIFICATION_PLAN.md`. The "3/10" score below reflects the July 13
+  snapshot, not today.
 
 The roadmap below advances both, because a technical creator will want Track A immediately and Track B
 as the differentiated product. **Track A is days–weeks of polish away; Track B is roughly one focused
@@ -70,17 +74,18 @@ The roadmap is complete for this audience when all of these are observable by so
 | Govern Claude Code, deny-by-default, audited | A | **Works, R0-verified** on CC 2.1.183 | `OVERLAY_USAGE.md`, `USABILITY_ASSESSMENT.md` |
 | `init` / `install` / `daemon` / `doctor` / `attest` / `audit` CLI | A | Built + bundled; daemon must be started manually | `OVERLAY_USAGE.md` |
 | Write-friction control (`--writes auto\|ask` + backups) | A | Built | `OVERLAY_USAGE.md` |
-| Published install artifact | A/B | **npm at v0.11.1**; the v0.13→v0.23 line is built + green **locally but unpushed/unpublished** | `MASTER_COMPLETION_PLAN.md`, `package.json` |
+| Published install artifact | A/B | ✅ **Done (2026-08-01)** — `project-starfish@0.26.0` published to npm, provenance/tags as of this release | `npm view project-starfish version` |
 | Governance core (PDP, audit, risk, dispatch, runner, agent loop) | B | Built + **300+ conformance/determinism tests green** | `README.md`, core tests |
 | Desktop app observes live governor (crew/decisions/audit) | B | Phase 1–2 wired (read + approve/deny) | `BRIDGE_LIVE_PLAN.md` |
 | Desktop app **dispatches + executes** an agent | B | **Wired** in `main/index.ts` — `DecisionBroker` + `gov:requestAction → AgentLoop → PEPs`; the June "not wired" note is superseded | `packages/desktop/app/src/main/index.ts` |
 | App verified to **launch** post-wiring | B | ✅ **Verified 2026-07-13** — `npm run dev` opens the desktop app on Windows (M1 done) | Scott run |
-| Chat-first "what do you need?" entry | B | **Partial** — v0.23 added neutral `Chat`/`Skills` nav; a plain free-text→governed-task surface still needs confirming | `CHANGELOG.md`, `PERSONAS_AND_GAPS.md` |
+| Chat-first "what do you need?" entry | B | ✅ **Done** — Calm Home's one-input landing surface (`Home.tsx`) calls `requestAction({kind:'mission', text})` directly; this is the plain free-text→governed-task surface | `packages/desktop/app/src/renderer/src/screens/Home.tsx` |
 | Seeded sample / in-app "watch it get denied" | A/B | Exists only as the separate `examples/zero-change-demo` CLI artifact | `PERSONAS_AND_GAPS.md` |
 
-**Reading:** the technical creator is ~one polish pass from a genuinely good Track-A experience, and the
-Track-B runtime is *built in core but not connected to the app*. Neither gap is "invent new technology";
-both are "finish the wiring and the ergonomics."
+**Reading (updated 2026-08-01):** the technical creator is ~one polish pass from a genuinely good Track-A
+experience, and Track A's install gap (npm publish) is now closed. Track B's runtime is built **and**
+connected to the app end-to-end — the remaining gap is a live verification run, not further wiring. See
+`docs/design/M3_DISPATCH_VERIFICATION_PLAN.md`.
 
 ---
 
@@ -93,7 +98,7 @@ create here · rough solo effort**. `[me]` = doable in-session; `[Scott]` = need
 **Goal:** a technical user who is not Scott can `npm i -g project-starfish`, govern a real Claude Code
 project, and never think about the daemon.
 **Work:**
-- `[Scott]` Run `npm run ci` on Windows to confirm the v0.23 line green; push `62d8cc4..HEAD`; tag; `npm publish` with provenance/SBOM (needs `NPM_TOKEN`). *(Standing "Needs Scott".)*
+- ✅ **(done 2026-08-01)** `[Scott]` Ran `npm run ci` on Windows, pushed, tagged, and published — `project-starfish@0.26.0` is live on npm (v0.24.0/v0.25.0 also published in the same pass, catching the registry up from the stale v0.11.1).
 - ✅ **(done 2026-07-13)** `[me]` Daemon auto-start: the hook starts the daemon fail-closed if it's down (no allow-window), so "I forgot to run `starfish daemon`" stops being a deny-all footgun.
 - ✅ **(done 2026-07-13)** `[me]` `starfish audit` reader with `--json` / `--since seq` / `--verify` for scriptable inspection (Priya gap #4).
 - `[me/Scott]` Capture one full governed Claude Code task start-to-finish + its audit log as the proof artifact (never yet done end-to-end).
@@ -119,27 +124,31 @@ resolves it (operator ≠ proposer enforced); persist pending decisions fail-clo
 
 ### M3 — Dispatch: talk to it and it runs  ★★ THE milestone for this audience
 **Goal:** type a brief in the app → a governed agent actually runs it with a real model call.
-**Work:** `[me]` `BRIDGE_LIVE_PLAN` **Phase 3** — `requestAction{kind:'order', brief}` creates a governed
-`Task`, then runs `AgentLoop.run` with `Dispatcher` + `HostRunner` (real Claude call, key from keychain,
-egress gated by `STARFISH_ALLOW_EGRESS`), budgets enforced by `TokenGovernor`. Replace `void buildRuntime`.
-The Bridge shows the run live.
+**Status correction (2026-08-01):** the "Work" below describes this as still to build (`Replace void
+buildRuntime`). That's stale — `buildRuntime()` is called and used (`main/index.ts`'s `runAgent()`), not
+void-ed. `requestAction{kind:'mission'|'order', text}` already creates a governed `Task` and runs
+`AgentLoop.run` with `Dispatcher` + `HostRunner`, wired all the way from `Home.tsx`'s brief box. The
+`STARFISH_ALLOW_EGRESS` gate only applies to router-kind providers (OpenRouter) — the default Anthropic
+provider doesn't need it. This milestone is built; what remains is a live verified run, not
+construction — see `docs/design/M3_DISPATCH_VERIFICATION_PLAN.md` for the concrete next step.
 **Exit:** an order typed in-app runs a real governed agent to completion, gated + audited.
 **Create here:** *this is where a technical user starts creating with Starfish itself* — give it a brief,
 it plans and runs under governance. (Output may still be "reasoning + proposals" until M4 gives it real
 tools.)
-**Effort:** ~1–2 weeks.
+**Effort:** superseded — this is now a verification task (hours, not weeks); see the plan doc above.
 
 ### M4 — Real tools / self-hosting (create actual artifacts)  ★★
 **Goal:** the agent produces real files/code, every tool call gated + evidence-checked.
-**Work:** `[me]` `BRIDGE_LIVE_PLAN` **Phase 4** — boundary-checked `ToolExecutor`s: `fs.read`, `fs.list`
-(visibility-scoped), `fs.write` (worktree-scoped), `run_tests` (exec), `git_commit` (ask-gated);
-deletion already governed. Keep the Evidence Gate on (a "tests pass" claim must be backed by a recorded
-run). **Dogfood target** (from `BRIDGE_LIVE_PLAN`): "add `lastActiveTs` to `AgentDetailView`, update the
-conformance fake bridge, run the desktop tests" — build Starfish in Starfish.
+**Status correction (2026-08-01):** also built, not open work. `packages/desktop/src/peps.ts`'s
+`makeExecutor` implements every `ToolExecutor` below for real — `fs.read`/`fs.list` visibility-scoped,
+`fs.write` worktree-scoped with a pre-image backup on every overwrite, `run_tests`/`git_commit` routed
+through the T-05-hardened command templates. Not stubs. **Dogfood target** (from `BRIDGE_LIVE_PLAN`):
+"add `lastActiveTs` to `AgentDetailView`, update the conformance fake bridge, run the desktop tests" —
+this doubles as the M3 verification run, since M3's dispatch path already calls this same executor.
 **Exit:** an agent makes a real, governed code change to a repo, gated by the operator, backed by evidence.
 **Create here:** *real artifacts — code, documents, edited files — governed end to end.* The Track-B
 Definition-of-Done item 3(B) is met.
-**Effort:** ~1–2 weeks.
+**Effort:** superseded — rides M3's verification run; see `docs/design/M3_DISPATCH_VERIFICATION_PLAN.md`.
 
 ### M5 — Creator ergonomics (make it pleasant + legible, not archaeology)
 **Goal:** a technical creator reaches first governed creation without reading source, and governance is

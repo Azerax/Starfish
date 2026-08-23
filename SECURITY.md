@@ -18,7 +18,7 @@ Starfish is in active pre-1.0 development. Security fixes target the latest publ
 
 Starfish is a **deny-by-default reference monitor**: an agent is a guest inside a governance layer that mediates every action. The design intent:
 
-- **No ungoverned action.** Every tool call is authorized (registered tool, allowed agent, task-bound purpose, in-boundary), risk-scored, policy-checked, and audited before it runs. *No task, no tool.*
+- **No ungoverned action.** Every tool call is authorized (registered tool, allowed agent, in-boundary, and - when task-binding is enabled - a task-bound purpose), risk-scored, policy-checked, and audited before it runs. A call made under a task is additionally held to that task's scope contract (tools, paths, commands, budget). Task-binding is opt-in via `enforceTaskBinding`; the boot posture records which gates are actually live, so "off" is a visible fact rather than an assumption.
 - **Hard floors that no setting can lift.** Filesystem boundary escape, secret-file access, catastrophic shell, and network exfiltration are enforced independently of policy or Risk Tolerance.
 - **Vetting is the only door.** Skills/tools/MCPs are provenance-checked, risk-scored, and prompt-injection-screened before registration; medium+ is quarantined pending operator consent; hash-on-vet means "vetted" = these exact bytes.
 - **Tamper-evident + fail-closed.** A hash-chained, append-only audit; if the log can't be written or governance is missing/corrupt, the system halts or enters safe mode.

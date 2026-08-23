@@ -143,7 +143,12 @@ describe('F0 phase 1 — enforcement posture is explicit + audited (never silent
     const g = loadGovernor(dir, join(dir, 'audit.jsonl'), { stateDir: state });
     expect(g.posture).toBeDefined();
     expect(typeof g.posture.integrity).toBe('boolean');
-    expect(g.posture.scopeNonDeviation).toBe(false);          // honestly off — no contract issuer yet
+    // F-10: was `toBe(false)` with the comment "honestly off — no contract issuer yet". There IS an
+    // issuer now (scopeissuer.ts), so the gate defaults ON in 'contracted' mode. The posture is
+    // derived from the live gate rather than asserted as a literal — that equality is the point.
+    expect(g.posture.scopeNonDeviation).toBe(true);
+    expect(g.posture.scopeNonDeviation).toBe(g.scope.enforce);
+    expect(g.posture.scopeMode).toBe('contracted');
     expect(g.posture.secretGatekeeper).toBe('toby');
     expect(g.audit.recent(50).some((e) => e.action === 'enforcement-posture')).toBe(true);
   });

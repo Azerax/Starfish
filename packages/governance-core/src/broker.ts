@@ -70,10 +70,23 @@ export class DecisionBroker {
     return { ok: true, reason: `operator ${verdict}`, decision: d };
   }
 
+  /** Q9: "best-effort" persistence hid a real failure mode. The class docs promise "pending decisions
+   *  persist fail-closed — a restart re-offers them". If the write silently fails, a restart instead
+   *  makes a pending high-risk decision VANISH: the awaiting caller is gone and nothing is re-offered,
+   *  which reads as "no decisions pending" rather than "decisions lost". Now audited as a failure. */
   private save(): void {
     if (!this.persistPath) return;
-    try { mkdirSync(dirname(this.persistPath), { recursive: true }); writeFileSync(this.persistPath, JSON.stringify({ pending: [...this.pending.values()] } as Persisted, null, 2)); }
-    catch { /* best-effort; in-memory remains authoritative this session */ }
+    try {
+      mkdirSync(dirname(this.persistPath), { recursive: true });
+      writeFileSync(this.persistPath, JSON.stringify({ pending: [...this.pending.values()] } as Persisted, null, 2));
+    } catch (e) {
+      try {
+        this.audit.append({
+          actor: 'system', domain: 'failure', action: 'broker-persist-failed', decision: 'deny', riskTier: 'high',
+          reason: `pending decisions are NOT durable (${(e as Error).message}) — a restart will lose them instead of re-offering`,
+        });
+      } catch { /* the audit itself is down; the PDP fails closed on that independently */ }
+    }
   }
   private restore(): void {
     if (!this.persistPath || !existsSync(this.persistPath)) return;

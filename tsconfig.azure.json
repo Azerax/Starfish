@@ -1,0 +1,22 @@
+// Typecheck config for the Azure / Foundry surface.
+//
+// WHY THIS IS A SEPARATE CONFIG
+// The root tsconfig.json includes only `packages/*/src/**`, which is also the scope of every other CI
+// gate (vitest, dep-direction lint, IP scan). The Azure work — sidecar, metering, tier2 gateway,
+// tier3 policy/telemetry, Bicep deployment — lives OUTSIDE packages/, so for as long as it existed it
+// was checked by nothing at all. That is the same failure shape as adversarial findings F-7/F-8/F-10
+// (code that is real but that no gate touches), applied to the commercial Marketplace surface rather
+// than to a governance control.
+//
+// It is separate rather than folded into the root config because this tree is ESM-with-.ts-imports
+// (`allowImportingTsExtensions`), which the packages/ tree is not.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // azure/* imports siblings with an explicit .ts extension (native ESM style)
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["azure/**/*.ts"]
+}

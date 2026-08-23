@@ -18,8 +18,8 @@ It's an original, clean-room project. (Conceptually inspired by the open-source 
 project, MIT - no upstream code or assets are used; see `NOTICE`.)
 
 > ⚠️ **Status: research preview / active build.** The governance core is implemented and heavily
-> tested (**307 conformance/determinism tests green**); the desktop UI is being built on top of it.
-> 🌐 [projectstarfish.ca](https://projectstarfish.ca)
+> tested (**704 tests green** — 104 files, 1 skipped, whole-repo suite as of v0.26.0); the desktop UI
+> is being built on top of it. 🌐 [projectstarfish.ca](https://projectstarfish.ca)
 
 ---
 
@@ -86,7 +86,7 @@ loads first and is not optional**, and capabilities are guests inside it, not th
 The supreme source of truth is [`GOVERNANCE.md`](GOVERNANCE.md):
 
 - **Governance precedes execution** - no action without authorization. Default: **DENY**.
-- **All work is a task** - nothing runs outside the governed task lifecycle. *No task, no tool.*
+- **All work is a task** - the governed task lifecycle is the unit of work, and enabling task-binding (`enforceTaskBinding`) makes it enforced: *no task, no tool.* Each approved task also carries a scope contract that narrows the agent's standing grants for the duration of that task.
 - **Auditability** - every meaningful action is recorded to a hash-chained, append-only log.
 - **Bounded autonomy** - agents may automate work; they may never expand their own authority.
 - **Human authority** - a human is the final approver. **Proposer ≠ approver.**
@@ -171,4 +171,5 @@ All Project Starfish art is original (see `docs/ART_PROVENANCE_LEDGER.md`).
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Latest: **v0.10.0** - govern Claude Code (deny-by-default overlay).
+See [CHANGELOG.md](CHANGELOG.md) for the full, current history — not restated here so this line can't
+go stale again.

@@ -38,10 +38,31 @@ describe('TC-2.2 — 4-tier risk routing', () => {
     expect(d.ask).toBe(true); expect(d.riskTier).toBe('high');
   });
   it('critical (destructive) → human, no auto-allow even with allow policy', () => {
+    // A critical-tier command that is NOT on the catastrophic denylist: `rm -rf ./build` is a real
+    // destructive action but a legitimate one, so it escalates to a human rather than hard-denying.
+    const p = pdp([{ id: 'sh', category: 'exec', pathParams: [], allowedAgents: '*' }],
+      [{ id: 'p', subject: '*', action: '*', resource: '*', effect: 'allow' }] as any);
+    const d = p.decide('ingress', { agentId: 'a', tool: 'sh', input: { cmd: 'rm -rf ./build' } }, BS);
+    expect(d.allow).toBe(false); expect(d.ask).toBe(true); expect(d.riskTier).toBe('critical');
+    expect(d.askOrigin).toBe('floor');   // F-3: a critical ask is a floor no friction profile may satisfy
+  });
+  // F-11: the catastrophic denylist is now a HARD FLOOR inside the PDP, not only in the hooks overlay.
+  // `rm -rf /` is not approvable — it is denied outright, ahead of policy and tolerance, so an SDK or
+  // sidecar consumer inherits the same protection the Claude Code overlay always had.
+  it('F-11: a catastrophic command is DENIED outright in the PDP, not offered for approval', () => {
     const p = pdp([{ id: 'sh', category: 'exec', pathParams: [], allowedAgents: '*' }],
       [{ id: 'p', subject: '*', action: '*', resource: '*', effect: 'allow' }] as any);
     const d = p.decide('ingress', { agentId: 'a', tool: 'sh', input: { cmd: 'rm -rf /' } }, BS);
-    expect(d.allow).toBe(false); expect(d.ask).toBe(true); expect(d.riskTier).toBe('critical');
+    expect(d.allow).toBe(false);
+    expect(d.ask).toBeFalsy();                       // NOT approvable
+    expect(d.reason).toMatch(/catastrophic/i);
+  });
+  it('F-11: the egress host guard is a PDP floor too (internal/loopback destinations)', () => {
+    const p = pdp([{ id: 'net', category: 'network', pathParams: [], allowedAgents: '*', riskTier: 'medium' }],
+      [{ id: 'p', subject: '*', action: '*', resource: '*', effect: 'allow' }] as any);
+    const d = p.decide('ingress', { agentId: 'a', tool: 'net', input: { url: 'http://169.254.169.254/latest/meta-data/' } }, BS);
+    expect(d.allow).toBe(false);
+    expect(d.reason).toMatch(/blocked internal|loopback|metadata/i);
   });
   it('policy deny overrides everything', () => {
     const p = pdp([{ id: 'r', category: 'read', pathParams: ['path'], allowedAgents: '*' }],

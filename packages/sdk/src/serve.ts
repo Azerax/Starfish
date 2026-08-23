@@ -26,7 +26,9 @@ const RISK_TIERS = ['low', 'medium', 'high', 'critical'] as const;
 // independently in packages/desktop/src/projections.ts, which is what prompted centralizing this.
 const VERDICTS = ['approve', 'deny'] as const;
 export interface SidecarIdentity { token: string; actor: string }
-export interface SidecarOptions { governance: Governance; identities: SidecarIdentity[]; host?: string; port?: number }
+/** `operators` restricts who may approve a pending decision (A20). F-9: defaults to ['operator']
+ *  rather than "anyone who isn't the proposer" — approval authority is always an explicit set. */
+export interface SidecarOptions { governance: Governance; identities: SidecarIdentity[]; host?: string; port?: number; operators?: string[] }
 /** A governed root exposed by a multi-tenant sidecar. `operators` restricts who may approve (A20); if
  *  omitted, any non-proposer may approve (single-tenant legacy behavior). */
 export interface RootSpec { id: string; governance: Governance; identities: SidecarIdentity[]; operators?: string[] }
@@ -96,7 +98,13 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
               const head = gov.governor.audit.head().seq + 1; if (head > cursor) cursor = head;
               emit('pending', pendingSnapshot());
               emit('budgets', gov.governor.tokens.snapshot());
-              emit('monitor', { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
+              // F-7/F-8: the live tick is the natural production driver for both dormant checks —
+              // a real monitor sweep (which files findings) and a registry re-attestation, so an
+              // out-of-band edit to tools.json trips safe mode within a second instead of never.
+              const sweep = gov.governor.monitor.sweep();
+              try { gov.governor.tools.verifyIntegrity(); gov.governor.agents.verifyIntegrity(); }
+              catch (e) { gov.governor.pdp.setSafeMode(true, (e as Error).message); }
+              emit('monitor', { counters: sweep.counters, findings: sweep.findings, safeMode: gov.safeMode() });
             } catch { /* fail soft */ }
           };
           const dataIv = setInterval(tick, 1000);
@@ -133,7 +141,25 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
         if (method === 'GET' && url === '/v1/audit') return send(200, gov.governor.audit.recent(50));
         if (method === 'GET' && url === '/v1/audit/verify') return send(200, { ok: gov.verifyAudit() });
         if (method === 'GET' && url === '/v1/budgets') return send(200, gov.governor.tokens.snapshot());
-        if (method === 'GET' && url === '/v1/monitor') return send(200, { counters: gov.governor.monitor.counters(), safeMode: gov.safeMode() });
+        // F-8: `/v1/monitor` only ever called counters(), so sweep() — and with it every monitor rule
+        // (probing, enumeration, boundary-escape, audit-vanished) — never ran in production; the
+        // module was fully tested and completely dormant. The endpoint now drives a real sweep, which
+        // files findings to the audit, and returns them alongside the counters.
+        if (method === 'GET' && url === '/v1/monitor') {
+          const { counters, findings } = gov.governor.monitor.sweep();
+          return send(200, { counters, findings, safeMode: gov.safeMode() });
+        }
+        // F-7: nothing re-verified the registries after boot, so an out-of-band edit to tools.json
+        // was undetected at runtime. Exposed so a host can re-attest on demand; also run on each
+        // sweep tick by the desktop host.
+        if (method === 'GET' && url === '/v1/integrity') {
+          try { gov.governor.tools.verifyIntegrity(); gov.governor.agents.verifyIntegrity(); }
+          catch (e) {
+            gov.governor.pdp.setSafeMode(true, (e as Error).message);
+            return send(200, { ok: false, reason: (e as Error).message, safeMode: true });
+          }
+          return send(200, { ok: true, reason: 'registries match their boot hashes', safeMode: gov.safeMode() });
+        }
         if (method === 'GET' && url.startsWith('/v1/decisions/')) {
           const decId = decodeURIComponent(url.slice('/v1/decisions/'.length));
           if (gov.broker.list().some((p) => p.id === decId)) return send(200, { status: 'pending' });
@@ -177,7 +203,13 @@ export async function startSidecar(opts: SidecarOptions): Promise<Sidecar> {
     if (!tok) return null;
     const idn = opts.identities.find((i) => tokenEq(i.token, tok));
     if (!idn) return null;
-    return { rootId: 'default', gov: opts.governance, actor: idn.actor, operators: undefined, resolved };
+    // F-9 (adversarial review): this passed `operators: undefined`, which makes broker.resolve skip
+    // the operator check entirely — proposer≠approver still held, but ANY other authenticated
+    // identity could approve someone else's pending decision (agent-vs-agent approval). The
+    // multi-root sidecar and the desktop IPC path both supply an operator set; this one did not.
+    // Default to the conventional 'operator' identity when the caller doesn't name one, so approval
+    // authority is always an explicit, closed set.
+    return { rootId: 'default', gov: opts.governance, actor: idn.actor, operators: opts.operators ?? ['operator'], resolved };
   };
   return buildSidecar(resolveCtx, host, opts.port ?? 0);
 }

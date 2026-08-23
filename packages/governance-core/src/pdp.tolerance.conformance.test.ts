@@ -39,10 +39,17 @@ describe('RM-2 — Risk Tolerance widening', () => {
     expect(d.allow).toBe(true);
   });
   it('Medium never lifts critical — a destructive command still asks', () => {
+    // Critical but not catastrophic (see pdp.risk.conformance) — escalates, never auto-runs.
+    const p = build([{ id: 'sh', category: 'exec', pathParams: [], allowedAgents: '*' }]);
+    p.setRiskTolerance('medium');
+    const d = p.decide('ingress', { agentId: 'a', tool: 'sh', input: { cmd: 'rm -rf ./build' } }, BS);
+    expect(d.allow).toBe(false); expect(d.ask).toBe(true); expect(d.riskTier).toBe('critical');
+  });
+  it('F-11: Medium cannot reach a catastrophic command at all — hard-denied before tolerance', () => {
     const p = build([{ id: 'sh', category: 'exec', pathParams: [], allowedAgents: '*' }]);
     p.setRiskTolerance('medium');
     const d = p.decide('ingress', { agentId: 'a', tool: 'sh', input: { cmd: 'rm -rf /' } }, BS);
-    expect(d.allow).toBe(false); expect(d.ask).toBe(true); expect(d.riskTier).toBe('critical');
+    expect(d.allow).toBe(false); expect(d.ask).toBeFalsy();
   });
   it('Medium never lifts a policy deny', () => {
     const p = build([{ id: 'w', category: 'write', pathParams: ['path'], allowedAgents: '*' }],

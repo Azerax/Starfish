@@ -72,14 +72,56 @@ export class TrashStore {
     return { ok: true, restoredTo: entry.originalPath, reason: 'restored' };
   }
 
-  /** PERMANENT removal of one entry (higher-tier: caller must gate on operator confirmation). */
-  purge(id: string): boolean {
+  /**
+   * PERMANENT, irreversible removal of one entry.
+   *
+   * Q5 (adversarial review): "which recovery paths bypass forward-path governance?" The forward
+   * delete path is the strongest thing in the codebase — hard rules approval cannot override,
+   * blast-radius assessment, soft delete to this trash, never an unlink. But this method, which
+   * destroys the recovery store that makes all of that safe, took no PDP and no audit and was a bare
+   * `rmSync(recursive, force)`. The guarantee lived entirely in the caller. `privilegedPurge` IS a
+   * correct caller (token + verified renderer + native OS confirmation), but a class cannot assume
+   * every future caller will be.
+   *
+   * An `audit` is now REQUIRED. Purge is the one operation with no undo, so it must be impossible to
+   * perform unrecorded — and if the record cannot be written, the destruction does not happen.
+   */
+  purge(id: string, audit: AuditLog, by = 'operator'): boolean {
     const slot = join(this.trashDir, id);
     if (!existsSync(slot)) return false;
+    // audit-BEFORE-act: the record must exist before the bytes are gone (Q8 rings-agree rule).
+    try {
+      audit.append({
+        actor: by, domain: 'tool', action: 'trash-purge', target: id, decision: 'allow', riskTier: 'critical',
+        reason: 'permanent, irreversible removal of a trashed item',
+      });
+    } catch {
+      return false;   // unauditable destruction is refused, not performed quietly
+    }
     rmSync(slot, { recursive: true, force: true });
     return true;
   }
-  purgeAll(): number { const n = this.list().length; rmSync(this.trashDir, { recursive: true, force: true }); mkdirSync(this.trashDir, { recursive: true }); return n; }
+
+  /**
+   * PERMANENT removal of EVERY entry — i.e. destroying the entire recovery store in one call.
+   * Requires an explicit confirmation token as well as an audit: this is the single most destructive
+   * operation the class offers and it should not be reachable by a typo or a stray loop.
+   */
+  purgeAll(audit: AuditLog, confirm: 'PURGE-ALL', by = 'operator'): number {
+    if (confirm !== 'PURGE-ALL') throw new Error("purgeAll requires the literal confirmation 'PURGE-ALL'");
+    const n = this.list().length;
+    try {
+      audit.append({
+        actor: by, domain: 'tool', action: 'trash-purge-all', target: this.trashDir, decision: 'allow', riskTier: 'critical',
+        reason: `permanent removal of the ENTIRE recovery store (${n} item(s))`,
+      });
+    } catch {
+      return 0;   // refuse rather than wipe unrecorded
+    }
+    rmSync(this.trashDir, { recursive: true, force: true });
+    mkdirSync(this.trashDir, { recursive: true });
+    return n;
+  }
 }
 
 /** DeleteOps adapter so the core gate can perform the soft delete through a TrashStore. */

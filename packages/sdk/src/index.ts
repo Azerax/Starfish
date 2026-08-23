@@ -19,6 +19,7 @@ export interface GovernanceOptions {
   allowCloudFs?: boolean;       // opt out of the cloud/network-FS guard
   allowEgress?: boolean;        // opt in to hosted-router data egress
   fetcher?: Fetcher;            // inject transport (tests / custom clients)
+  enforceClaims?: boolean;      // Evidence Gate: block closing claims not backed by a recorded deed (default true)
 }
 export interface GovernDecision { allow: boolean; ask: boolean; reason: string }
 export interface RunSkillInput {
@@ -68,8 +69,25 @@ export function createGovernance(opts: GovernanceOptions): Governance {
     const runner = new HostRunner({ tokens: governor.tokens, keyResolver: opts.keyResolver ?? ((_id: string) => undefined), allowEgress: !!opts.allowEgress, audit: governor.audit, fetcher: opts.fetcher });
     const execute = input.execute ?? makeFsExecutor({ projectRoot: opts.root, boundary: input.boundary });
     const task = governor.tasks.create({ type: 'mission', subject: input.brief.slice(0, 80), proposer: 'operator', assignee: input.agentId, origin: 'internal' });
+    // F-10: issue the task's scope contract at creation, so non-deviation is actually enforceable for
+    // this run. Derived from what governance already knows — the agent's declared tools and this run's
+    // boundary roots — so no caller has to author one. Without this the PDP's scope gate would deny
+    // every call the loop makes under the default 'contracted' mode, which is exactly why the gate
+    // shipped unwired for so long.
+    governor.scope.issue({
+      taskId: task.id,
+      proposer: 'operator',
+      agentId: input.agentId,
+      boundary: input.boundary,
+    });
     const loop = new AgentLoop({
-      dispatcher, runner, pdp: governor.pdp, audit: governor.audit, maxSteps: 8, enforceClaims: false,
+      // C-8 (site claims audit): the Evidence Gate was advertised as blocking any claim not backed by
+      // a recorded deed, but shipped OFF here — an agent could close a run saying "tests pass" with no
+      // test run in the ledger. Now ON by default; the fail direction is safe (an unbacked claim ends
+      // the run as `claim-unbacked` after a correction retry, rather than being believed). Hosts that
+      // want the old behaviour pass enforceClaims:false.
+      dispatcher, runner, pdp: governor.pdp, audit: governor.audit, maxSteps: 8,
+      enforceClaims: opts.enforceClaims ?? true,
       boundaryFor: () => input.boundary,
       execute,
       resolveAsk: async (call: ToolCall, reason: string) => {

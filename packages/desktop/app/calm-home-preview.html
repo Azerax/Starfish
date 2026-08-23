@@ -1,0 +1,54 @@
+<!-- PREVIEW ONLY — a static mirror of screens/Home.tsx so the calm layout can be seen without running
+     Electron. Not shipped; delete freely. The real component is Home.tsx wired to the live bridge. -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background: #f7f7f8; color: #1d1f20; }
+  .wrap { max-width: 620px; margin: 0 auto; padding: 0 28px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 22px; border-bottom: 1px solid #ededee; }
+  .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 500; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #5980a6; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #8a8d90; }
+  h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin: 38px 0 6px; }
+  .sub { font-size: 16px; color: #8a8d90; margin: 0 0 22px; }
+  .row { display: flex; gap: 10px; }
+  input { flex: 1; height: 48px; border: 1px solid #e2e2e4; border-radius: 8px; padding: 0 15px; font-size: 15px; color: #1d1f20; background: #fff; outline: none; }
+  input::placeholder { color: #a9acae; }
+  .start { height: 48px; padding: 0 22px; border: none; border-radius: 8px; background: #5980a6; color: #fff; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .kicker { font-size: 12px; letter-spacing: 0.09em; color: #a9acae; text-transform: uppercase; margin: 34px 0 12px; display: flex; justify-content: space-between; align-items: center; }
+  .seeAll { font-size: 13px; color: #5980a6; cursor: pointer; text-transform: none; letter-spacing: 0; text-decoration: underline; text-underline-offset: 2px; }
+  .card { border: 1px solid #e2e2e4; border-radius: 10px; padding: 18px; display: flex; gap: 15px; align-items: center; background: #fff; }
+  .check { width: 40px; height: 40px; border-radius: 8px; border: 1px solid #e2e2e4; display: flex; align-items: center; justify-content: center; color: #8a8d90; font-size: 18px; }
+  .rowTitle { font-size: 15px; font-weight: 500; }
+  .rowSub { font-size: 14px; color: #8a8d90; margin-top: 2px; }
+  .act { display: flex; gap: 16px; padding: 13px 0; border-bottom: 1px solid #ededee; align-items: baseline; }
+  .time { font-size: 13px; color: #a9acae; min-width: 44px; font-variant-numeric: tabular-nums; }
+  .atext { font-size: 15px; color: #2b2b2d; }
+  .cockpit { font-size: 12.5px; color: #5980a6; margin-top: 30px; cursor: pointer; }
+</style>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand"><span class="dot"></span> Starfish</span>
+    <span class="status">🔒 Protected &amp; recording</span>
+  </div>
+  <h1>Good afternoon.</h1>
+  <p class="sub">Tell me what you&rsquo;d like done.</p>
+  <div class="row">
+    <input placeholder="Draft the Q3 summary and send it to the team" />
+    <button class="start">Start</button>
+  </div>
+  <div class="kicker"><span>Right now</span></div>
+  <div class="card">
+    <div class="check">✓</div>
+    <div>
+      <div class="rowTitle">Ready when you are</div>
+      <div class="rowSub">Nothing running right now</div>
+    </div>
+  </div>
+  <div class="kicker"><span>Recent activity</span><span class="seeAll">See all</span></div>
+  <div>
+    <div class="act"><span class="time">09:14</span><span class="atext">Wrote Q3-sales-summary.md</span></div>
+    <div class="act"><span class="time">09:13</span><span class="atext">Read last quarter&rsquo;s figures</span></div>
+    <div class="act"><span class="time">09:02</span><span class="atext">Committed changes</span></div>
+  </div>
+  <p class="cockpit">Open the full cockpit →</p>
+</div>

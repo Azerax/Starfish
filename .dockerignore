@@ -1,0 +1,8 @@
+
+# Starfish test-deploy: node_modules is never needed in the ACR build context (the
+# Dockerfile only COPYs the already-bundled azure/sidecar/dist/sidecar.mjs) and including
+# it crashes az acr build's context upload on Windows -- see Deploy-StarfishTestEnv.ps1
+node_modules/
+**/node_modules/
+.git/
+

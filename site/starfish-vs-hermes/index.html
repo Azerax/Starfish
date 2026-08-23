@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Starfish vs Hermes: Governing a Self-Improving AI Agent | Project Starfish</title>
-<meta name="description" content="Hermes writes its own skills from your workflows. Project Starfish keeps that capability but makes every self-authored skill and learned behavior prove it's safe — in an Arena — before it can act.">
+<meta name="description" content="Hermes writes its own skills from your workflows. Project Starfish keeps that capability but puts every self-authored skill through governed intake — provenance, risk scoring and injection screening — before it can act.">
 <link rel="canonical" href="https://projectstarfish.ca/starfish-vs-hermes/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#04060f">
@@ -19,9 +19,9 @@
 <link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"What is the difference between Starfish and Hermes?","acceptedAnswer":{"@type":"Answer","text":"Hermes is a self-improving, self-hosted AI agent that learns from your workflows and generates its own skills. Project Starfish keeps that capability but governs it: a self-authored skill is untrusted until it proves itself in an isolated Arena, and an agent may automate work but never expand its own authority."}},
-{"@type":"Question","name":"Is it safe for an AI agent to write its own skills?","acceptedAnswer":{"@type":"Answer","text":"Self-authored skills are powerful but risky, because the author is also the executor with no second review. Starfish adds that review: a generated skill must pass an Arena of competence, non-deviation, and injection-resistance trials, judged on recorded evidence, before it is signed and allowed to act."}},
-{"@type":"Question","name":"What is bounded autonomy?","acceptedAnswer":{"@type":"Answer","text":"Bounded autonomy means an agent may automate work but can never grant itself more authority. In Starfish, a learned behavior that drifts off its approved scope trips non-deviation enforcement and is stopped, and trust is revoked instantly on any deviation."}}
+{"@type":"Question","name":"What is the difference between Starfish and Hermes?","acceptedAnswer":{"@type":"Answer","text":"Hermes is a self-improving, self-hosted AI agent that learns from your workflows and generates its own skills. Project Starfish keeps that capability but governs it: a self-authored skill is untrusted until it clears capability intake — provenance, risk scoring and prompt-injection screening, with anything medium-risk or above quarantined until you consent — and an agent may automate work but never expand its own authority."}},
+{"@type":"Question","name":"Is it safe for an AI agent to write its own skills?","acceptedAnswer":{"@type":"Answer","text":"Self-authored skills are powerful but risky, because the author is also the executor with no second review. Starfish adds that review: a generated skill must clear capability intake — provenance checking, deterministic risk scoring and prompt-injection screening — and anything medium-risk or above is quarantined until a human consents, before it is registered and allowed to act. An isolated Arena that proves competence and non-deviation under trial is designed and on the roadmap; it is not in the current release."}},
+{"@type":"Question","name":"What is bounded autonomy?","acceptedAnswer":{"@type":"Answer","text":"Bounded autonomy means an agent may automate work but can never grant itself more authority. In Starfish, every task carries a scope contract - narrower than the agent's standing grants, sealed at approval and amendable only by governed re-approval - and a call that strays outside its approved tools, paths, commands or budget is refused. Every action is also adjudicated against a deny-by-default boundary and hard floors that no policy or tolerance setting can lift, so an agent cannot widen its own reach."}}
 ]}
 </script>
 </head><body>
@@ -39,19 +39,19 @@
   <p>Hermes solved something most agent frameworks ignore: memory and compounding capability. It treats every task as a chance to learn something reusable, and it generates skill files from your actual workflows. That's a genuine advance. Starfish isn't arguing against self-improvement — it's arguing that self-improvement without governance is an agent quietly expanding its own authority, which is exactly what governance exists to bound.</p>
 
   <h2>What they share</h2>
-  <p>Both are self-hosted and model-agnostic. Both keep persistent memory and compounding capability, execute code, search the web, and manage files. And both let an agent write its own skills — Starfish just routes that generated skill through the Arena before it can run.</p>
+  <p>Both are self-hosted and model-agnostic. Both keep persistent memory and compounding capability, execute code, search the web, and manage files. And both let an agent write its own skills — Starfish just routes that generated skill through governed capability intake before it can run.</p>
 
   <h2>The difference: who gets to trust a new skill</h2>
   <p>Hermes's headline feature — the agent writing and then running its own automation — is, in governance terms, an agent minting new capability for itself. Starfish keeps the feature and changes who's in charge of trusting it:</p>
   <ul>
-    <li><strong>Self-authored skills are untrusted by default.</strong> A newly generated skill is a candidate, not a live capability. It goes through an Arena — a no-OS proving ground of competence, non-deviation, injection-resistance, and canary trials, judged on recorded evidence, not the agent's say-so — before it is signed and registered.</li>
-    <li><strong>Bounded autonomy.</strong> An agent may automate work; it may never expand its own authority. A learned behavior that drifts off scope trips non-deviation enforcement and is stopped.</li>
+    <li><strong>Self-authored skills are untrusted by default.</strong> A newly generated skill is a candidate, not a live capability. It goes through capability intake — provenance checking, deterministic risk scoring and prompt-injection screening, judged on recorded evidence, not the agent's say-so — and anything medium-risk or above is quarantined until you consent, before it is registered. <em>(An isolated Arena that proves competence and non-deviation under trial is designed and on the roadmap, not in the current release.)</em></li>
+    <li><strong>Bounded autonomy.</strong> An agent may automate work; it may never expand its own authority. Each task carries a scope contract - narrower than the agent's standing grants, sealed at approval - and a call that strays outside its approved tools, paths, commands or budget is refused. Hard floors sit underneath, and no policy or tolerance setting can lift them.</li>
     <li><strong>Provenance on everything remembered.</strong> Compounding capability is only safe if you can see why the agent believes something. Starfish's memory is provenance-first: nothing is remembered because the model said so.</li>
-    <li><strong>Earned auto-approval, revocable.</strong> Trust is earned by a proven history of non-deviation and revoked instantly on a single deviation — slow to earn, instant to lose.</li>
+    <li><strong>Earned auto-approval, revocable.</strong> Trust is earned by a recorded history of in-scope, in-bounds work and revoked on a single deviation — slow to earn, instant to lose.</li>
   </ul>
 
   <h2>The risk Hermes's best feature creates</h2>
-  <p>A self-improving agent that writes and runs its own skills is a supply chain of one author who is also the executor — no second set of eyes. Starfish's Arena plus proposer-not-approver is precisely a second set of deterministic, evidence-based eyes between "the agent wrote a skill" and "the skill can touch your system."</p>
+  <p>A self-improving agent that writes and runs its own skills is a supply chain of one author who is also the executor — no second set of eyes. Starfish's capability intake plus proposer-not-approver is precisely a second set of deterministic, evidence-based eyes between "the agent wrote a skill" and "the skill can touch your system."</p>
 
   <h2>Who should choose which</h2>
   <p>Choose Hermes if you want maximum self-improvement velocity and you're comfortable being the sole reviewer of what your agent teaches itself. Choose Starfish if you love the idea of an agent that learns — but you want every new skill and learned behavior to prove it's safe, with an audit trail, before it can act.</p>

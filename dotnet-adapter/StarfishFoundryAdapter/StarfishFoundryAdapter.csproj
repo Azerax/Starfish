@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compile-tested tonight: `dotnet build` failed on first attempt because XML comments cannot contain
+    two consecutive hyphens, which this file's own comment originally used. Fixed, then built clean.
+    See IMPLEMENTATION_PLAN.md Sec 6 for the full account, including the C# console harness that then
+    verified this against a real running sidecar container.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Starfish.FoundryAdapter</RootNamespace>
+    <PackageId>Starfish.FoundryAdapter</PackageId>
+    <Description>Starfish governance adapter for Azure AI Foundry Agent Service (.NET).</Description>
+  </PropertyGroup>
+
+</Project>

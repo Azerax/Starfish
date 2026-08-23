@@ -59,7 +59,13 @@ export class AuditLog {
   constructor(private path: string, opts: AuditOptions = {}) {
     this.anchorEnabled = opts.anchor ?? true;   // A17: anchoring ON by default
     this.rotateBytes = opts.rotateBytes ?? 0;   // 0 = rotation disabled
-    if (existsSync(path) || existsSync(this.segIndexPath())) this.recover();
+    // F-1 (adversarial review): recovery used to be gated on the log or segment index existing, so
+    // DELETING the log outright skipped recovery entirely — the anchor, the one artifact that proves
+    // events existed, was never read. Integrity reported clean, verify() returned true, and seq
+    // restarted at 0: absence read as health. Recovery now always runs, so the anchor is consulted
+    // even when there is nothing left to compare it against. Telemetry that VANISHES must be at least
+    // as loud as telemetry that reports failure.
+    this.recover();
   }
 
   private anchorPath(): string { return this.path + '.anchor'; }
@@ -73,9 +79,19 @@ export class AuditLog {
     if (!existsSync(this.anchorPath())) return null;
     try { return JSON.parse(readFileSync(this.anchorPath(), 'utf8')) as AuditAnchor; } catch { return null; }
   }
+  /** Q9: a silently-unwritable anchor is a SILENTLY DEGRADED guarantee — the chain keeps working,
+   *  so nothing looks wrong, but tail truncation stops being detectable. "Best effort" was hiding
+   *  the difference between "anchoring is off" (a choice) and "anchoring is broken" (a failure).
+   *  The degradation is now recorded on the instance so boot can surface it. */
+  anchorDegraded = '';
   private writeAnchor(): void {
     if (!this.anchorEnabled) return;
-    try { this.writeFileSynced(this.anchorPath(), JSON.stringify({ seq: this.seq - 1, headHash: this.prevHash })); } catch { /* best effort */ }
+    try {
+      this.writeFileSynced(this.anchorPath(), JSON.stringify({ seq: this.seq - 1, headHash: this.prevHash }));
+      this.anchorDegraded = '';
+    } catch (e) {
+      this.anchorDegraded = `anchor unwritable (${(e as Error).message}) — tail truncation is no longer detectable`;
+    }
   }
   private readSegments(): SegmentRoot[] {
     if (!existsSync(this.segIndexPath())) return [];
@@ -98,8 +114,17 @@ export class AuditLog {
       try { this.writeFileSynced(this.path, cur.events.map((e) => JSON.stringify(e)).join('\n') + (cur.events.length ? '\n' : '')); } catch { /* best effort */ }
     }
     // A17: a head anchor ahead of the recovered log proves tail truncation/rollback.
+    // F-1: this also now covers TOTAL deletion. With the log gone, seq is 0, so any anchor at seq >= 0
+    // is "ahead" and trips. An anchor with no log at all is called out explicitly, because that is the
+    // deletion case and an operator needs to read it as destruction, not as a fresh install.
     const anchor = this.readAnchor();
-    if (anchor && this.seq - 1 < anchor.seq) { this.integrity.ok = false; this.integrity.reason = 'audit-truncated (anchor ahead of log)'; }
+    if (anchor && this.seq - 1 < anchor.seq) {
+      this.integrity.ok = false;
+      const nothingLeft = !existsSync(this.path) && !segs.length;
+      this.integrity.reason = nothingLeft
+        ? `audit-deleted (anchor at seq ${anchor.seq}, no log present)`
+        : 'audit-truncated (anchor ahead of log)';
+    }
   }
 
   /** Append an event. Throws on write failure so callers can fail closed. */

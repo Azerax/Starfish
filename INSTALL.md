@@ -44,6 +44,13 @@ quarantined pending your `--approve`. Local-only; nothing runs ungoverned.
 
 ## Publishing (maintainers)
 ```bash
-npm publish -w project-starfish      # prepublishOnly bundles dist/cli.mjs first
+cd packages/cli
+npm publish      # prepublishOnly bundles dist/cli.mjs first
+cd ../..
 ```
+Publish from **inside `packages/cli`**, not via `npm publish -w packages/cli` (or `-w project-starfish`)
+from the repo root. On npm 10.9.8, publishing a workspace with `--workspace` from root can incorrectly
+inherit the root `package.json`'s `private: true` and fail with `EPRIVATE`, even though
+`packages/cli/package.json` itself has no `private` field.
+
 The desktop app (GCS Starfish) is distributed separately; this package is the governance CLI/overlay.

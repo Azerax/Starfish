@@ -45,11 +45,34 @@ describe('TrashStore — recoverable soft delete', () => {
     writeFileSync(f, 'replaced');                       // something new at the original path
     expect(store.restore(id).ok).toBe(false);
   });
-  it('purge permanently removes an entry', () => {
+  it('purge permanently removes an entry, and records it first', () => {
     const d = ws(); const f = join(d, 'y.txt'); writeFileSync(f, '1');
     const store = new TrashStore(join(d, '.trash'));
     const { id } = store.move(f);
-    expect(store.purge(id)).toBe(true); expect(store.list()).toEqual([]);
+    const audit = new AuditLog(join(d, 'audit.jsonl'));
+    expect(store.purge(id, audit)).toBe(true);
+    expect(store.list()).toEqual([]);
+    expect(audit.recent(10).some((e) => e.action === 'trash-purge' && e.target === id)).toBe(true);
+  });
+  // Q5 — the recovery store is what makes the whole soft-delete guarantee safe, so destroying it
+  // must be as governed as the forward path. An unauditable purge is refused, not performed quietly.
+  it('purge REFUSES when the destruction cannot be recorded', () => {
+    const d = ws(); const f = join(d, 'z.txt'); writeFileSync(f, '1');
+    const store = new TrashStore(join(d, '.trash'));
+    const { id } = store.move(f);
+    const broken = { append() { throw new Error('audit unavailable'); } } as unknown as AuditLog;
+    expect(store.purge(id, broken)).toBe(false);
+    expect(store.list().length).toBe(1);                 // still recoverable
+  });
+  it('purgeAll demands an explicit confirmation token', () => {
+    const d = ws(); const f = join(d, 'w.txt'); writeFileSync(f, '1');
+    const store = new TrashStore(join(d, '.trash'));
+    store.move(f);
+    const audit = new AuditLog(join(d, 'audit.jsonl'));
+    expect(() => (store as unknown as { purgeAll(a: AuditLog, c: string): number }).purgeAll(audit, 'yes')).toThrow(/PURGE-ALL/);
+    expect(store.list().length).toBe(1);
+    expect(store.purgeAll(audit, 'PURGE-ALL')).toBe(1);
+    expect(store.list()).toEqual([]);
   });
   it('refuses to trash a directory (hard rule belt-and-suspenders)', () => {
     const d = ws(); mkdirSync(join(d, 'folder'));

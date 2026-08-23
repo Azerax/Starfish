@@ -8,7 +8,7 @@
 
 `project-starfish` is the `starfish` CLI. It puts every AI agent action through a single **Policy Decision
 Point** that defaults to **deny**: each tool call is authorized on the way in, contained on the way out,
-and written to a tamper-evident **audit log**. No task, no tool. Proposer is never approver. Fail-closed:
+and written to a tamper-evident **audit log**. Turn on task-binding and it is *no task, no tool*. Proposer is never approver. Fail-closed:
 if governance is not running, governed tool calls are denied, not allowed.
 
 It is **model-agnostic** (Claude, OpenAI, Gemini, OpenRouter, local) and, as of v0.10.0, it can govern
