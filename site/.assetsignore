@@ -1,0 +1,9 @@
+# Cloudflare Pages: paths listed here are NOT uploaded as public assets.
+#
+# `wrangler pages deploy site` publishes EVERYTHING in this directory, so anything dropped in here
+# becomes a live URL. Two zip bundles (a stale full-site archive and a manual-upload delta) were
+# sitting here and would have been served at projectstarfish.ca/site.zip -- harmless content, but
+# stale copies of the site are exactly the sort of thing that shouldn't be publicly fetchable.
+*.zip
+*.tgz
+README.md

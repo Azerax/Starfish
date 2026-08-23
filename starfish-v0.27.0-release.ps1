@@ -43,7 +43,10 @@
   6/10  Review + commit (asks first).
   7/10  Tag v0.27.0 (asks first; skipped if the tag already exists).
   8/10  Push branch + tags (asks first).
-  9/10  Optional `npm publish` from packages/cli -- only if HEAD is actually tagged.
+  9/10  Optional `npm publish` from packages/cli -- only if HEAD is actually tagged. Detects whether
+        a non-interactive npm credential exists and SKIPS with instructions if not, because BOTH of
+        npm's 2FA flows (classic "Enter OTP:" and the newer "Press ENTER to open in the browser")
+        read from a stdin that does not exist inside a script -- they hang rather than fail.
   10/10 Post-release checklist: what's still open and what to do about the site.
 
   All ten adversarial findings are closed, AND the Q12 exploit chain the review demonstrated is
@@ -457,18 +460,80 @@ if (-not $tagOnHead) {
     Write-Host "npm account: $whoami"
     Write-Host "Tag on HEAD: $tagOnHead"
     Write-Host "This publishes $PublishWorkspace publicly. It cannot be un-published for the same version." -ForegroundColor Yellow
+    $skipPublish = $false
     if (Confirm-Yes "Run 'npm publish' from $PublishWorkspace now") {
-      # Publish from inside the package dir, not 'npm publish --workspace' from root -- that flag can
-      # inherit the ROOT package.json's "private": true on some npm versions (EPRIVATE on 10.9.8).
-      Push-Location (Join-Path $RepoPath $PublishWorkspace)
-      try { npm publish; $publishExit = $LASTEXITCODE } finally { Pop-Location }
-      if ($publishExit -ne 0) {
-        Write-Host "npm publish failed (exit code $publishExit)." -ForegroundColor Red
+      # PUBLISHING FROM A SCRIPT NEEDS A NON-INTERACTIVE CREDENTIAL. Learned the hard way on v0.27.0.
+      #
+      # npm has two interactive 2FA flows and BOTH break in here, because stdin is not a real TTY
+      # when npm is invoked from a script:
+      #   * classic OTP  -- prints "Enter OTP:", receives nothing, re-prompts forever (the v0.27.0 hang).
+      #   * web auth     -- prints "Press ENTER to open in the browser..." and waits on the same dead stdin.
+      # npm 11 prefers the web flow, so passing --otp alone does NOT make this safe; the first fix
+      # here only covered the classic case and would still have hung.
+      #
+      # The durable answer is an npm AUTOMATION token, which bypasses 2FA entirely by design:
+      #   npmjs.com -> avatar -> Access Tokens -> Generate New Token -> Automation
+      #   npm config set //registry.npmjs.org/:_authToken=<token>     (or set $env:NPM_TOKEN)
+      # With one configured, publish is non-interactive and this step just works.
+      $hasToken = $false
+      try { $hasToken = -not [string]::IsNullOrWhiteSpace((& npm config get //registry.npmjs.org/:_authToken 2>$null)) -and
+                        (& npm config get //registry.npmjs.org/:_authToken 2>$null) -ne 'undefined' } catch { $hasToken = $false }
+      if (-not $hasToken -and -not [string]::IsNullOrWhiteSpace($env:NPM_TOKEN)) { $hasToken = $true }
+
+      if (-not $hasToken) {
+        Write-Host ""
+        Write-Host "No automation token detected, so npm will try an INTERACTIVE 2FA flow -- and that" -ForegroundColor Red
+        Write-Host "cannot read the keyboard from inside this script. It will hang, not fail." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Two ways forward:" -ForegroundColor Yellow
+        Write-Host "  1. RECOMMENDED -- create an Automation token (bypasses 2FA by design):" -ForegroundColor Yellow
+        Write-Host "       npmjs.com -> avatar -> Access Tokens -> Generate New Token -> Automation" -ForegroundColor Gray
+        Write-Host "       npm config set //registry.npmjs.org/:_authToken=<token>" -ForegroundColor Gray
+        Write-Host "     then re-run this script." -ForegroundColor Gray
+        Write-Host "  2. Publish by hand in a normal terminal, where the prompts work:" -ForegroundColor Yellow
+        Write-Host "       cd $PublishWorkspace ; npm publish" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Skipping publish rather than hanging the script." -ForegroundColor Yellow
+        $otp = $null
+        $skipPublish = $true
+      }
+      Write-Host ""
+      $otp = if ($skipPublish) { $null } else { Read-Host "6-digit OTP if your token still demands one (or press Enter)" }
+
+      $publishArgs = @('publish')
+      if (-not [string]::IsNullOrWhiteSpace($otp)) {
+        if ($otp -notmatch '^\d{6}$') {
+          Write-Host "'$otp' is not a 6-digit code -- skipping publish rather than sending a bad OTP." -ForegroundColor Red
+          $otp = $null
+        } else {
+          $publishArgs += @('--otp', $otp)
+        }
+      }
+
+      if ($skipPublish) {
+        Write-Host "Publish skipped -- see the guidance above." -ForegroundColor Yellow
+      } elseif ($null -eq $otp -and $publishArgs.Count -eq 1 -and -not (Confirm-Yes "Publish now (no OTP supplied)")) {
+        Write-Host "Skipped." -ForegroundColor Yellow
       } else {
-        Write-Host "Published." -ForegroundColor Green
+        # Publish from inside the package dir, not 'npm publish --workspace' from root -- that flag can
+        # inherit the ROOT package.json's "private": true on some npm versions (EPRIVATE on 10.9.8).
+        Push-Location (Join-Path $RepoPath $PublishWorkspace)
+        try { & npm @publishArgs; $publishExit = $LASTEXITCODE } finally { Pop-Location }
+        if ($publishExit -ne 0) {
+          Write-Host ""
+          Write-Host "npm publish failed (exit code $publishExit)." -ForegroundColor Red
+          Write-Host "  E401 + 'requires a one-time password'  -> the OTP was wrong or had expired; re-run and" -ForegroundColor Yellow
+          Write-Host "                                            fetch a fresh code immediately before entering it." -ForegroundColor Yellow
+          Write-Host "  E401 with no OTP mention               -> the token lacks publish rights ('npm login' again," -ForegroundColor Yellow
+          Write-Host "                                            or issue an automation token that can publish)." -ForegroundColor Yellow
+          Write-Host "  E403                                   -> that version already exists, or you lack rights to the name." -ForegroundColor Yellow
+          Write-Host "  By hand:  cd $PublishWorkspace ; npm publish --otp=123456" -ForegroundColor Gray
+        } else {
+          Write-Host "Published." -ForegroundColor Green
+        }
       }
     } else {
-      Write-Host "Skipped -- publish by hand later from $PublishWorkspace." -ForegroundColor Yellow
+      Write-Host "Skipped -- publish by hand later:  cd $PublishWorkspace ; npm publish --otp=123456" -ForegroundColor Yellow
     }
   }
 }
