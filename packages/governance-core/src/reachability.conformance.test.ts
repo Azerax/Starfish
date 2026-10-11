@@ -104,4 +104,127 @@ describe('reachability — every enforcement control is invoked by shipped code,
     const r = calledFromProduction('issue', 'governance-core/src/scopeissuer.ts');
     expect(r.ok, 'nothing issues scope contracts — the gate would deny every task-bound call').toBe(true);
   });
+
+  // ---- v0.28: H5 input re-provenance ----
+  //
+  // Found by applying this suite's OWN question to a module it did not cover. `attest.ts` was
+  // implemented, correct, audited when called, and called by nothing — a second instance of the
+  // F-7/F-8/F-10 shape, one layer down, which this file existed to catch and did not because it
+  // enumerated controls by hand. Both halves are asserted, because either alone is useless: a verify
+  // with nothing stamping it always passes, and a stamp nothing verifies is dead weight.
+  it('H5: input stamps are taken from production (the PICK half)', () => {
+    const r = calledFromProduction('stampInputs', 'governance-core/src/scope.ts');
+    expect(r.ok, 'nothing stamps task inputs — verifyInputs would always see an empty set and pass').toBe(true);
+  });
+  it('H5: input stamps are re-verified from production (the USE half)', () => {
+    const r = calledFromProduction('verifyInputs', 'governance-core/src/scope.ts');
+    expect(r.ok, 'nothing re-verifies task inputs — the TOCTOU guard is dormant').toBe(true);
+  });
+  it('H5: the PDP is the enforcement point for both halves', () => {
+    const pdp = SOURCES.find((s) => s.path.replace(/\\/g, '/').endsWith('governance-core/src/pdp.ts'));
+    expect(pdp).toBeDefined();
+    expect(pdp!.text).toMatch(/verifyInputs/);
+    expect(pdp!.text).toMatch(/stampInputs/);
+  });
+});
+
+// ===========================================================================
+// THE INVENTORY OF WHAT IS BUILT AND NOT YET WIRED
+// ===========================================================================
+//
+// Every assertion above asks "is this control reached?" and fails if it is not. That is the right
+// question for a control that is SUPPOSED to be live, and the wrong one for a module deliberately
+// landed ahead of its call site — which `inquiry.ts`, `controlplane.ts` and now `completion.ts` all
+// are, each for a stated reason in its ADR.
+//
+// Saying nothing is not an option: an unwired module that nobody has written down is precisely the
+// F-7/F-8/F-10 defect class, and it is found by an auditor rather than by CI. But a prose disclosure
+// is the F-10 shape — v0.27.0 shipped a hardcoded flag that "read as an honest disclosure while being
+// unfalsifiable", and a comment saying "not wired yet" rots into a lie the moment it IS wired, with
+// nothing to notice.
+//
+// So the disclosure is a list, and the list is TESTED IN BOTH DIRECTIONS:
+//
+//   * every entry must still be unreached — once a module acquires a production caller the test FAILS
+//     and tells you to delete the entry. The claim cannot go stale in the safe-looking direction.
+//   * every entry must name a milestone that appears in the plan — a module cannot be parked here
+//     indefinitely without a committed plan to wire it.
+//   * every entry's file must exist — a deleted module leaves no ghost claim behind.
+//
+// WHY THE BARREL IS EXCLUDED. `index.ts` re-exports all three of these modules, so the naive
+// `calledFromProduction` check finds a "caller" in shipped source and passes. A re-export is not a
+// call site; it is what made these modules look reachable in the first place. Counting it would have
+// made this entire file agree that `inquiry.ts` was wired.
+
+interface AwaitingWiring {
+  /** Path suffix of the module, as `calledFromProduction` expects. */
+  module: string;
+  /** The symbol a production caller would have to reference for this module to be live. */
+  entryPoint: string;
+  /** The ADR that states the module ships ahead of its caller, and why. */
+  adr: string;
+  /** The milestone that commits to wiring it. Must appear in docs/design/CONTROL_PLANE_PLAN.md. */
+  milestone: string;
+}
+
+const AWAITING_WIRING: readonly AwaitingWiring[] = Object.freeze([
+  {
+    module: 'governance-core/src/inquiry.ts', entryPoint: 'askGoverned',
+    adr: '0002-semantic-signal-boundary.md', milestone: 'M1.2',
+  },
+  {
+    module: 'governance-core/src/controlplane.ts', entryPoint: 'forwardGoverned',
+    adr: '0002-semantic-signal-boundary.md', milestone: 'M1.2',
+  },
+  {
+    module: 'governance-core/src/completion.ts', entryPoint: 'CompletionLedger',
+    adr: '0003-completion-receipt.md', milestone: 'M1.2',
+  },
+]);
+
+/** As `calledFromProduction`, but a barrel re-export does not count as a caller. */
+function reachedExcludingBarrel(symbol: string, definedIn: string): { ok: boolean; callers: string[] } {
+  const callers = SOURCES
+    .map((s) => ({ ...s, rel: s.path.replace(/\\/g, '/') }))
+    .filter((s) => !s.rel.endsWith(definedIn))
+    .filter((s) => !/\/index\.ts$/.test(s.rel))
+    .filter((s) => new RegExp(`\\b${symbol.replace('.', '\\.')}\\b`).test(stripComments(s.text)))
+    .map((s) => s.rel.split('/packages/')[1]);
+  return { ok: callers.length > 0, callers };
+}
+
+describe('reachability — the inventory of built-but-unwired modules is accurate', () => {
+  it('the inventory is not empty for the wrong reason (the list itself is loaded)', () => {
+    expect(AWAITING_WIRING.length).toBeGreaterThan(0);
+  });
+
+  for (const e of AWAITING_WIRING) {
+    it(`${e.module} exists (no ghost claim about a deleted module)`, () => {
+      const found = SOURCES.some((s) => s.path.replace(/\\/g, '/').endsWith(e.module));
+      expect(found, `${e.module} is listed as awaiting wiring but does not exist — delete the entry`).toBe(true);
+    });
+
+    // The falsifiable half. This test is DESIGNED to fail the moment the module is wired.
+    it(`${e.module} is still unwired — delete its entry the moment it is not`, () => {
+      const r = reachedExcludingBarrel(e.entryPoint, e.module);
+      expect(
+        r.ok,
+        `${e.entryPoint} NOW HAS a production caller (${r.callers.join(', ')}). That is good news: ` +
+        `remove ${e.module} from AWAITING_WIRING and add a positive reachability assertion for it above.`,
+      ).toBe(false);
+    });
+
+    it(`${e.module} names a milestone that the plan actually commits to`, () => {
+      const plan = readFileSync(resolve(PACKAGES, '..', 'docs', 'design', 'CONTROL_PLANE_PLAN.md'), 'utf8');
+      expect(
+        plan.includes(e.milestone),
+        `${e.module} is parked under ${e.milestone}, which the plan does not mention`,
+      ).toBe(true);
+    });
+
+    it(`${e.module} points at an ADR that exists`, () => {
+      const adr = resolve(PACKAGES, '..', 'docs', 'adr', e.adr);
+      expect(() => readFileSync(adr, 'utf8'), `${e.adr} is referenced but missing`).not.toThrow();
+    });
+  }
 });

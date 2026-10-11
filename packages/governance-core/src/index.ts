@@ -87,3 +87,56 @@ export {
   classifyBehaviour, classifyStructuralFeature, classifyStructuralFeatures,
   type BehaviouralCheck, type BehaviouralFinding,
 } from './detectors';
+
+// ---- Bounded semantic inquiry (docs/adr/0002-semantic-signal-boundary.md) ----
+// Typed questions in, advisory signals out. A signal folds into CategoryScores for the ONE scorer
+// in score.ts and can only ever raise a category — it is never an authorization result.
+export {
+  INQUIRY_SCHEMA, INQUIRY_SCHEMA_VERSION, INQUIRY_FAILSAFE_SCORE, INQUIRY_MIN_SCORE, INQUIRY_OUTCOMES,
+  FixtureInquiryProvider, RulesInquiryProvider,
+  inquiryHash, validateQuestion, validateInquiryRequest, validateThresholds,
+  classificationPermitted, admitInquiry, askGoverned, foldInquiry, shadowInquiry,
+  buildInquiryHttpRequest, parseInquirySignal, treatCalibrationAsValid,
+  type InquiryKind, type InquiryOutcome, type InquiryQuestion, type InquiryRequest,
+  type InquirySignal, type InquiryProvider, type InquiryThresholds, type InquiryFold,
+  type InquiryLint, type InquiryAdmission, type InquiryHttpRequest,
+  type ShadowInquiryRecord, type InquiryCalibration,
+} from './inquiry';
+
+// ---- Vendor-neutral MCP control-plane boundary (docs/adr/0002-semantic-signal-boundary.md) ----
+// Starfish decides, THEN the call is forwarded. An external plane's "allowed" never overrides a
+// Starfish deny; its "denied" does stop an allowed call. Denials compose, grants do not.
+export {
+  CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION, REGISTRY_APPROVALS, PROD_FORBIDDEN_SANDBOXES,
+  admitMcpCall, forwardGoverned, looksLikeSecret, FakeMcpControlPlane,
+  type RegistryApproval, type DeployEnvironment, type SandboxRequirement, type RegistryProvenance,
+  type McpServerRef, type McpToolRef, type McpAdmission, type ExternalOpinion,
+  type McpForwardRequest, type McpForwardResult, type McpHealth, type McpControlPlane,
+  type McpInvocation,
+} from './controlplane';
+
+// ---- Completion receipts (docs/adr/0003-completion-receipt.md) ----
+// The record that separates "the tool said it worked" from "it worked". `isProvenComplete` is true for
+// 'verified' ONLY — never for 'returned-success' — and a consequential effect cannot complete on a
+// tool's own report. NOT outcome verification: no verifier exists yet, so the statuses past
+// 'returned-success' are reachable and unused (ADR 0003 §5).
+export {
+  COMPLETION_SCHEMA, COMPLETION_SCHEMA_VERSION, COMPLETION_STATUSES, TERMINAL_COMPLETION_STATUSES,
+  ALLOWED_COMPLETION_TRANSITIONS, CompletionLedger,
+  isTerminalCompletion, canCompletionTransition, isProvenComplete, outcomeKnown, canCompleteTask,
+  statusFromInvocationOutcome, verifyReceiptSeal, recordVerification,
+  // Renamed at the barrel only: `advance` and `commitInputs` are fine inside completion.ts and far too
+  // generic in a ring-1 surface that will also carry an evidence lifecycle and (M1.4) a verifier.
+  advance as advanceCompletion, openReceipt as openCompletionReceipt, commitInputs as commitEffectInputs,
+  type CompletionStatus, type CompletionReceipt, type CompletionTransition, type RequestedEffect,
+  type EffectKind, type VerificationMethod, type VerificationRecord, type DiscrepancyKind,
+  type InvocationOutcome, type OpenReceiptInput, type ObservedPatch, type AdvanceInput, type AdvanceResult,
+} from './completion';
+
+// ---- ToolCall.taskId migration ladder (deprecation path to a required taskId) ----
+export {
+  TASK_BINDING_MODES, UntaskedCallTracker, isTightening,
+  type TaskBindingMode, type UntaskedCaller, type TaskBindingMigrationReport,
+} from './taskmigration';
+export { resolveTaskBindingMode } from './pdp';
+export { asTaskBound, type TaskBoundToolCall } from './types';
