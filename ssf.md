@@ -59,6 +59,21 @@
 
 ## 3. PR 1 — Workflow hardening (zero runtime impact)
 
+> **STATUS: APPLIED 2026-09-27. All four items, including the optional CodeQL one.**
+>
+> | Item | State | Notes |
+> |---|---|---|
+> | 3.1 least-privilege `GITHUB_TOKEN` | ✅ | `permissions: contents: read` at the top of `ci.yml`. `codeql.yml` also declares it, widening only within the job for the SARIF upload. |
+> | 3.2 SHA-pin actions | ✅ | `ci.yml`, `release.yml`, `codeql.yml` and `deploy-site.yml`. **No mutable `@vN` tag remains in any workflow** — verified by grep. Every pin carries a `# v4` / `# v3` comment so the intended version stays legible. |
+> | 3.3 Dependabot | ✅ | `.github/dependabot.yml` — three ecosystems: root npm workspaces, the desktop app's own lockfile, and `github-actions` (which is what keeps 3.2's pins from silently ageing). |
+> | 3.4 CodeQL | ✅ | `.github/workflows/codeql.yml`, informational only — deliberately **not** added to branch protection's required checks until its noise level is known. |
+>
+> Pins resolved live at apply time rather than transcribed, and kept on the **current major** per 3.2's
+> own rationale. Note this leaves two checkout majors in the tree: `scorecard.yml` was already pinned to
+> v7.0.0 while `ci.yml`/`release.yml` stay on v4. That is the intended conservative choice — bumping a
+> major in the same change as a pinning change would confound a behaviour regression with a
+> supply-chain fix. Dependabot will now propose those bumps individually, each gated by `npm run ci`.
+
 All four items below are safe to ship together: none affect the app or its published artifacts.
 
 ### 3.1 Token-Permissions → add least-privilege block to `ci.yml`
@@ -204,8 +219,19 @@ other three — it's the only "optional" item in PR 1.
 
 ## 4. PR 2 — Dependency vulnerabilities (the careful one)
 
-**Why:** Scorecard reported 21 known-vulnerable dependencies. This is the only item with real
-breakage risk, so it ships as its own PR with staged, test-gated changes.
+> **STATUS UPDATE (2026-09-27): the premise below is stale, and PR 2 is now largely moot.**
+> `npm audit --omit=dev` reports **0 production vulnerabilities**. The 21 reported at baseline were
+> either dev-only (build/test/electron toolchain, which never ship in `packages/cli`) or have since
+> been resolved by ordinary lockfile movement. The scoped triage below is preserved because the
+> *procedure* is still the right one if the count ever regrows — but there is currently no production
+> backlog to clear, and the standing protection is Dependabot from PR 1 item 3.3 rather than a one-off
+> sweep. **Re-run the enumeration in step 1 before assuming any of the numbers below still hold.**
+>
+> Recorded rather than quietly edited, because a remediation plan that overstates the problem it
+> solves is the same class of defect as a comment that overstates a guarantee.
+
+**Why (as written at baseline):** Scorecard reported 21 known-vulnerable dependencies. This is the only
+item with real breakage risk, so it ships as its own PR with staged, test-gated changes.
 
 **Scope note:** root deps are lean (`esbuild`, `typescript`, `vitest`, `@types/node`); most of the
 21 are almost certainly **transitive** and many are **dev-only** (build/test/electron toolchain).
