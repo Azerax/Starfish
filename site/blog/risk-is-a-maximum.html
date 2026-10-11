@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why the risk score is a maximum, not an average · Project Starfish</title>
+<meta name="description" content="A deep dive on Starfish's risk scorer: 50 categories, a max-driven 0-100 composite, and the dilution attack that rules out averaging. Floors versus hard-denies, decade-aligned bands, and exactly four things a tolerance setting can never lift.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/risk-is-a-maximum.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-09-27</div><h1>Why the risk score is a maximum, not an average</h1><div class="dek">A deep dive on the scorer. Fifty categories, a 0&ndash;100 composite, and one arithmetic decision that decides whether the whole thing works — plus what a floor is, why two of them never deny, and the exactly four things no tolerance setting can lift.</div>
+<p>Scoring risk across many dimensions has an obvious implementation and it is wrong. If you score fifty categories from 1 to 10 and average them, you have built a system that can be talked out of its own judgement by adding irrelevant context.</p>
+<p>Here is the formula Starfish actually uses:</p>
+<pre><code>// composite = min(100, max*10 + 2 * min(10, count of OTHER categories >= 7))
+export function composite(cats: Record&lt;CategoryId, number&gt;): number {
+  let max = SAFE_MIN;
+  let atLeast7 = 0;
+  for (const c of CATEGORIES) {
+    const v = cats[c.id];
+    if (v > max) max = v;
+    if (v >= 7) atLeast7 += 1;
+  }
+  const others = max >= 7 ? atLeast7 - 1 : atLeast7;
+  const bump = 2 * Math.min(10, others);
+  return Math.min(100, max * 10 + bump);
+}</code></pre>
+<p>Max-driven, with a small bump for accumulation. The comment above it names the reason: <em>one dangerous dimension is never diluted.</em></p>
+<h2>The dilution attack, in numbers</h2>
+<p>Take bulk exfiltration of a customer database to an arbitrary external sink. Exactly one category is maxed — <strong>#12, data egress and exfiltration</strong>, at 10. The other forty-nine sit at their default of 1, because nothing scored them.</p>
+<p><strong>Averaged:</strong> (10 + 49&times;1) / 50 = 1.18, scaled to <strong>11.8</strong>. That lands in the 11&ndash;20 band — <em>Contained</em>, tier low. Under the default tolerance, it auto-runs.</p>
+<p><strong>Max-driven:</strong> max is 10, so the composite is 10&times;10 = <strong>100</strong>. Band 91&ndash;100, <em>Forbidden</em>, tier critical. And #12 is a hard-deny floor, so the verdict is a refusal before the tolerance ceiling is consulted at all.</p>
+<div class="pull">11.8 versus 100, on the same action. That ratio is the entire argument against averaging.</div>
+<p>The averaged number is not merely wrong, it is wrong in a way an attacker controls. Forty-nine of those fifty rows were never scored by anything — they are at 1 because no producer claimed they applied. An average treats "not assessed" as "assessed and fine," which converts the breadth of the taxonomy into a dilution mechanism. The more thorough your category list, the worse the attack gets.</p>
+<h2>What the bump is for</h2>
+<p>Max alone misses the opposite case: several medium-high dimensions at once, none of them maxed. So each <em>other</em> category at 7 or above adds 2, capped at +20.</p>
+<pre><code>assessRisk({ 2: 7 })              // 7*10 + 0  = 70   Gated,  high
+assessRisk({ 2: 7, 3: 7, 4: 7 })  // 70 + 2*2  = 74   Acute,  critical</code></pre>
+<p>Three sevens score 74, not 70. That matters precisely because 70 is the Medium tolerance ceiling, so stacking three moderate dimensions flips an auto-run into an ask. The max itself is excluded from its own bump, which is what keeps the single-dimension case landing exactly on a decade boundary.</p>
+<p>The bump saturates at eleven categories ≥7. Twenty categories at 7 still scores 90, not 100 — reaching <em>Forbidden</em> requires a single dimension at 10, not an accumulation of moderate ones. That is deliberate: breadth of concern and depth of consequence are different things, and only the second one should be able to forbid.</p>
+<h2>Two kinds of bad input, two opposite defaults</h2>
+<p>The clamp is five lines and carries a distinction worth more than its length:</p>
+<pre><code>const SAFE_MIN = 1;
+const FAILSAFE = 10; // a bad value fails to the WORST score, never the safest</code></pre>
+<p>A <strong>malformed</strong> value — <code>NaN</code>, <code>Infinity</code>, a string, an object — becomes <strong>10</strong>. A value that is not a finite number means the pipeline that should have produced it broke, and if you cannot trust the producer you cannot trust anything about the action. Note that <code>-Infinity</code> also fails high: not-finite is not-finite, regardless of sign.</p>
+<p>An <strong>absent</strong> value becomes <strong>1</strong>. That looks like the same situation and is not. Absence means no producer claimed this dimension applies, and with fifty categories where realistically a handful are wired for any given tool, defaulting absence to 10 would make every action Forbidden and the system unusable.</p>
+<p>So the scorer separates "this number is broken" from "nobody made a claim here," and fails in opposite directions on each. The second one is booked honestly as an exposure that belongs to the producer rather than the scorer: a consequential dimension that <em>should</em> have been scored and wasn't is a gap in whatever feeds the scorer, and no arithmetic here can detect it.</p>
+<p>One honest divergence, since a deep dive should include them. The header comment says an out-of-range value fails safe to 10 — but a finite negative clamps to <strong>1</strong>, the safest value, and a conformance test pins that behaviour. Underflow can no longer break the maximum, which was the actual attack. But a negative does not itself become a critical signal, and the clamping is silent — nothing on the assessment records that a value was corrected.</p>
+<h2>Floors, and the two that never deny</h2>
+<p>Seven of the fifty categories are <strong>floors</strong>. Five of those seven are additionally <strong>hard-denies</strong>. Both sets are derived from flags on the category table rather than hand-listed, and both are pinned by a conformance test with exact array equality — so a category quietly losing its floor flag fails CI.</p>
+<pre><code>FLOOR_TRIGGER = 8        // a category "trips its floor" at or above this red-band score
+
+floors      = [1, 6, 8, 10, 11, 12, 29]
+hard-denies = [1, 8, 11, 12, 29]
+ask-only    = [6, 10]</code></pre>
+<p>The hard-denies are the constitutional five: <strong>system storage, arbitrary code execution, secrets, exfiltration, and self-modification of governance.</strong> At 8 or above, any of these refuses outright. No human prompt is offered on that path.</p>
+<p>The two ask-only floors are the interesting ones. <strong>#6, action reversibility</strong> and <strong>#10, oversight and auditability.</strong> An irreversible action — a payment, a publish, a force-push — is a legitimate thing to do. So is an action that reduces what the system can later see about itself. Neither is forbidden. Both are removed from the set of things <em>any</em> tolerance setting can run unattended.</p>
+<p>That is the distinction the two lists encode: a hard-deny says <em>this must not happen</em>, a floor says <em>this must not happen without a human</em>. Collapsing them into one list would either forbid legitimate work or let irreversibility be auto-approved by a config toggle.</p>
+<p>Both are evaluated before the composite matters at all, which means the score is not the gate. The score decides how much <em>convenience</em> you get; the floors decide what convenience cannot reach.</p>
+<h2>Decade alignment is not cosmetic</h2>
+<p>Ten bands, contiguous, ten to a decade: <em>Clear, Contained, Routine</em> (low) · <em>Noted, Weighty</em> (medium) · <em>Heightened, Gated</em> (high) · <em>Acute, Grave, Forbidden</em> (critical).</p>
+<p>Because a single category at <em>n</em> with no bump produces exactly <em>n</em>&times;10, the 1&ndash;10 category scale and the 0&ndash;100 composite are the same scale at two resolutions. "This is a 7 on permissions" and "this scores 70" are the same statement. A lone 3 is 30; a lone 8 is 80.</p>
+<p>Which has a useful consequence: the accumulation bump is the <em>only</em> thing that moves a score off a decade boundary. So any score not ending in zero tells you at a glance that multiple dimensions were ≥7. The number carries its own explanation of why it is not round.</p>
+<p>The band lookup has two defences in five lines. It re-clamps and re-rounds its input before comparing, so no float reaches the band test. And its unreachable fallthrough returns <em>Forbidden / critical</em> rather than the first band — the table is contiguous and a test pins that, so the fallthrough should be dead code. It exists so that tampering which opens a gap in the table fails high instead of low.</p>
+<h2>The verdict function, and why the order is load-bearing</h2>
+<pre><code>if (a.injection)   return deny  'prompt-injection — hard reject'
+if (a.hardDeny)    return deny  'hard-floor category tripped'
+if (a.floors.length) return ask 'floor category requires a human'
+if (policy === 'deny') return deny 'policy-deny'
+const ceiling = CEILING[tolerance] ?? CEILING.low
+if (a.score <= ceiling) return allow
+return ask</code></pre>
+<p><strong>Injection first</strong>, because it is off-scale by construction — an injection assessment never calls the composite at all, so nothing downstream can reason about it numerically.</p>
+<p><strong>Hard-deny before floors</strong>, because a hard-deny category is <em>also</em> in the floors list. Reverse the order and every hard-deny silently degrades to an ask.</p>
+<p><strong>Floors before policy-deny</strong> does not change the safety outcome — both refuse — but it changes the reason string, and "floor category requires a human" is more auditable than "policy-deny".</p>
+<p><strong>Policy-deny before the ceiling</strong>, so no tolerance setting can override an operator's explicit rule. Note the asymmetry: <code>policy === 'allow'</code> is never consulted here at all. There is no policy-allow shortcut. Policy can only tighten.</p>
+<p><strong>Ceiling last</strong>, and only reached when everything above has declined to fire. By then the only remaining question is whether ordinary risk sits inside what the operator said they would run unattended.</p>
+<p>And the terminal branch is <strong>ask</strong>, not deny. Tolerance never refuses anything. It only decides whether a human is inserted.</p>
+<h2>What tolerance can and cannot do</h2>
+<p>Two settings, ceilings 30 and 70. There is no "high".</p>
+<p>Low's ceiling of 30 is the top of the low tier, which auto-allows anyway — so <strong>Low is behaviourally a no-op</strong>, and the source says so outright. Medium additionally auto-runs <em>Noted, Weighty, Heightened</em> and <em>Gated</em>. That is the entire dial: one setting, one decade-boundary move, and an explicit confirmation required to enable it.</p>
+<p>Exactly four things it cannot lift, because all four resolve before the ceiling is even evaluated: <strong>injection, hard-deny floors, ask-only floors, and an operator's explicit deny rule.</strong></p>
+<p>An unknown tolerance value collapses to the strictest ceiling. A conformance test passes the literal string <code>'bogus'</code> and asserts the verdict is still <em>ask</em>.</p>
+<p>Two honest notes. The comparison is <em>inclusive</em>, so a score of exactly 70 auto-runs under Medium — a known ceiling-hugging exposure, accepted in the spec and mitigated by the irreversibility floor rather than by the number. And the fallback uses <code>??</code>, which only catches null and undefined; a tolerance string colliding with an <code>Object.prototype</code> key would yield a function rather than undefined, and the comparison against a function evaluates false, producing an ask. It fails safe — but by accident of JavaScript rather than by design, which is worth writing down rather than admiring.</p>
+<h2>Making a single 10 visible</h2>
+<p>Every assessment carries its top three contributing categories, filtered to exclude anything still at the default and sorted with a deterministic tie-break by id.</p>
+<p>That is the detection half of the same attack the max-driven composite prevents structurally. A lone maxed category produces a score of 100 <em>and</em> names itself in the audit record. Categories at 1 are filtered out rather than padding the list with noise, so a fully-default action reports no contributors at all instead of three meaningless ones.</p>
+<h2>What this does not do</h2>
+<p>The scorer is deterministic and total — same categories in, same score out, no exceptions thrown, a fail-safe answer for every malformed input. What it cannot do is know whether the <em>right</em> categories were scored.</p>
+<p>Absence defaults to safe. That is the correct call for usability and it is a real exposure: an action whose dangerous dimension was never assessed scores as though that dimension were benign. No arithmetic inside the scorer can detect a claim nobody made. The defence lives upstream, in whatever produces the category vector, and in the floors that do not depend on the composite being right.</p>
+<p>Which is the honest summary of the whole design. The score is a convenience mechanism — it decides how much friction you are spared. The floors are the control, and they were deliberately built so that getting the score wrong cannot open them.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

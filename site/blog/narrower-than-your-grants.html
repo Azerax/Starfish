@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Narrower than your grants: the Scope Contract · Project Starfish</title>
+<meta name="description" content="A deep dive on non-deviation. A per-task contract, sealed at approval, narrower than the agent's standing permissions, amendable only by someone who is not the proposer — and why it sat correct and unused for months until an issuer existed.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/narrower-than-your-grants.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-09-27</div><h1>Narrower than your grants</h1><div class="dek">A deep dive on the Scope Contract. Standing permissions say what an agent may ever do. A contract says what <em>this task</em> may do — sealed at approval, amendable only by someone who is not the proposer, and deliberately tighter than the grants it derives from in exactly one place.</div>
+<p>An agent with a boundary and a tool allowlist is constrained but not directed. It can stay perfectly inside its standing permissions while doing something entirely unrelated to the job it was approved for. Every individual call is legitimate; the run as a whole is not the run anybody authorised.</p>
+<p>That gap is the difference between a <em>boundary</em> and a <em>mission</em>. The Scope Contract closes it with a per-task object, derived at approval, narrower than the agent's general grants, and consulted on every call.</p>
+<pre><code>interface ScopeContract {
+  taskId, proposer,
+  allowedTools,      // D1 — a subset of the agent's tools
+  pathScope,         // D2 — directory roots this task may touch
+  allowedCommands,   // D3 — exact command strings
+  budget,            // D4 — max in-scope calls
+  planHash,          // binds the approved plan
+  hash,              // the seal over everything above
+  frozen, used, inputs   // runtime state, deliberately outside the seal
+}</code></pre>
+<h2>What the seal covers, and what it must not</h2>
+<p>Seven fields are sealed. Four are not, and the split is the most considered decision in the module.</p>
+<pre><code>function seal(c) {
+  const canon = JSON.stringify({
+    taskId: c.taskId, proposer: c.proposer,
+    allowedTools:    [...c.allowedTools].sort(),
+    pathScope:       [...c.pathScope].sort(),
+    allowedCommands: [...c.allowedCommands].sort(),
+    budget: c.budget ?? {}, planHash: c.planHash,
+  });
+  return sha256(canon);
+}</code></pre>
+<p>Field order comes from the literal rather than the caller's object, and arrays are sorted on copies — so reordering a tool list does not break the seal, while adding to it does. The stored arrays keep their insertion order; only the hashed view is canonical.</p>
+<p>The unsealed fields are <code>used</code> (the call meter) and <code>inputs</code> (file stamps taken at pick-time). Sealing them would be a category error. The seal's job is to make the <em>authority grant</em> immutable for the life of the task, and the grant is fixed at approval. The meter and the stamps are observations that legitimately change afterwards.</p>
+<p>More sharply: if stamping an input had to re-seal the contract, then a method taking no actor at all would become a mutation path for a sealed object — and the proposer-is-not-approver guarantee would be routed around by the back door. Sealing observations would have destroyed the meaning of the seal.</p>
+<h2>Four deviation classes, checked in a deliberate order</h2>
+<p>The gate returns the <em>first</em> deviation, in the order <strong>D1 → D3 → D2 → D4</strong> — not numeric order, because path canonicalisation is the expensive check and there is no reason to pay for it when a cheaper one already refuses.</p>
+<p>Two preconditions run before any of them: no contract for a claimed task id is a fail-closed refusal, and a contract whose recomputed seal does not match its stored hash is <code>scope-contract-tampered</code> — the only refusal in the module that carries no deviation class, because tampering is not a deviation, it is a different kind of problem.</p>
+<p><strong>D1, tool.</strong> Exact string membership. No globs, no prefixes, no namespace matching. A task approved to read files cannot invoke a write tool even though the agent holds it.</p>
+<p><strong>D3, command.</strong> The gate extracts a command descriptor from the call's input — <code>command</code>, <code>cmd</code>, <code>template</code>, or the first element of <code>argv</code> — and requires exact membership in the task's list. Byte-exact: <code>'npm test'</code> is not <code>'npm  test'</code>.</p>
+<p><strong>D2, path.</strong> Every declared path parameter must sit at or under a root in the task's scope, using the same case-folding, Unicode-normalising containment check the boundary engine uses.</p>
+<p><strong>D4, budget.</strong> Prospective: the call that <em>would</em> exceed the ceiling is refused, then an admitted call advances the meter. An absent budget means unlimited.</p>
+<p>One structural consequence worth naming. Exec tools declare no path parameters — correctly, since their argument is a command rather than a path — so paths embedded in a shell string never reach D2. <strong>For exec, D3 is the only thing standing in front of the call.</strong> That is why D3 exists as its own class rather than being folded into D1.</p>
+<h2>The one place derivation tightens</h2>
+<p>Nobody hand-authors a contract. The issuer derives one from what governance already knows:</p>
+<ul>
+<li><strong>D1</strong> mirrors the agent's declared tools — or, if it declared none, every registered tool, because you cannot narrow what was never declared.</li>
+<li><strong>D2</strong> mirrors the union of the run's write and visibility roots.</li>
+<li><strong>D4</strong> mirrors a configured default, or unlimited.</li>
+<li><strong>D3</strong> mirrors nothing, because there is nothing to mirror.</li>
+</ul>
+<p>There is no "allowed commands" field on an agent definition anywhere in the system. So derivation has only two options — all commands or none — and it chooses none:</p>
+<div class="pull">D3 commands: none unless explicitly supplied. This is the one place auto-derivation tightens rather than mirrors — a task must name the commands it may run.</div>
+<p>The effect is that an auto-derived contract permits ordinary work and still withholds un-named commands. A task can read and write inside its boundary without anyone authoring anything; the moment it wants to run <code>rm -rf ./build</code>, that string has to have been named at approval.</p>
+<p>Deriving rather than authoring is what makes the control adoptable. A contract nobody has to write is a contract that actually exists on every task.</p>
+<h2>Amendment is about who, not about direction</h2>
+<p>A contract is not immutable in the absolute sense — a task's scope legitimately changes. It is immutable to the <em>agent</em>. Amendment requires an actor in the approver set, and that actor must not be the contract's proposer. Both checks audit the refusal before throwing, so a rejected amendment is still evidence.</p>
+<p>Because the proposer is a sealed field and is deliberately absent from the patch type, the separation-of-duties check cannot be moved by the patch it is guarding.</p>
+<p>This is the repo's reference implementation of proposer-is-not-approver; the wiki's dual-control gate cites it by file and line. And note what the control is <em>not</em>: nothing requires an amendment to narrow. An approver may widen the tool list or raise the budget. The control is on <em>who</em>, not on which direction.</p>
+<h2>Why it shipped correct and unused for months</h2>
+<p>This is the part worth the whole article.</p>
+<p>The module was written, sealed, metered, tested — seven green conformance tests — and wired to nothing. An external review found it, and the site had been describing non-deviation as a live control for months.</p>
+<p>The reason it was never switched on is the interesting bit, and it is not negligence. <strong>The gate fails closed when a task has no contract, and nothing issued contracts.</strong> Turning it on would have denied every call in the system. The missing piece was an issuer, not a flag.</p>
+<p>That is a specific and under-appreciated failure mode: a correct fail-closed control whose enabling precondition does not exist yet is <em>unshippable</em>, and the pressure is to leave it dark rather than build the boring half. The boring half was 147 lines.</p>
+<p>The fix also had to solve an applicability problem. A naive rollout would require a contract for every call — which conflates non-deviation with "no task, no tool", a different control that already exists. So there are three modes, and the middle one is the design:</p>
+<table>
+<tr><td><strong>off</strong></td><td>the gate is not consulted at all — exact pre-enforcement behaviour</td></tr>
+<tr><td><strong>contracted</strong></td><td>a call <em>claiming</em> a task id must have a contract; a call with no task id has no mission to deviate from and falls through to standing grants, boundary and floors</td></tr>
+<tr><td><strong>strict</strong></td><td>additionally requires a task id on every call</td></tr>
+</table>
+<p>Conflating the middle row with task-binding would have made non-deviation impossible to enable without also mandating task ids everywhere, which is a much larger change to force on an adopter.</p>
+<p>Two further details that turned out to be load-bearing. Issuance is <strong>idempotent</strong> — a replayed approval after a restart returns the existing contract rather than throwing, so recovery does not fail the task. And contracts <strong>persist and restore</strong>, because without that an in-flight task comes back contract-less and has every call denied: the gate would look broken rather than fail-safe. The state file shares the corrupt-versus-absent discipline used everywhere else — absent restores empty, unparseable enters safe mode.</p>
+<h2>Time-of-check to time-of-use</h2>
+<p>A file a task picks can change before the task uses it. A shared drive, a cloud sync, or an attacker swapping it. So inputs are stamped when picked — content hash plus size and mtime — and re-verified at use, with a changed hash treated as a deviation rather than as trusted input.</p>
+<p>One implementation detail is worth stealing. The content hash reads the file as <code>latin1</code>, not <code>utf8</code>, because latin1 maps each byte to exactly one code unit. Hashing as UTF-8 would collapse every invalid byte sequence onto the replacement character and make distinct binary files hash identically. One word, and it is the difference between a binary-safe stamp and a broken one.</p>
+<h2>Honest limits</h2>
+<p>The gate meters on a clean scope verdict, and the scope check runs early — before boundary containment, before the secret gates, before risk and policy. So a call that clears scope and is then denied downstream has still consumed budget. The accurate description is <em>"budget counts attempts that cleared scope"</em>, not "actions that happened". For a rate limit that is defensible; for anything described as a task's spend it would not be.</p>
+<p>The path check resolves but does not follow symlinks — the outer boundary engine does that, so this is defence in depth rather than a hole, but the scope layer alone does not canonicalise links.</p>
+<p>The command extractor reads the first matching parameter name and, for array forms, only the first element. A tool whose command parameter is named something else entirely would not be seen by D3 at all, though it would still have to pass D1.</p>
+<p>And amendment records that a change happened, by whom, but not what changed. Reconstructing a contract's history from the audit chain tells you there were three amendments and who approved them; it does not tell you what any of them did.</p>
+<p>None of that undermines the control. It does mean the honest claim is narrower than "the agent cannot deviate": the agent cannot use a tool, path or command outside what was approved for this task, and cannot widen that set itself. That is a real and unusual guarantee, and it is not the same as a guarantee about intent.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

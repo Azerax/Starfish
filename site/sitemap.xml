@@ -3,6 +3,15 @@
   <url><loc>https://projectstarfish.ca/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
 
   <url><loc>https://projectstarfish.ca/blog/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/the-test-that-didnt-cover-itself.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/risk-is-a-maximum.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/what-a-chain-cannot-see.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/narrower-than-your-grants.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/volume-buys-nothing.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/advising-without-deciding.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/twelve-questions.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/threat-evidence-lifecycle.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://projectstarfish.ca/blog/auditing-ourselves.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/mosaic-and-the-unwired-fix.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/risk-in-numbers.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://projectstarfish.ca/blog/the-1.0-candidate.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
