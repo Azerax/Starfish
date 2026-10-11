@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=../estate.schema.json
+apiVersion: estate/v1
+kind: Workspace
+
+metadata:
+  name: field-ops
+  estate: contoso
+  owner: ops@contoso.com
+  description: SOP lookup and dispatch notes for field technicians.
+  dataClassification: internal
+  foundryResource: fdy-contoso-cc
+
+access:
+  entraGroup: sg-ai-field-ops
+  createGroupIfMissing: true
+  role: Foundry User
+  scope: agentApplication
+  reviewCadenceMonths: 6
+
+model:
+  deployment: fast-chat
+  limits:
+    tokensPerMinute: 200000
+    quotaPeriod: Monthly
+    quotaTokens: 150000000
+
+knowledge:
+  - name: sops
+    store: dedicated
+    index: idx-sop-library
+    source:
+      type: adlsGen2
+      uri: abfss://ops@stcontosoops.dfs.core.windows.net/sops
+      aclSource: none
+    trust: untrusted
+    refreshSchedule: "0 6 * * *"
+
+tools:
+  - name: dispatch-update
+    type: mcp
+    endpoint: https://mcp.contoso.com/dispatch
+    effect: write
+    auth: agentIdentityToken
+    downstreamGrants:
+      - resource: mcp.contoso.com/dispatch
+        role: Dispatch.Write
+
+publish:
+  asAgentApplication: true
+  agentName: field-assistant
+  sponsor: ops@contoso.com
+
+governance:
+  inherit: true
+
+chargebackCode: CC-3100

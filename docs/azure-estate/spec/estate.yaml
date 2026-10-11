@@ -1,0 +1,173 @@
+# yaml-language-server: $schema=./estate.schema.json
+#
+# Estate baseline — one document per client tenant.
+# Everything here is inherited by every workspace. A workspace may tighten a
+# control; the validator rejects any override that loosens one.
+
+apiVersion: estate/v1
+kind: Estate
+
+metadata:
+  name: contoso
+  tenantId: 8f2c1a44-6b3e-4d17-9f80-2a5c7e91b0d3
+  client: Contoso Ltd
+  deliveredBy: intelicoreAI Inc
+  dataClassification: confidential
+
+platform:
+  subscriptionId: 3d7b90e2-14af-4c6d-8b21-9e5f0a3c8d47
+  location: canadacentral
+  resourceGroup: rg-contoso-ai-cc
+
+  foundryResources:
+    - name: fdy-contoso-cc
+      location: canadacentral
+      localKeysDisabled: true          # not negotiable — keys bypass RBAC entirely
+      aiGateway:
+        mode: managed                  # Foundry provisions APIM Basic v2 itself
+        sku: BasicV2
+      maxDeployments: 32               # Azure ceiling; validator enforces it
+
+  # The shared pool. Workspaces reference these by name and never create their
+  # own — 32 deployments per resource against 250 projects means sharing is not
+  # an optimisation, it is the only shape that scales.
+  modelDeployments:
+    - name: frontier-chat
+      model: openai/gpt-frontier/2026-06-01
+      foundryResource: fdy-contoso-cc
+      skuType: GlobalProvisioned
+      capacity: 100
+      spilloverTo: frontier-chat-payg  # burst to pay-go instead of returning 429
+
+    - name: frontier-chat-payg
+      model: openai/gpt-frontier/2026-06-01
+      foundryResource: fdy-contoso-cc
+      skuType: GlobalStandard
+
+    - name: fast-chat
+      model: openai/gpt-frontier-mini/2026-06-01
+      foundryResource: fdy-contoso-cc
+      skuType: GlobalStandard
+
+    - name: embed
+      model: openai/text-embedding-4/2026-02-01
+      foundryResource: fdy-contoso-cc
+      skuType: GlobalStandard
+
+  search:
+    service: srch-contoso-cc
+    tier: standard                     # 50 index ceiling; one index per workspace
+
+  observability:
+    logAnalyticsWorkspace: log-contoso-ai-cc
+    appInsights: appi-contoso-ai-cc
+    costManagementScope: /subscriptions/3d7b90e2-14af-4c6d-8b21-9e5f0a3c8d47
+
+# ---------------------------------------------------------------------------
+# Starfish governance baseline
+# ---------------------------------------------------------------------------
+
+governance:
+
+  leastPrivilege:
+    maxRoleScope: agent                # narrowest available; CLI-only to assign
+    downstreamGrants: explicit         # nothing is granted implicitly
+    separateProjectPerAccessPattern: true
+
+  # DEPLOY-TIME gates. Evaluated against the plan diff before anything applies.
+  # This is the orchestration layer: it reviews changes to how agents are wired,
+  # which is a different question from whether a given agent action is allowed.
+  changeGates:
+
+    - id: widen-access
+      description: Any change that lets more people reach a workspace, or lets them reach it more broadly.
+      when: access.groupWidened || access.scopeWidened || access.roleEscalated
+      requires: humanApproval
+      approvers:
+        - scott@intelicore.ai
+
+    - id: new-write-tool
+      description: Adding a tool that can mutate a system of record.
+      when: tools.added && tools.effectIncludes(write)
+      requires: humanApproval
+      approvers:
+        - scott@intelicore.ai
+
+    - id: new-external-tool
+      description: Adding a tool that reaches outside the tenant.
+      when: tools.added && tools.effectIncludes(external)
+      requires: humanApproval
+      approvers:
+        - scott@intelicore.ai
+
+    - id: knowledge-classification-raised
+      description: Pointing a workspace at more sensitive material than it held before.
+      when: knowledge.sourceAdded || knowledge.classificationRaised
+      requires: humanApproval
+      approvers:
+        - scott@intelicore.ai
+
+    - id: limits-removed
+      description: Removing a token ceiling. Quota is pooled at subscription level, so this is a shared-capacity decision, not a per-workspace one.
+      when: model.limitsRemoved
+      requires: humanApproval
+      approvers:
+        - scott@intelicore.ai
+
+    - id: preview-dependency
+      description: Taking a dependency on a preview Azure capability. Allowed, but never silently.
+      when: feature.usesPreview
+      requires: acknowledgement
+
+    # The two that cannot be waived.
+    - id: governance-weakened
+      description: Any edit that loosens a control in this section.
+      when: governance.controlWeakened
+      requires: block
+
+    - id: local-keys-reenabled
+      description: Re-enabling key-based auth on a Foundry resource.
+      when: resource.localKeysEnabled
+      requires: block
+
+  # RUNTIME gates. Declared here, compiled into wrappers on the named tools.
+  # Azure has no native per-action approval for agents, so the spec's job is to
+  # make the requirement explicit, auditable, and impossible to forget: the
+  # build fails if a tool that needs a gate does not have one.
+  runtimeGates:
+    highStakes:
+      - action: external               # every outbound tool, by effect class
+        requires: humanConfirm
+        timeoutSeconds: 300
+        onTimeout: deny
+
+      - action: write
+        requires: humanConfirm
+        threshold:
+          recordCount: 1               # confirm every write, not just bulk ones
+        timeoutSeconds: 300
+        onTimeout: deny
+
+  audit:
+    destination: logAnalytics
+    retentionDays: 365
+    includePromptContent: false        # forced false at this classification
+    specChangeLog: git                 # commit SHA + plan hash + who cleared what
+    recordGateDecisions: true
+
+  dataHandling:
+    treatRetrievedContentAsUntrusted: true
+    treatToolOutputAsUntrusted: true
+    forbidPrivilegeEscalationFromContent: true
+    contentSafety: required
+
+# ---------------------------------------------------------------------------
+# Azure Policy — GA, and strictly better than enforcing the same thing yourself
+# ---------------------------------------------------------------------------
+
+policy:
+  allowedModelPublishers:
+    - OpenAI
+    - Microsoft
+  denyPreviewModels: true
+  onlyAllowDirectFromAzure: true

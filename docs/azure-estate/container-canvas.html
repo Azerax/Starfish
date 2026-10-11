@@ -1,0 +1,715 @@
+<title>Container Canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#FCFCFB; --surface:#FFFFFF; --sunk:#F1F2F0;
+  --ink:#14161A; --ink-2:#4B5158; --muted:#868D93;
+  --rule:#D9DCDE; --rule-strong:#B4B9BC;
+  --accent:#1D5C8F; --accent-soft:#E3EDF5;
+  --shared:#7A4A12; --shared-soft:#F6EEE1;
+  --clash:#A3231A; --clash-soft:#FAE7E4;
+  --ok:#2F6B3F; --ok-soft:#E6F0E8;
+  --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#16181A; --surface:#1E2124; --sunk:#111315;
+  --ink:#EDEEEC; --ink-2:#C4C8CA; --muted:#8B9196;
+  --rule:#2F3336; --rule-strong:#4A4F53;
+  --accent:#79B4E3; --accent-soft:#182734;
+  --shared:#D3A45E; --shared-soft:#2C2418;
+  --clash:#EE8B7E; --clash-soft:#331B18;
+  --ok:#7FC08E; --ok-soft:#1B2A1F;
+}}
+:root[data-theme="dark"]{
+  --paper:#16181A; --surface:#1E2124; --sunk:#111315;
+  --ink:#EDEEEC; --ink-2:#C4C8CA; --muted:#8B9196;
+  --rule:#2F3336; --rule-strong:#4A4F53;
+  --accent:#79B4E3; --accent-soft:#182734;
+  --shared:#D3A45E; --shared-soft:#2C2418;
+  --clash:#EE8B7E; --clash-soft:#331B18;
+  --ok:#7FC08E; --ok-soft:#1B2A1F;
+}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;margin:0;padding:0 16px 40px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+header{padding:26px 0 12px}
+h1{font-size:24px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin:0;max-width:70ch}
+
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0 0;padding:8px;background:var(--surface);border:1px solid var(--rule);border-radius:2px}
+button{font-family:var(--sans);font-size:12.5px;font-weight:500;color:var(--ink-2);background:var(--surface);border:1px solid var(--rule-strong);border-radius:2px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.35;cursor:default}
+button.primary{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+button.primary:hover{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+button.danger:hover:not(:disabled){border-color:var(--clash);color:var(--clash)}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.divider{width:1px;height:22px;background:var(--rule);margin:0 3px}
+.grow{flex:1 1 8px}
+
+.stage{position:relative;margin-top:10px;background:var(--surface);border:1px solid var(--rule);border-radius:2px;height:min(58vh,560px);overflow:auto;touch-action:pan-x pan-y}
+.inner{position:relative;width:1500px;height:860px}
+svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.wire{stroke:var(--shared);stroke-width:2;fill:none}
+.wire.clash{stroke:var(--clash);stroke-width:3}
+.wire.hot{stroke:var(--accent);stroke-width:2.5}
+
+.box{position:absolute;background:var(--surface);border:2px solid var(--ink);border-radius:2px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;width:242px}
+.box:active{cursor:grabbing}
+.box.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.box.clash{border-color:var(--clash)}
+.box.linkable{border-style:dashed}
+.ctname{font-weight:600;font-size:13.5px;padding:9px 12px 2px;display:block}
+.ctuse{font-size:11.5px;color:var(--muted);padding:0 12px 8px;display:block;border-bottom:1px solid var(--rule)}
+.slots{padding:9px;display:flex;flex-direction:column;gap:8px;min-height:26px}
+.empty{font-size:11.5px;color:var(--muted);font-family:var(--mono);padding:2px 3px}
+
+.users{border:2px solid var(--ink);border-radius:2px;padding:5px 9px;font-size:12.5px;background:var(--surface);cursor:pointer;display:flex;gap:7px;align-items:baseline}
+.users .k{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);flex:none}
+.users.sel{border-color:var(--accent);background:var(--accent-soft)}
+
+/* An agent is one model bound to one slice. The drawing stacks them; so do we. */
+.agent{border:2px solid var(--ink);border-radius:2px;background:var(--surface);cursor:pointer;overflow:hidden}
+.agent.sel{border-color:var(--accent)}
+.agent.clash{border-color:var(--clash)}
+.agent .an{font-size:12px;font-weight:600;padding:5px 9px 1px;display:block}
+.agent .am{font-family:var(--mono);font-size:11px;color:var(--ink-2);padding:0 9px 5px;display:block}
+.agent .ap{font-family:var(--mono);font-size:11px;padding:4px 9px;display:block;background:var(--shared-soft);color:var(--ink-2);border-top:2px solid var(--shared);word-break:break-all}
+.agent.clash .ap{background:var(--clash-soft);border-top-color:var(--clash)}
+.agent .ap.none{background:var(--sunk);border-top-color:var(--rule);color:var(--muted)}
+.agent .moved{font-family:var(--mono);font-size:10px;padding:4px 9px;display:block;background:var(--accent-soft);color:var(--accent);border-top:1px solid var(--accent);word-break:break-all}
+
+.float{position:absolute;border:2px solid var(--ink);background:var(--sunk);border-radius:2px;padding:7px 11px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;min-width:158px}
+.float:active{cursor:grabbing}
+.float.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.float .k{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);display:block}
+.float .n{font-size:13px;font-weight:500;display:block}
+.float .u{font-family:var(--mono);font-size:10px;color:var(--muted);display:block;margin-top:2px}
+
+.insp{margin-top:10px;background:var(--surface);border:1px solid var(--rule);border-radius:2px;padding:12px 14px;min-height:66px}
+.insp h2{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-family:var(--mono)}
+.insp .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.insp input{font-family:var(--sans);font-size:13px;color:var(--ink);background:var(--sunk);border:1px solid var(--rule-strong);border-radius:2px;padding:6px 9px;min-width:140px;flex:0 1 210px}
+.insp input.path{font-family:var(--mono);font-size:12px}
+.insp input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:12.5px;color:var(--muted);margin:8px 0 0;max-width:76ch}
+.hint b{color:var(--ink-2);font-weight:600}
+
+.gate{margin-top:10px;border:2px solid var(--ok);background:var(--ok-soft);border-radius:2px;padding:12px 14px}
+.gate.blocked{border-color:var(--clash);background:var(--clash-soft)}
+.gate h2{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;margin:0 0 6px;color:var(--ok)}
+.gate.blocked h2{color:var(--clash)}
+.gate p{margin:0;font-size:13px;color:var(--ink-2);max-width:80ch}
+.gate ul{margin:8px 0 0;padding-left:18px}
+.gate li{font-size:13px;margin-bottom:6px;color:var(--ink-2)}
+.gate code{font-family:var(--mono);font-size:11.5px;background:var(--surface);border:1px solid var(--rule);border-radius:2px;padding:.05em .3em}
+.gate .who{font-weight:600;color:var(--ink)}
+.gate .sub2{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule)}
+.gate .sub2 h3{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 5px}
+.gate button{margin-top:6px;font-size:12px;padding:5px 10px;border-color:var(--clash);color:var(--clash);background:var(--surface)}
+.gate button:hover{background:var(--clash);border-color:var(--clash);color:var(--surface)}
+
+details{margin-top:10px;background:var(--surface);border:1px solid var(--rule);border-radius:2px}
+summary{padding:10px 14px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-2);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--muted)}
+details[open] summary::before{content:"▾ "}
+pre{font-family:var(--mono);font-size:11.5px;line-height:1.6;margin:0;padding:0 14px 14px;overflow-x:auto;color:var(--ink-2);white-space:pre}
+.note{margin:0;padding:0 14px 12px;font-size:12.5px;color:var(--shared);max-width:82ch}
+
+.foot{margin-top:22px;padding-top:14px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);max-width:82ch}
+.foot code{font-family:var(--mono);font-size:11px}
+
+@media (max-width:640px){
+  body{padding:0 10px 32px}
+  h1{font-size:20px}
+  .stage{height:52vh}
+  .insp input{flex:1 1 100%;min-width:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Container Canvas</h1>
+  <p class="sub">A container is one audience. Inside it, each agent pairs a model with its own slice of the company drive. Two paths in the same hierarchy always need their own container — inside one, they would share an identity and stop being a boundary at all.</p>
+</header>
+
+<div class="bar">
+  <button class="primary" id="add-ct">+ Container</button>
+  <button id="add-drive">+ Drive</button>
+  <div class="divider"></div>
+  <button id="add-agent" disabled>+ Agent</button>
+  <button id="add-users" disabled>+ Users</button>
+  <div class="divider"></div>
+  <button id="del" class="danger" disabled>Delete</button>
+  <div class="grow"></div>
+  <button id="reset">Start over</button>
+</div>
+
+<div class="stage" id="stage"><div class="inner" id="inner">
+  <svg class="wires" id="wires" viewBox="0 0 1500 860" preserveAspectRatio="none" aria-hidden="true"></svg>
+</div></div>
+
+<div class="insp" id="insp"></div>
+
+<div class="gate" id="gate"></div>
+
+<details id="out-wrap">
+  <summary>What this would deploy</summary>
+  <p class="note" id="out-note"></p>
+  <pre id="out"></pre>
+</details>
+
+<p class="foot">Each agent's slice becomes a blob knowledge source with a <code>folderPath</code>, provisioning its own data source, indexer, skillset and index. A folder path is a recursive prefix — <code>/marketing/*.*</code> and <code>/marketing/</code> both mean everything under marketing, and there is no way to index one folder without its subfolders. Sibling folders under one parent are disjoint and may share a container; only a containing path forces a split.</p>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------------
+   Model
+
+   container — one audience. One Entra group, one Foundry project, one managed
+               identity. This is the security boundary.
+   agent     — one model bound to one slice, inside a container. A container can
+               hold several, which is how you get a broad assistant and a
+               focused one for the same team.
+   drive     — the existing company store. Slices are folder paths into it.
+
+   The rule: two slices whose folders sit in the same hierarchy — one containing
+   the other — always belong in separate containers.
+
+   Inside one container they would share a managed identity, so the narrower
+   agent could reach the broader index anyway. The nesting would look like a
+   boundary while being none, which is worse than not drawing it. Splitting
+   costs a Foundry project (250 per resource, effectively free) and no extra
+   Search objects, since the slice count is unchanged either way.
+--------------------------------------------------------------------------- */
+
+let seq = 1;
+const uid = (p) => `${p}${seq++}`;
+
+let containers = [];  // {id, name, purpose, x, y}
+let drives = [];      // {id, name, kind, location, x, y}
+let agents = [];      // {id, containerId, name, model, driveId, path}
+let users = [];       // {id, containerId, name}
+let sel = null;       // {type:'container'|'drive'|'agent'|'users', id}
+
+function seed() {
+  seq = 1; containers = []; drives = []; agents = []; users = [];
+  const d = addDrive("Company drive", 620, 40);
+
+  const mkt = addContainer("Marketing", 60, 250);
+  mkt.purpose = "Campaign work for the marketing team";
+  users.push({ id: uid("u"), containerId: mkt.id, name: "sg-ai-marketing" });
+  agents.push({ id: uid("a"), containerId: mkt.id, name: "Marketing assistant", model: "gpt-frontier", driveId: d.id, path: "marketing" });
+  agents.push({ id: uid("a"), containerId: mkt.id, name: "Spring launch", model: "gpt-frontier-mini", driveId: d.id, path: "marketing/spring-launch" });
+
+  const hr = addContainer("HR assistant", 430, 250);
+  hr.purpose = "Policy and handbook questions";
+  users.push({ id: uid("u"), containerId: hr.id, name: "sg-ai-hr" });
+  agents.push({ id: uid("a"), containerId: hr.id, name: "Handbook", model: "gpt-frontier-mini", driveId: d.id, path: "hr/handbook" });
+
+  const pay = addContainer("Payroll support", 800, 250);
+  pay.purpose = "Payroll queries for the finance team";
+  users.push({ id: uid("u"), containerId: pay.id, name: "sg-ai-payroll" });
+  agents.push({ id: uid("a"), containerId: pay.id, name: "Payroll", model: "gpt-frontier-mini", driveId: d.id, path: "hr" });
+
+  sel = null;
+}
+
+function addContainer(name, x, y) {
+  const c = { id: uid("c"), name: name ?? `Container ${containers.length + 1}`, purpose: "", x, y };
+  containers.push(c); return c;
+}
+function addDrive(name, x, y) {
+  const d = { id: uid("d"), name: name ?? "Drive", kind: "blob", location: "company-drive", x, y };
+  drives.push(d); return d;
+}
+
+function removeSelected() {
+  if (!sel) return;
+  const { type, id } = sel;
+  if (type === "container") {
+    agents = agents.filter(a => a.containerId !== id);
+    users = users.filter(u => u.containerId !== id);
+    containers = containers.filter(c => c.id !== id);
+  } else if (type === "drive") {
+    for (const a of agents) if (a.driveId === id) { a.driveId = null; a.path = ""; }
+    drives = drives.filter(d => d.id !== id);
+  } else if (type === "agent") {
+    agents = agents.filter(a => a.id !== id);
+  } else {
+    users = users.filter(u => u.id !== id);
+  }
+  sel = null;
+}
+
+/* ---------------------------------------------------------------------------
+   Paths
+
+   A folder path is a recursive prefix, so the glob suffixes people naturally
+   write mean the same thing as the bare folder. Strip them rather than reject
+   them — "/marketing/*.*" is what a person types, and refusing it would be
+   pedantry about a notation that carries no extra meaning here.
+--------------------------------------------------------------------------- */
+function normPath(p) {
+  let s = (p ?? "").trim().replace(/\\/g, "/");
+  s = s.replace(/\/(\*\.\*|\*\*|\*)\/?$/, "");   // /marketing/*.*  →  /marketing
+  s = s.replace(/\/{2,}/g, "/");                 // a pasted path can double its separators
+  return s.replace(/^\/+|\/+$/g, "").toLowerCase();
+}
+function contains(parent, child) {
+  const a = normPath(parent), b = normPath(child);
+  if (a === "") return true;          // root contains everything
+  if (a === b) return true;
+  return b.startsWith(a + "/");
+}
+
+/* Pairs of agents whose folders sit in the same hierarchy. Both kinds block;
+   they are kept apart because the fix differs — a cross-container overlap is a
+   wrong path, a same-container one is a wrong boundary. */
+function analyse() {
+  const leaks = [], nests = [], wholeDrive = [];
+  const withSlice = agents.filter(a => a.driveId);
+  for (const a of withSlice) if (normPath(a.path) === "") wholeDrive.push(a);
+  for (let i = 0; i < withSlice.length; i++) {
+    for (let j = i + 1; j < withSlice.length; j++) {
+      const a = withSlice[i], b = withSlice[j];
+      if (a.driveId !== b.driveId) continue;
+      if (!contains(a.path, b.path) && !contains(b.path, a.path)) continue;
+      (a.containerId === b.containerId ? nests : leaks).push([a, b]);   // nests block too
+    }
+  }
+  return { leaks, nests, wholeDrive };
+}
+
+const clashing = () => {
+  const s = new Set();
+  const { leaks, nests, wholeDrive } = analyse();
+  for (const [a, b] of [...leaks, ...nests]) { s.add(a.id); s.add(b.id); s.add(a.containerId); s.add(b.containerId); }
+  for (const a of wholeDrive) { s.add(a.id); s.add(a.containerId); }
+  return s;
+};
+
+/* Split an agent out — container AND folder.
+   
+   A new container alone does not fix a nested path: the parent's index still
+   contains the child's documents, so the nest simply becomes a cross-container
+   leak. Prefix scoping has no exclusion, so the only real fix is for the folder
+   to leave its parent on the drive. The tool moves the path and says plainly
+   that the documents have to follow. */
+function proposePath(leaf) {
+  let base = slug(leaf) || "new-slice";
+  let candidate = base, n = 2;
+  const taken = () => agents.some(a => a.driveId && normPath(a.path) === candidate);
+  while (taken()) candidate = `${base}-${n++}`;
+  return candidate;
+}
+
+function splitAgent(agentId) {
+  const a = agents.find(x => x.id === agentId);
+  if (!a) return;
+  const from = containers.find(c => c.id === a.containerId);
+  const leaf = normPath(a.path).split("/").pop() || a.name;
+
+  const c = addContainer(a.name, (from?.x ?? 60) + 20, (from?.y ?? 250) + 330);
+  c.purpose = from?.name ? `Split out of ${from.name}` : "";
+  users.push({ id: uid("u"), containerId: c.id, name: `sg-ai-${slug(a.name)}` });
+
+  a.containerId = c.id;
+  a.wasPath = normPath(a.path);      // remembered so the move can be reported
+  a.path = proposePath(leaf);
+
+  sel = { type: "container", id: c.id };
+}
+
+/* ---------- render ---------- */
+const inner = document.getElementById("inner");
+const wires = document.getElementById("wires");
+const boxOf = (id) => inner.querySelector(`[data-id="${id}"]`);
+const esc = (s) => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+function render() {
+  [...inner.querySelectorAll(".box,.float")].forEach(n => n.remove());
+  const bad = clashing();
+
+  for (const c of containers) {
+    const el = document.createElement("div");
+    el.className = "box"
+      + (sel?.type === "container" && sel.id === c.id ? " sel" : "")
+      + (bad.has(c.id) ? " clash" : "")
+      + (linking() ? " linkable" : "");
+    el.style.left = c.x + "px"; el.style.top = c.y + "px";
+    el.dataset.id = c.id; el.tabIndex = 0; el.setAttribute("role", "button");
+    el.setAttribute("aria-label", `Container ${c.name}`);
+
+    const h = document.createElement("span"); h.className = "ctname"; h.textContent = c.name;
+    const u = document.createElement("span"); u.className = "ctuse"; u.textContent = c.purpose || "no use case set";
+    el.append(h, u);
+
+    const slots = document.createElement("div"); slots.className = "slots";
+    const myUsers = users.filter(x => x.containerId === c.id);
+    const myAgents = agents.filter(a => a.containerId === c.id);
+
+    if (!myUsers.length && !myAgents.length) {
+      const e = document.createElement("div"); e.className = "empty";
+      e.textContent = "nothing in here yet"; slots.appendChild(e);
+    }
+    for (const x of myUsers) {
+      const b = document.createElement("div");
+      b.className = "users" + (sel?.type === "users" && sel.id === x.id ? " sel" : "");
+      b.dataset.users = x.id;
+      b.innerHTML = `<span class="k">users</span><span class="n"></span>`;
+      b.querySelector(".n").textContent = x.name;
+      slots.appendChild(b);
+    }
+    for (const a of myAgents) {
+      const d = drives.find(x => x.id === a.driveId);
+      const b = document.createElement("div");
+      b.className = "agent" + (sel?.type === "agent" && sel.id === a.id ? " sel" : "") + (bad.has(a.id) ? " clash" : "");
+      b.dataset.agent = a.id;
+      b.innerHTML = `<span class="an"></span><span class="am"></span><span class="ap"></span>`;
+      b.querySelector(".an").textContent = a.name;
+      b.querySelector(".am").textContent = a.model || "no model chosen";
+      const ap = b.querySelector(".ap");
+      if (!d) { ap.classList.add("none"); ap.textContent = "no knowledge — select a drive to connect"; }
+      else ap.textContent = normPath(a.path) === "" ? "/  the whole drive" : "/" + normPath(a.path) + "/**";
+      if (a.wasPath && a.wasPath !== normPath(a.path)) {
+        const mv = document.createElement("span");
+        mv.className = "moved";
+        mv.textContent = "move on drive: /" + a.wasPath + "  →  /" + normPath(a.path);
+        b.appendChild(mv);
+      }
+      slots.appendChild(b);
+    }
+    el.appendChild(slots);
+    inner.appendChild(el);
+  }
+
+  for (const d of drives) {
+    const el = document.createElement("div");
+    el.className = "float" + (sel?.type === "drive" && sel.id === d.id ? " sel" : "");
+    el.style.left = d.x + "px"; el.style.top = d.y + "px";
+    el.dataset.id = d.id; el.dataset.drive = "1"; el.tabIndex = 0; el.setAttribute("role", "button");
+    el.setAttribute("aria-label", `Drive ${d.name}`);
+    const n = agents.filter(a => a.driveId === d.id).length;
+    el.innerHTML = `<span class="k">drive &middot; ${d.kind}</span><span class="n"></span><span class="u"></span>`;
+    el.querySelector(".n").textContent = d.name;
+    el.querySelector(".u").textContent = n ? `${n} slice${n === 1 ? "" : "s"} taken` : "no slices yet";
+    inner.appendChild(el);
+  }
+
+  drawWires(bad);
+  renderInspector();
+  renderGate();
+  renderOutput();
+}
+
+function drawWires(bad) {
+  wires.innerHTML = "";
+  for (const a of agents) {
+    if (!a.driveId) continue;
+    const de = boxOf(a.driveId), ce = boxOf(a.containerId);
+    const d = drives.find(x => x.id === a.driveId), c = containers.find(x => x.id === a.containerId);
+    if (!de || !ce || !d || !c) continue;
+    const ar = rectOf(de, d.x, d.y), br = rectOf(ce, c.x, c.y);
+    const p1 = edgePoint(ar, br), p2 = edgePoint(br, ar);
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    l.setAttribute("x1", p1.x); l.setAttribute("y1", p1.y);
+    l.setAttribute("x2", p2.x); l.setAttribute("y2", p2.y);
+    l.setAttribute("class", "wire" + (bad.has(a.id) ? " clash" : "") + (sel?.id === a.id || sel?.id === a.driveId ? " hot" : ""));
+    wires.appendChild(l);
+  }
+}
+const rectOf = (el, x, y) => ({ x, y, w: el.offsetWidth, h: el.offsetHeight, cx: x + el.offsetWidth / 2, cy: y + el.offsetHeight / 2 });
+function edgePoint(from, to) {
+  const dx = to.cx - from.cx, dy = to.cy - from.cy;
+  if (!dx && !dy) return { x: from.cx, y: from.cy };
+  const sx = dx ? (from.w / 2) / Math.abs(dx) : Infinity;
+  const sy = dy ? (from.h / 2) / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return { x: from.cx + dx * s, y: from.cy + dy * s };
+}
+const linking = () => sel?.type === "drive" || sel?.type === "agent";
+
+/* ---------- inspector ---------- */
+function renderInspector() {
+  const insp = document.getElementById("insp");
+  const sc = sel?.type === "container" ? containers.find(c => c.id === sel.id) : null;
+  const sd = sel?.type === "drive" ? drives.find(d => d.id === sel.id) : null;
+  const sa = sel?.type === "agent" ? agents.find(a => a.id === sel.id) : null;
+  const su = sel?.type === "users" ? users.find(u => u.id === sel.id) : null;
+
+  if (!sel) {
+    insp.innerHTML = `<h2>Nothing selected</h2>
+      <p class="hint">Tap <b>+ Container</b> for an audience, <b>+ Drive</b> for the company store.
+      Select a container and add <b>Agents</b> — one model, one folder each. Select an agent, then tap the drive to give it its slice.</p>`;
+  } else if (sc) {
+    insp.innerHTML = `<h2>Container &middot; one audience</h2>
+      <div class="row">
+        <input id="f1" aria-label="Container name" placeholder="Name">
+        <input id="f2" aria-label="What this container is for" placeholder="What is it for?">
+      </div>
+      <p class="hint">Everyone in this container sees everything its agents can reach. Add agents for different jobs — a broad one and a focused one is fine, because they share an audience. If two agents need <em>different</em> people, they need different containers.</p>`;
+    bind(insp, "#f1", sc.name, v => { sc.name = v || "Untitled"; render(); });
+    bind(insp, "#f2", sc.purpose, v => { sc.purpose = v; render(); });
+  } else if (sd) {
+    insp.innerHTML = `<h2>Drive</h2>
+      <div class="row">
+        <input id="f1" aria-label="Drive name" placeholder="Name">
+        <input id="f2" class="path" aria-label="Storage container" placeholder="storage container">
+      </div>
+      <p class="hint">The existing store. Select an <b>agent</b> and tap this drive to connect it, or tap again to disconnect. Nothing is copied between containers — each agent gets its own index built from its own folder.</p>`;
+    bind(insp, "#f1", sd.name, v => { sd.name = v || "Drive"; render(); });
+    bind(insp, "#f2", sd.location, v => { sd.location = v; render(); });
+  } else if (sa) {
+    const c = containers.find(x => x.id === sa.containerId);
+    const siblings = agents.filter(x => x.containerId === sa.containerId && x.id !== sa.id).length;
+    insp.innerHTML = `<h2>Agent &middot; model + slice</h2>
+      <div class="row">
+        <input id="f1" aria-label="Agent name" placeholder="Name">
+        <input id="f2" class="path" aria-label="Model" placeholder="model deployment">
+        <input id="f3" class="path" aria-label="Folder path" placeholder="/marketing/campaigns/">
+      </div>
+      <p class="hint">Inside <b>${esc(c?.name ?? "this container")}</b>${siblings ? `, alongside ${siblings} other agent${siblings === 1 ? "" : "s"}` : ""}.
+      The folder is a recursive prefix — <code>/marketing/*.*</code> and <code>/marketing/</code> are the same thing.
+      ${sa.driveId ? "Tap the drive to disconnect." : "Tap a drive to connect it."}</p>`;
+    bind(insp, "#f1", sa.name, v => { sa.name = v || "Agent"; render(); });
+    bind(insp, "#f2", sa.model, v => { sa.model = v; render(); });
+    bind(insp, "#f3", sa.path, v => { sa.path = v; render(); });
+  } else if (su) {
+    insp.innerHTML = `<h2>Users</h2>
+      <div class="row"><input id="f1" class="path" aria-label="Group name" placeholder="sg-ai-team"></div>
+      <p class="hint">The Entra group that gets access to this container. One group per container — that is what makes "who can use this" have exactly one answer.</p>`;
+    bind(insp, "#f1", su.name, v => { su.name = v || "sg-ai-group"; render(); });
+  }
+
+  const isCt = !!sc;
+  document.getElementById("add-agent").disabled = !isCt;
+  document.getElementById("add-users").disabled = !isCt;
+  document.getElementById("del").disabled = !sel;
+}
+
+function bind(root, q, value, onInput) {
+  const el = root.querySelector(q);
+  el.value = value ?? "";
+  let t;
+  el.oninput = () => { const v = el.value; clearTimeout(t); t = setTimeout(() => { onInput(v); refocus(q, el.selectionStart); }, 260); };
+}
+/* Re-rendering replaces the input, so restore focus and caret — otherwise
+   typing a folder path drops focus after every keystroke. */
+function refocus(q, caret) {
+  const el = document.getElementById("insp").querySelector(q);
+  if (!el) return;
+  el.focus();
+  try { el.setSelectionRange(caret, caret); } catch { /* not a text input */ }
+}
+
+/* ---------- the gate ---------- */
+function renderGate() {
+  const gate = document.getElementById("gate");
+  const { leaks, nests, wholeDrive } = analyse();
+  const nameOfC = (id) => containers.find(c => c.id === id)?.name ?? "?";
+
+  if (!leaks.length && !nests.length && !wholeDrive.length) {
+    const noUse = containers.filter(c => !c.purpose.trim()).length;
+    const noKnow = agents.filter(a => !a.driveId).length;
+    gate.className = "gate";
+    gate.innerHTML = `<h2>Clear to deploy</h2>
+      <p>Every folder is disjoint from every other, so no container can read another's documents and no agent shares an identity with one that could.${
+        noUse ? ` ${noUse} container${noUse === 1 ? " has" : "s have"} no stated use case.` : ""
+      }${noKnow ? ` ${noKnow} agent${noKnow === 1 ? " has" : "s have"} no knowledge connected.` : ""}</p>`;
+    return;
+  }
+
+  gate.className = "gate blocked";
+  const parts = [];
+
+  if (wholeDrive.length || leaks.length) {
+    const items = [];
+    for (const a of wholeDrive) {
+      items.push(`<span class="who">${esc(a.name)}</span> in ${esc(nameOfC(a.containerId))} is pointed at the whole drive. It can read everything on it, including anything added later.`);
+    }
+    for (const [a, b] of leaks) {
+      const outer = contains(a.path, b.path) ? a : b, inner_ = outer === a ? b : a;
+      const co = containers.find(c => c.id === outer.containerId), ci = containers.find(c => c.id === inner_.containerId);
+      items.push(
+        `<code>/${esc(normPath(outer.path))}</code> contains <code>/${esc(normPath(inner_.path))}</code> — ` +
+        `<span class="who">${esc(co?.name ?? "?")}</span>${co?.purpose ? ` (${esc(co.purpose)})` : ""} can read ` +
+        `<span class="who">${esc(ci?.name ?? "?")}</span>'s documents.`);
+    }
+    parts.push(`<h2>Blocked — ${items.length} folder${items.length === 1 ? "" : "s"} reaching across containers</h2>
+      <p>These cross an audience boundary. Fix the path: two containers' folders must not overlap at all.</p>
+      <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul>`);
+  }
+
+  if (nests.length) {
+    const items = nests.map(([a, b]) => {
+      const outer = contains(a.path, b.path) ? a : b, inner_ = outer === a ? b : a;
+      return `<li><code>/${esc(normPath(inner_.path))}</code> sits inside <code>/${esc(normPath(outer.path))}</code>, both in ` +
+        `<span class="who">${esc(nameOfC(a.containerId))}</span>. Every agent in a container shares one managed identity, so ` +
+        `<span class="who">${esc(inner_.name)}</span> could reach <span class="who">${esc(outer.name)}</span>'s index regardless of its own folder — ` +
+        `the nesting looks like a boundary and is not one. ` +
+        `A new container is only half the fix: <span class="who">${esc(outer.name)}</span>'s index would still hold these documents, so the folder has to leave its parent on the drive too. ` +
+        `<button data-split="${esc(inner_.id)}">Split ${esc(inner_.name)} out and move its folder</button></li>`;
+    });
+    const head = parts.length
+      ? `<div class="sub2"><h3>Same hierarchy, same container — needs splitting</h3>`
+      : `<h2>Blocked — ${nests.length} nested folder${nests.length === 1 ? "" : "s"} in one container</h2>
+         <p>Paths in the same hierarchy need their own container — and their own place on the drive. Prefix scoping has no exclusion, so a parent folder always contains its children and no configuration can undo that. There is deliberately no override: if the folder cannot move, the two agents share one audience, and that is a different design rather than a waived rule.</p>`;
+    parts.push(`${head}<ul>${items.join("")}</ul>${parts.length ? "</div>" : ""}`);
+  }
+
+  gate.innerHTML = parts.join("");
+}
+
+document.getElementById("gate").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-split]");
+  if (!b) return;
+  splitAgent(b.dataset.split);
+  render();
+});
+
+/* ---------- output ---------- */
+function renderOutput() {
+  const L = [];
+  const { leaks, nests } = analyse();
+  L.push("# estate/v1 — generated from the canvas");
+  L.push("");
+  for (const d of drives) {
+    L.push(`- kind: Drive`);
+    L.push(`  name: ${slug(d.name)}`);
+    L.push(`  storageContainer: ${d.location || "company-drive"}`);
+    L.push("");
+  }
+  for (const c of containers) {
+    const myAgents = agents.filter(a => a.containerId === c.id);
+    const myUsers = users.filter(u => u.containerId === c.id);
+    L.push(`- kind: Workspace                 # one Foundry project, one managed identity`);
+    L.push(`  name: ${slug(c.name)}`);
+    L.push(`  purpose: ${c.purpose ? JSON.stringify(c.purpose) : "# not stated"}`);
+    L.push(`  access:`);
+    L.push(`    entraGroup: ${myUsers[0]?.name || `sg-ai-${slug(c.name)}`}`);
+    L.push(`    scope: agentApplication`);
+    if (myAgents.length) {
+      L.push(`  agents:`);
+      for (const a of myAgents) {
+        L.push(`    - name: ${slug(a.name)}`);
+        L.push(`      model: ${a.model ? slug(a.model) : "# none chosen yet"}`);
+        if (a.driveId) {
+          const d = drives.find(x => x.id === a.driveId);
+          L.push(`      knowledge:`);
+          L.push(`        kind: azureBlob        # blob knowledge source, GA`);
+          L.push(`        name: ks-${slug(c.name)}-${slug(a.name)}`);
+          L.push(`        containerName: ${d?.location || "company-drive"}`);
+          L.push(`        folderPath: ${normPath(a.path) || "''   # WHOLE DRIVE"}`);
+        }
+      }
+    }
+    L.push("");
+  }
+  document.getElementById("out").textContent = L.join("\n") || "Nothing on the canvas yet.";
+
+  const notes = [];
+  if (leaks.length) notes.push(`${leaks.length} cross-container leak${leaks.length === 1 ? "" : "s"} — this will not deploy until the folders are disjoint.`);
+  if (nests.length) notes.push(`${nests.length} nested slice${nests.length === 1 ? "" : "s"} sharing a container — split each into its own before deploying.`);
+  const n = agents.filter(a => a.driveId).length;
+  if (n > 50) notes.push(`${n} slices. Each consumes an index, an indexer, a data source and a skillset — Search S1 allows 50 of each, S2 and S3 allow 200.`);
+  const moves = agents.filter(a => a.wasPath && a.wasPath !== normPath(a.path));
+  if (moves.length) notes.push(`${moves.length} folder${moves.length === 1 ? "" : "s"} must actually move on the drive before this deploys — the canvas has updated the paths, the documents have not moved themselves.`);
+  notes.push("Narrowing a folder path after deployment rebuilds that index rather than editing it: documents already indexed under the wider path are not removed.");
+  document.getElementById("out-note").textContent = notes.join(" ");
+}
+const slug = (s) => (s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unnamed";
+
+/* ---------- interaction ---------- */
+let drag = null;
+
+inner.addEventListener("pointerdown", (e) => {
+  const agentEl = e.target.closest("[data-agent]");
+  const usersEl = e.target.closest("[data-users]");
+  const boxEl = e.target.closest(".box,.float");
+  if (!boxEl) return;
+
+  if (agentEl) { e.stopPropagation(); sel = { type: "agent", id: agentEl.dataset.agent }; render(); return; }
+  if (usersEl) { e.stopPropagation(); sel = { type: "users", id: usersEl.dataset.users }; render(); return; }
+
+  const id = boxEl.dataset.id;
+  const isDrive = boxEl.dataset.drive === "1";
+
+  // With an agent selected, tapping a drive connects or disconnects its slice.
+  if (sel?.type === "agent" && isDrive) {
+    const a = agents.find(x => x.id === sel.id);
+    a.driveId = a.driveId === id ? null : id;
+    render();
+    return;
+  }
+
+  sel = { type: isDrive ? "drive" : "container", id };
+  const obj = isDrive ? drives.find(d => d.id === id) : containers.find(c => c.id === id);
+  drag = { id, obj, dx: e.clientX - boxEl.offsetLeft, dy: e.clientY - boxEl.offsetTop };
+  try { boxEl.setPointerCapture(e.pointerId); } catch { /* not a live pointer */ }
+  render();
+});
+
+inner.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  drag.obj.x = Math.max(0, Math.min(1500 - 60, e.clientX - drag.dx));
+  drag.obj.y = Math.max(0, Math.min(860 - 40, e.clientY - drag.dy));
+  const el = boxOf(drag.id);
+  if (el) { el.style.left = drag.obj.x + "px"; el.style.top = drag.obj.y + "px"; }
+  drawWires(clashing());
+});
+const endDrag = () => { drag = null; };
+inner.addEventListener("pointerup", endDrag);
+inner.addEventListener("pointercancel", endDrag);
+
+document.getElementById("stage").addEventListener("pointerdown", (e) => {
+  if (!e.target.closest(".box,.float")) { sel = null; render(); }
+});
+
+inner.addEventListener("keydown", (e) => {
+  const el = e.target.closest(".box,.float");
+  if (!el || (e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault();
+  el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
+  endDrag();
+});
+
+document.getElementById("add-ct").onclick = () => {
+  const n = containers.length;
+  const c = addContainer(null, 60 + (n % 4) * 370, 250 + Math.floor(n / 4) * 300);
+  sel = { type: "container", id: c.id };
+  render();
+};
+document.getElementById("add-drive").onclick = () => {
+  const d = addDrive(null, 620 + drives.length * 40, 40);
+  sel = { type: "drive", id: d.id };
+  render();
+};
+document.getElementById("add-agent").onclick = () => {
+  if (sel?.type !== "container") return;
+  const a = { id: uid("a"), containerId: sel.id, name: "New agent", model: "gpt-frontier-mini", driveId: drives[0]?.id ?? null, path: "" };
+  agents.push(a);
+  sel = { type: "agent", id: a.id };
+  render();
+};
+document.getElementById("add-users").onclick = () => {
+  if (sel?.type !== "container") return;
+  const c = containers.find(x => x.id === sel.id);
+  const u = { id: uid("u"), containerId: sel.id, name: `sg-ai-${slug(c.name)}` };
+  users.push(u);
+  sel = { type: "users", id: u.id };
+  render();
+};
+document.getElementById("del").onclick = () => { removeSelected(); render(); };
+document.getElementById("reset").onclick = () => { seed(); render(); };
+
+seed();
+render();
+</script>

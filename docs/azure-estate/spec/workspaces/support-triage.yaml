@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../estate.schema.json
+apiVersion: estate/v1
+kind: Workspace
+
+metadata:
+  name: support-triage
+  estate: contoso
+  owner: support@contoso.com
+  description: Ticket triage and knowledge-base lookup.
+  dataClassification: internal
+  foundryResource: fdy-contoso-cc
+
+access:
+  entraGroup: sg-ai-support-triage
+  createGroupIfMissing: true
+  role: Foundry User
+  scope: project
+  reviewCadenceMonths: 6
+
+model:
+  deployment: fast-chat
+  limits:
+    tokensPerMinute: 80000
+    quotaPeriod: Monthly
+    quotaTokens: 50000000
+
+knowledge:
+  - name: runbooks
+    store: dedicated
+    index: idx-support-runbooks
+    source:
+      type: adlsGen2
+      uri: abfss://support@stcontososup.dfs.core.windows.net/runbooks
+      aclSource: none
+    trust: untrusted
+
+tools:
+  - name: ticket-read
+    type: mcp
+    endpoint: https://mcp.contoso.com/tickets
+    effect: read
+    auth: agentIdentityToken
+    downstreamGrants:
+      - resource: srch-contoso-cc/idx-support-runbooks
+        role: Search Index Data Reader
+
+governance:
+  inherit: true
+
+chargebackCode: CC-5400

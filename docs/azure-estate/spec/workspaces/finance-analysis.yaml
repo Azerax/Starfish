@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../estate.schema.json
+# Declared but not yet deployed — exercises the "planned" drift class.
+apiVersion: estate/v1
+kind: Workspace
+
+metadata:
+  name: finance-analysis
+  estate: contoso
+  owner: finance-ops@contoso.com
+  description: Management-reporting analysis over the finance model library.
+  dataClassification: restricted
+  foundryResource: fdy-contoso-cc
+
+access:
+  entraGroup: sg-ai-finance-analysis
+  createGroupIfMissing: true
+  role: Foundry User
+  scope: agentApplication
+  conditionalAccessPolicy: require-compliant-device
+  reviewCadenceMonths: 3
+
+model:
+  deployment: frontier-chat
+  limits:
+    tokensPerMinute: 30000
+    quotaPeriod: Monthly
+    quotaTokens: 12000000
+
+knowledge:
+  - name: models
+    store: dedicated
+    index: idx-finance-model
+    source:
+      type: adlsGen2
+      uri: abfss://finance@stcontosofin.dfs.core.windows.net/models
+      aclSource: posix
+    trust: untrusted
+
+tools:
+  - name: ledger-lookup
+    type: mcp
+    endpoint: https://mcp.contoso.com/ledger
+    effect: read
+    auth: agentIdentityToken
+    downstreamGrants:
+      - resource: srch-contoso-cc/idx-finance-model
+        role: Search Index Data Reader
+
+governance:
+  inherit: true
+
+chargebackCode: CC-1100
