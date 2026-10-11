@@ -2,12 +2,24 @@ name: CI
 on:
   push:
   pull_request:
+
+# ssf.md 3.1 — least privilege. This job checks out code and runs npm scripts: it writes nothing back
+# to the repo, posts no comments and uploads no artifacts, so read is sufficient. Without a top-level
+# block the GITHUB_TOKEN inherits broad default scopes; release.yml and scorecard.yml already declared
+# theirs, and ci.yml was the only one flagged.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # ssf.md 3.2 — actions pinned by commit SHA, not by mutable tag. A tag can be repointed by the
+      # upstream owner; a SHA cannot. Each pin is the commit the v4 tag pointed at when applied, so
+      # behaviour is identical — deliberately NOT bumped to a new major in the same change. Dependabot
+      # (3.3) proposes future bumps, each of which still has to pass this suite under branch protection.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm

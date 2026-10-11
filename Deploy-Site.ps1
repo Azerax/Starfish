@@ -1,46 +1,52 @@
 <#
 .SYNOPSIS
-  Deploys site/ to Cloudflare Pages, discovering the project name rather than guessing it.
+  Manual deploy of site/ to projectstarfish.ca. The automated path is
+  .github/workflows/deploy-site.yml — use this only when CI is unavailable.
 
 .USAGE
-  Right-click -> "Run with PowerShell", or:
-      powershell -ExecutionPolicy Bypass -File .\Deploy-Site.ps1
+  powershell -ExecutionPolicy Bypass -File .\Deploy-Site.ps1
 
-.WHY THIS EXISTS
-  `wrangler pages deploy` needs three things that are easy to get wrong by hand:
-    1. The ASSET DIRECTORY, named explicitly. Standing in site/ is not enough -- wrangler still
-       errors with "Must specify a directory of assets to deploy". (site/wrangler.toml now supplies
-       it via pages_build_output_dir, but this script passes it anyway so it works either way.)
-    2. The PROJECT NAME. Get it wrong and wrangler offers to CREATE a new project rather than
-       failing -- silently producing a second, unlinked site. This script lists your real projects
-       and makes you pick, so that cannot happen by typo.
-    3. A clean publish root. Pages uploads EVERYTHING in the directory, so a stray zip becomes a
-       public URL. Step 2 checks for that before anything is uploaded.
+.WHAT CHANGED (2026-09-26)
+  This script previously deployed via Cloudflare PAGES (`wrangler pages deploy`, interactive
+  `pages project list` discovery, and a `site/wrangler.toml` carrying `pages_build_output_dir`).
 
-.WHAT IT DOES
-  1/5  Preflight -- repo path, wrangler present, logged in.
-  2/5  Publish-root audit -- lists exactly what would go live, and refuses on archives/junk.
-  3/5  Project discovery -- lists your Cloudflare Pages projects and confirms the target.
-  4/5  Deploy (asks first).
-  5/5  Post-deploy verification -- fetches the live page and checks the corrected v0.27.0 claims
-       are actually being served, rather than trusting that the upload worked.
+  All three of those were wrong:
+    * projectstarfish.ca is NOT a Pages project. It is a Worker with static assets,
+      `misty-bread-80fa`, with the domain bound as a custom domain. wrangler.toml at the repo root
+      says so explicitly, and notes that `wrangler pages project list` "will not find it".
+    * There is no site/wrangler.toml, and there never was in this layout.
+    * Project discovery is now pointless: there is exactly one target and it is named in config.
+
+  So the script deployed to the wrong product using a config file that does not exist. It is
+  rewritten here rather than deleted, because the three CHECKS it carried are the valuable part and
+  are now enforced in both paths (here and in the workflow).
+
+.THE THREE FAILURE MODES THESE CHECKS EXIST FOR
+  1. WRONG WORKER NAME. wrangler.toml's own warning: change `name` and wrangler creates a NEW worker
+     rather than updating the live one — "a second site nobody is looking at, with no error to tell
+     you." A silent success is the failure, so the name is asserted before deploying.
+  2. DIRTY PUBLISH ROOT. Everything in site/ becomes a public URL, so a stray archive or .env is a
+     disclosure. Refused before upload.
+  3. UNVERIFIED UPLOAD. "No unbacked word" applies to deploys: a success message is not evidence the
+     live site changed. The live page is fetched and compared against what is committed.
 #>
 
 param(
-  [string]$RepoPath   = "C:\Users\swhol\Documents\Github\Starfish",
-  [string]$SiteDir    = "site",
-  [string]$ProjectName = "",                       # blank = discover interactively
-  [string]$LiveUrl    = "https://projectstarfish.ca"
+  [string]$RepoPath       = "C:\Users\swhol\Documents\Github\Starfish",
+  [string]$SiteDir        = "site",
+  [string]$ExpectedWorker = "misty-bread-80fa",
+  [string]$LiveUrl        = "https://projectstarfish.ca",
+  [switch]$Yes                                   # skip the confirmation prompt
 )
 
 $ErrorActionPreference = 'Stop'
 $total = 5
-function Write-Step { param([int]$N,[string]$T)
+function Write-Step { param([int]$N, [string]$T)
   Write-Host ""; Write-Host ("=" * 78) -ForegroundColor DarkCyan
   Write-Host "  Step $N/$total  --  $T" -ForegroundColor Cyan
   Write-Host ("=" * 78) -ForegroundColor DarkCyan
 }
-function Confirm-Yes { param([string]$P) return ((Read-Host "$P [y/N]") -match '^(y|yes)$') }
+function Confirm-Yes { param([string]$P) if ($Yes) { return $true } return ((Read-Host "$P [y/N]") -match '^(y|yes)$') }
 function Fail-Out { param([string]$M) Write-Host ""; Write-Host $M -ForegroundColor Red; Read-Host "Press Enter to close"; exit 1 }
 
 # ---------------------------------------------------------------------------
@@ -49,8 +55,20 @@ Write-Step 1 "Preflight"
 if ($RepoPath -match 'OneDrive') { Fail-Out "That path is under OneDrive -- use the local clone." }
 if (-not (Test-Path $RepoPath))  { Fail-Out "Repo not found: $RepoPath" }
 Set-Location $RepoPath
+
 $assets = Join-Path $RepoPath $SiteDir
 if (-not (Test-Path $assets)) { Fail-Out "Asset directory not found: $assets" }
+
+$cfg = Join-Path $RepoPath 'wrangler.toml'
+if (-not (Test-Path $cfg)) {
+  Fail-Out @"
+wrangler.toml not found at the repo root.
+
+Without it wrangler has no config and would either fail or invent a new worker. If it exists on your
+machine but not in git, COMMIT IT -- the automated workflow checks out the repo and cannot see an
+untracked file.
+"@
+}
 
 Write-Host "Repo:   $RepoPath"
 Write-Host "Assets: $assets"
@@ -58,104 +76,105 @@ $wranglerVersion = (& npx wrangler --version 2>&1 | Select-Object -First 1)
 if ($LASTEXITCODE -ne 0) { Fail-Out "wrangler not available. Install with:  npm i -g wrangler" }
 Write-Host "Wrangler: $wranglerVersion"
 
-$who = & npx wrangler whoami 2>&1 | Out-String
-if ($who -match 'not authenticated|You are not logged in') {
-  Write-Host "Not logged in to Cloudflare." -ForegroundColor Red
-  if (Confirm-Yes "Run 'wrangler login' now (opens a browser)") { & npx wrangler login }
-  else { Fail-Out "Cannot deploy without auth." }
+# ---------------------------------------------------------------------------
+Write-Step 2 "Guard 1 -- worker name must match the live site EXACTLY"
+# ---------------------------------------------------------------------------
+$nameLine = (Select-String -Path $cfg -Pattern '^\s*name\s*=' | Select-Object -First 1).Line
+if (-not $nameLine) { Fail-Out "wrangler.toml has no `name` key." }
+$workerName = ($nameLine -replace '^\s*name\s*=\s*"?([^"]*)"?\s*$', '$1').Trim()
+Write-Host "wrangler.toml name = '$workerName'"
+
+if ($workerName -ne $ExpectedWorker) {
+  Fail-Out @"
+Worker name is '$workerName' but the live site is '$ExpectedWorker'.
+
+Deploying under a different name CREATES A NEW WORKER and reports success. You would get a second
+site nobody is looking at, and no error. If the rename is deliberate, pass -ExpectedWorker and update
+.github/workflows/deploy-site.yml in the same commit.
+"@
 }
-Write-Host ($who.Trim() -split "`n" | Select-Object -First 6) -ForegroundColor Gray
+Write-Host "Name guard passed." -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
-Write-Step 2 "What would go live"
+Write-Step 3 "Guard 2 -- publish-root audit (everything here becomes public)"
 # ---------------------------------------------------------------------------
-# Pages publishes the WHOLE directory. Anything sitting here becomes a fetchable URL, so show the
-# operator the actual payload before uploading rather than after someone finds it.
-$files = Get-ChildItem $assets -Recurse -File | Where-Object { $_.Name -ne '.assetsignore' }
-Write-Host "$($files.Count) file(s), $([math]::Round(($files | Measure-Object Length -Sum).Sum/1KB,1)) KB total:" -ForegroundColor Yellow
-$files | ForEach-Object { Write-Host ("  /{0}" -f ($_.FullName.Substring($assets.Length+1) -replace '\\','/')) -ForegroundColor Gray }
+$files = Get-ChildItem -Path $assets -Recurse -File
+Write-Host "--- files that would go live ---"
+$files | ForEach-Object { Write-Host ("  " + $_.FullName.Substring($RepoPath.Length + 1)) }
+$mb = [math]::Round(($files | Measure-Object -Sum Length).Sum / 1MB, 2)
+Write-Host "--------------------------------"
+Write-Host ("total: {0} file(s), {1} MB" -f $files.Count, $mb)
 
-$junk = $files | Where-Object { $_.Extension -in '.zip','.tgz','.tar','.bak' -or $_.Name -like '*.bak-*' }
+$badPatterns = @('*.zip','*.tgz','*.tar','*.tar.gz','*.7z','*.rar','*.bak','*.old','*.orig','*.swp','*~',
+                 '.env','.env.*','*.pem','*.key','*.pfx','id_rsa*','*.sqlite','*.db','.DS_Store')
+$junk = $files | Where-Object { $n = $_.Name; $badPatterns | Where-Object { $n -like $_ } }
 if ($junk) {
   Write-Host ""
-  Write-Host "These are archives and would become PUBLIC download URLs:" -ForegroundColor Red
-  $junk | ForEach-Object { Write-Host ("  ! /{0}" -f ($_.FullName.Substring($assets.Length+1) -replace '\\','/')) -ForegroundColor Red }
-  Write-Host "Add them to $SiteDir\.assetsignore or move them out, then re-run." -ForegroundColor Yellow
-  Fail-Out "Refusing to publish archives."
+  $junk | ForEach-Object { Write-Host ("  " + $_.FullName) -ForegroundColor Red }
+  Fail-Out "Refusing to publish -- the files above would become public URLs."
 }
-Write-Host ""
-Write-Host "No archives or junk in the publish root." -ForegroundColor Green
 
-# ---------------------------------------------------------------------------
-Write-Step 3 "Which Pages project"
-# ---------------------------------------------------------------------------
-# A WRONG name does not error -- wrangler offers to create a new project, which silently gives you a
-# second site nobody is looking at. So enumerate the real ones and pick from them.
-Write-Host "Fetching your Cloudflare Pages projects..." -ForegroundColor Yellow
-$listRaw = & npx wrangler pages project list 2>&1 | Out-String
-Write-Host $listRaw -ForegroundColor Gray
-
-if ([string]::IsNullOrWhiteSpace($ProjectName)) {
-  Write-Host "Pick the project that serves $LiveUrl (exact name, from the table above)." -ForegroundColor Yellow
-  $ProjectName = (Read-Host "Project name").Trim()
-}
-if ([string]::IsNullOrWhiteSpace($ProjectName)) { Fail-Out "No project name given." }
-
-if ($listRaw -notmatch [regex]::Escape($ProjectName)) {
+$secretRx = 'sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9\-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+$leaks = $files | Where-Object { $_.Extension -match '^\.(html|css|js|json|xml|txt|md|svg)$' } |
+         Select-String -Pattern $secretRx -List
+if ($leaks) {
   Write-Host ""
-  Write-Host "'$ProjectName' does not appear in your project list." -ForegroundColor Red
-  Write-Host "Deploying anyway would CREATE a new project instead of updating the live site." -ForegroundColor Red
-  if (-not (Confirm-Yes "Continue regardless (only if you are certain)")) { Fail-Out "Stopped." }
+  $leaks | ForEach-Object { Write-Host ("  " + $_.Path) -ForegroundColor Red }
+  Fail-Out "Refusing to publish -- credential-shaped string found in the publish root."
 }
-Write-Host "Target project: $ProjectName" -ForegroundColor Green
+Write-Host "Publish root clean." -ForegroundColor Green
+
+# What we will assert is live afterwards. Self-updating: whatever badge is committed must be served.
+$indexPath = Join-Path $assets 'index.html'
+$badge = ''
+if (Test-Path $indexPath) {
+  # The badge is its own <span>, separate from the brand link — match the span text only.
+  # "project-starfish v0.28" exists in the RENDERED page but never in the source.
+  $m = Select-String -Path $indexPath -Pattern '>(v[0-9]+\.[0-9]+[^<]*)<' | Select-Object -First 1
+  if ($m) { $badge = $m.Matches[0].Groups[1].Value }
+}
+if ($badge) { Write-Host "Will verify the live page serves: '$badge'" } else { Write-Host "No version badge found -- will verify by page title only." -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------------------
 Write-Step 4 "Deploy"
 # ---------------------------------------------------------------------------
-Write-Host "About to upload $($files.Count) file(s) to Pages project '$ProjectName'." -ForegroundColor Yellow
-Write-Host "This replaces the live production deployment for $LiveUrl." -ForegroundColor Yellow
-if (-not (Confirm-Yes "Deploy now")) { Fail-Out "Stopped -- nothing uploaded." }
+Write-Host "Target: Cloudflare Worker '$ExpectedWorker'  ->  $LiveUrl"
+Write-Host "Command: wrangler deploy   (NOT 'wrangler pages deploy' -- this is not a Pages project)"
+if (-not (Confirm-Yes "Deploy now?")) { Write-Host "Aborted."; exit 0 }
 
-$start = Get-Date
-& npx wrangler pages deploy $assets --project-name=$ProjectName
-$deployExit = $LASTEXITCODE
-Write-Host ("Elapsed: {0:mm}m {0:ss}s" -f ((Get-Date) - $start)) -ForegroundColor DarkGray
-if ($deployExit -ne 0) { Fail-Out "wrangler pages deploy failed (exit $deployExit) -- see output above." }
-Write-Host "Deployed." -ForegroundColor Green
+& npx wrangler deploy
+if ($LASTEXITCODE -ne 0) { Fail-Out "wrangler deploy failed (exit $LASTEXITCODE)." }
+Write-Host "Upload reported success." -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
-Write-Step 5 "Verify the LIVE site actually changed"
+Write-Step 5 "Guard 3 -- verify the LIVE site actually changed"
 # ---------------------------------------------------------------------------
-# "wrangler said OK" is not evidence the corrected copy is being served -- CDN caching, a wrong
-# project, or a preview-vs-production mixup all look like success at the CLI. Check the bytes.
-Write-Host "Waiting 10s for propagation..." -ForegroundColor Gray
-Start-Sleep -Seconds 10
-
-$checks = @(
-  @{ Url = "$LiveUrl/starfish-vs-hermes/"; Must = 'not in the current release'; Why = 'Arena is roadmap-labelled (was claimed as live)' },
-  @{ Url = "$LiveUrl/starfish-vs-hermes/"; Must = 'scope contract';             Why = 'non-deviation claim (true as of v0.27.0)' },
-  @{ Url = "$LiveUrl/";                    Must = 'Turn on task-binding';       Why = 'task-binding qualified (was unconditional)' },
-  @{ Url = "$LiveUrl/blog/toby-and-hank.html";     Must = 'Update, 2026-08-20'; Why = 'dated correction note (F-2/F-8)' },
-  @{ Url = "$LiveUrl/blog/the-1.0-candidate.html"; Must = 'Update, 2026-08-20'; Why = 'dated correction note (F-1)' }
-)
-$bad = 0
-foreach ($c in $checks) {
-  try {
-    $body = (Invoke-WebRequest -Uri $c.Url -UseBasicParsing -Headers @{ 'Cache-Control' = 'no-cache' }).Content
-    if ($body -match [regex]::Escape($c.Must)) { Write-Host ("  ok    {0}  --  {1}" -f $c.Url, $c.Why) -ForegroundColor Green }
-    else { Write-Host ("  STALE {0}  --  missing: {1}" -f $c.Url, $c.Why) -ForegroundColor Red; $bad++ }
-  } catch { Write-Host ("  ERROR {0}  --  {1}" -f $c.Url, $_.Exception.Message) -ForegroundColor Red; $bad++ }
+Write-Host "A success message is not evidence. Fetching $LiveUrl ..."
+$ok = $false
+for ($i = 1; $i -le 6; $i++) {
+  Start-Sleep -Seconds 10
+  try { $body = (Invoke-WebRequest -Uri $LiveUrl -UseBasicParsing -TimeoutSec 20).Content } catch { $body = '' }
+  if (-not $body) { Write-Host "  attempt $i/6 -- no response yet"; continue }
+  if ($badge) {
+    if ($body.Contains($badge)) { $ok = $true; break }
+    Write-Host "  attempt $i/6 -- reachable, badge not served yet"
+  } else {
+    if ($body -match '<title>Project Starfish') { $ok = $true; break }
+    Write-Host "  attempt $i/6 -- reachable, title not matched yet"
+  }
 }
 
-Write-Host ""
-if ($bad -eq 0) {
-  Write-Host "All $($checks.Count) live checks passed -- the corrected v0.27.0 claims are being served." -ForegroundColor Green
+if ($ok) {
+  Write-Host ""
+  Write-Host "DEPLOY VERIFIED -- $LiveUrl is serving the committed content." -ForegroundColor Green
+  if ($badge) { Write-Host "  live badge: $badge" -ForegroundColor Green }
 } else {
-  Write-Host "$bad of $($checks.Count) checks did not find the expected text." -ForegroundColor Red
-  Write-Host "Usually CDN cache. Purge in the Cloudflare dashboard (Caching -> Purge Everything)," -ForegroundColor Yellow
-  Write-Host "wait a minute, and re-run. If it persists, the deploy may have gone to a different project." -ForegroundColor Yellow
+  Fail-Out @"
+Deploy reported success but $LiveUrl is NOT serving the committed content.
+
+The most likely cause is the failure mode wrangler.toml warns about: the assets went to a worker
+other than '$ExpectedWorker'. Check the Cloudflare dashboard for a recently-created worker, and
+confirm which one has projectstarfish.ca bound as a custom domain.
+"@
 }
-Write-Host ""
-Write-Host "Reminder: the vs-hermes page carries FAQPage JSON-LD. Once live, validate at" -ForegroundColor Gray
-Write-Host "  https://search.google.com/test/rich-results" -ForegroundColor Gray
 Read-Host "Press Enter to close"

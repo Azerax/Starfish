@@ -1,0 +1,38 @@
+# ssf.md 3.4 — SAST. Scorecard reported this check at 0/10.
+#
+# A separate, additive workflow that reads code and reports findings to the Security tab. It runs no
+# build step (CodeQL needs none for JS/TS) and cannot alter the app or block anything that is not
+# already a required check.
+#
+# Deliberately NOT added to branch protection's required checks initially: it should run
+# informationally first, so it can never block a merge unexpectedly while its noise level is unknown.
+# Promote it to required once a few weeks of findings show what it actually reports.
+name: CodeQL
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  schedule:
+    - cron: '25 3 * * 1'   # weekly, Monday 03:25 UTC
+
+# Least privilege at the top level (ssf.md 3.1); the job widens it only for the results upload.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write   # required to upload results to code scanning
+      contents: read
+    steps:
+      # ssf.md 3.2 — SHA-pinned, same discipline as ci.yml and release.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3

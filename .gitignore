@@ -84,3 +84,6 @@ azure/.local-seed-config.json
 # duplicate of the tree, not a source of truth.
 serve_ts_verdict_fix_and_validation_governor.zip
 
+
+# Agent scratch output. The finished artefacts live under docs/; this is the working copy.
+claude/
