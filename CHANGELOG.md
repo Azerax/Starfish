@@ -6,6 +6,75 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **F-12 — an explicit allow policy silently disabled every risk floor.** `PDP.combine()` returned on
+  `pol === 'allow'` *before* consulting `assessment.floors` or `assessment.hardDeny`, so one operator
+  allow-rule skipped every category floor and hard-deny for that tool at any tier below critical.
+  `DROP TABLE users` was **allowed**, with the reason `medium-risk allowed by policy`. Floors now
+  resolve above policy-allow and far above the tolerance ceiling.
+
+  The cause was duplication. `score.ts:verdictFor` already folds assessment + policy + tolerance in
+  the correct order — its docstring states the invariant — and it had **no shipped caller**; only the
+  barrel re-exported it. The PDP carried a second, divergent reducer, and the copy in production was
+  the one with the hole. `combine()` is deliberately *not* refactored to delegate (a behaviour-changing
+  rewrite across every PDP suite); `pdp.verdict-parity.conformance.test.ts` pins the two together
+  instead: a floored assessment may never be allowed.
+
+- **F-13 — the reversibility floor could never fire.** `risk.ts` set every *secondary* category to
+  `Math.min(cap, 7)` while `FLOOR_TRIGGER` is `8`. One below, so no secondary category could trip a
+  floor by construction — including #6 (reversibility) and #12 (egress, a hard-deny). `drop table`,
+  `truncate` and `unlink` are in the category-6 pattern but in neither tier pattern, so they never
+  raised the tier either; `rm -rf` was only ever caught by the separate catastrophic denylist.
+
+  Fixed with a **strong/weak signal split**, not by uncapping: uncapping would force an approval on
+  any input containing the word "delete", and approval fatigue (H6) is already an open item — trading
+  a silent allow for a reflexive click moves the failure rather than fixing it. Strong signals
+  (`drop table`, `truncate`, `unlink`, `rm -rf`, `shred`, `mkfs`, `dd if=`) reach the trigger; weak
+  ones (`delete`, `overwrite`, bare `rm`) stay in-band. The split is pinned in both directions.
+
+- **F-14 — `assessDeletion` returned a hardcoded `reversible: true`.** Accurate (the only effect path
+  is a trash move) and still the F-10 shape: a field that cannot be false carries no information. It
+  reported "reversible" for hard-denied paths with no effect to reverse, and would have kept doing so
+  if a permanent-delete branch were ever added. The existing test asserted it and passed, because it
+  only checked a case where `true` was right. Now derived, with falsifying cases added.
+
+### Disclosed, not fixed
+
+- **`HARD_DENY_IDS` does not deny on the PDP path — it asks.** Copying `verdictFor`'s `hardDeny → deny`
+  faithfully broke three existing tests, which is how the incompatibility surfaced: `risk.ts` assigns
+  the tier cap to the *primary* category, which for an exec tool is #8, a hard-deny category, so every
+  critical-tier exec trips it. Denying would make `rm -rf ./build` unapprovable, against the stated
+  design (TC-2.2). Two modules written to the same spec that had never been run against each other.
+  Reconciling them is a scoring change with a wide blast radius and is not in this fix.
+- **Only one of seven declared floors is carried by the category mechanism** (#6). The rest are
+  enforced — where they are enforced — by purpose-built checks in `ingress()` that never consult a
+  category score: boundary containment (#1), the catastrophic denylist (#8), the secret-path check
+  (#11), tier escalation by filename (#29). #10 has no producer anywhere; #12 is covered only for
+  internal/loopback/metadata hosts by `netguard.ts`.
+- **Nothing populates categories 5, 10, 26, 29 or 35.** They are rows in the matrix and documentation
+  of intent, not live signals.
+- #12 is deliberately not fixed by the same route as #6: its producing pattern includes `POST ` and
+  `attachment`, and a hard-deny is unappealable, so a false positive is catastrophic rather than
+  annoying. A real producer needs `taint.ts` (classified data crossing an egress boundary), not a
+  keyword match.
+
+### Added
+
+- `pdp.floors.conformance.test.ts` — drives the whole PDP with real tool calls and asks, per floor,
+  whether any input actually trips it. Every answer is a demonstration rather than a flag, and each row
+  records *which* mechanism really decides it. Two inventories (`PROBES`, `UNDEMONSTRATED`) must
+  partition `FLOOR_IDS` exactly, so no floor can go unaccounted for.
+- `pdp.verdict-parity.conformance.test.ts` — the guard against the two reducers drifting again.
+- `completion.ts` + ADR 0003 — completion receipts. `isProvenComplete()` is true for `verified` only,
+  never `returned-success`; a consequential effect cannot complete on a tool's own report. **No
+  verifier exists**, so the statuses past `returned-success` are reachable, tested and produced by
+  nothing (ADR 0003 §5).
+- `AWAITING_WIRING` in `reachability.conformance.test.ts` — the inventory of built-but-unwired modules
+  (`inquiry.ts`, `controlplane.ts`, `completion.ts`), tested in both directions: it **fails the moment
+  a listed module acquires a production caller**. `index.ts` no longer counts as a caller, because a
+  barrel re-export is not a call site — and is what made `inquiry.ts` look reachable.
+
 ### Security
 - **Supply-chain posture — `ssf.md` PR 1 applied in full** (a named `ROADMAP.md` "Toward 1.0" item).
   Zero runtime impact: every change is additive or a permission narrowing, and none of it touches

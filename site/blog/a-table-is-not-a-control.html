@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A table is not a control · Project Starfish</title>
+<meta name="description" content="Our risk matrix marks seven categories as floors that no policy or tolerance setting can lift. We asked whether any real input could actually trip one. DROP TABLE users was being allowed.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/a-table-is-not-a-control.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-10-11</div><h1>A table is not a control</h1><div class="dek">Our risk matrix marks seven of its fifty categories as <em>floors</em> — tripped, they force a human regardless of policy or tolerance. We finally asked whether any real input could actually trip one. <code>DROP TABLE users</code> was being allowed.</div>
+
+<p>Two weeks ago we published a post about a test with a blind spot: <code>reachability.conformance.test.ts</code> asserts that each enforcement control is referenced from shipped code, and its coverage is a hand-typed list, so it can only find the instances someone remembered. We said the next unwired module would be found the way that one was — by someone asking what the list is missing.</p>
+
+<p>This time we asked a slightly different question, and it was a better one. Not <em>is this control called?</em> but <strong>can any real input actually trip it?</strong></p>
+
+<p>That question has a different blast radius, because a control can be perfectly wired, perfectly tested, and still be unreachable — not because nothing calls it, but because nothing can ever satisfy its condition.</p>
+
+<h2>The demonstration</h2>
+
+<p>A write-category tool. An operator policy that allows it. Input:</p>
+
+<pre><code>{ "sql": "DROP TABLE users" }</code></pre>
+
+<p>Verdict: <strong>allow</strong>. Reason string: <code>medium-risk allowed by policy</code>.</p>
+
+<p>No approval. No human. The risk matrix lists category 6, <em>Action reversibility</em>, as a floor. The floor did not fire, and nothing else in the decision point checks reversibility at all.</p>
+
+<div class="pull">The floor had never worked. Not once, in any release.</div>
+
+<p>Same for <code>TRUNCATE audit_log</code>. Same for <code>unlink</code>. The reason <code>rm -rf</code> was always caught is that it sits separately on the catastrophic-command denylist — not because the reversibility floor was doing anything.</p>
+
+<h2>One below the line</h2>
+
+<p>The first cause is arithmetic, and it is the kind of thing that reads as correct in review.</p>
+
+<p>The risk engine assigns the request's tier cap to a primary category, then adds secondary category detail — network, financial, reversibility, exfiltration — each written as <code>Math.min(cap, 7)</code>. The comment above it says the detail is "capped so it stays in-band," which is a real and sensible goal: category detail should not inflate the composite score past the band its tier belongs to.</p>
+
+<p>The floor trigger is <strong>8</strong>.</p>
+
+<p>So every secondary category was pinned at most one point below the threshold that matters. By construction, no secondary category could ever trip a floor. Only the primary escaped, because the primary got the uncapped value.</p>
+
+<p>Two floors were affected. Category 6, reversibility. And category 12, data egress — which is not only a floor but a <em>hard-deny</em>. A hard-deny that nothing could trigger.</p>
+
+<p>The cap and the trigger are correct in isolation. Keeping detail in-band is right. A floor at 8 is right. They were written months apart and the interaction between them is the defect — which is why neither looked wrong to anyone reading either one.</p>
+
+<h2>The deeper cause: we had two of them</h2>
+
+<p>Fixing the cap did not fix the demonstration. <code>DROP TABLE</code> was still allowed.</p>
+
+<p>Because the real problem was in the decision point, and it was worse. Simplified, <code>combine()</code> ran in this order:</p>
+
+<pre><code>injection          → deny
+policy says deny   → deny
+tier is critical   → ask (floor)
+policy says ask    → ask
+tier is low        → allow
+policy says allow  → allow        ← returns here
+...then, finally, the floor checks</code></pre>
+
+<p><strong>An explicit allow policy returned before any floor was consulted.</strong> Writing one allow-rule for a tool disabled every category floor and every hard-deny for that tool, at any tier below critical. Not weakened — skipped.</p>
+
+<p>And here is the part that is genuinely uncomfortable. The scorer already contained a function that gets this right:</p>
+
+<pre><code>/** Fold the assessment + operator policy + Risk Tolerance into a verdict.
+ *  Order is load-bearing: injection and floors are resolved BEFORE the
+ *  tolerance ceiling, so no value of `tolerance` can ever auto-run a
+ *  floor or a critical action. Fails CLOSED. */
+export function verdictFor(...)</code></pre>
+
+<p>That docstring is an accurate description of the invariant we wanted. The function has no shipped caller. Only the module barrel re-exports it.</p>
+
+<p>So there were two implementations of one policy. The one nobody called was correct. The one in production had the hole. In a codebase whose stated rule is <em>one scorer, one reducer</em>, this was a second reducer — and it survived because the first one was never invoked and therefore never got the chance to disagree out loud.</p>
+
+<div class="pull">An unused correct implementation is not a safety net. It is a second opinion nobody asked for.</div>
+
+<h2>What happened when we tried to just use the good one</h2>
+
+<p>The obvious fix is to delete the duplicate and call <code>verdictFor</code>. We tried copying its ordering faithfully, including <code>hardDeny → deny</code>.</p>
+
+<p>Three existing tests failed immediately. All three asserted the same thing: that a destructive-but-legitimate command like <code>rm -rf ./build</code> escalates to a human rather than being refused outright.</p>
+
+<p>The reason is the interaction again. The risk engine gives the tier cap to the <em>primary</em> category, and for an exec tool the primary category is 8 — which is a hard-deny category. So every critical-tier exec trips <code>hardDeny</code> as a matter of course. Denying on it would make every destructive shell command unapprovable, which contradicts a deliberate design position: some destructive actions are legitimate and a human should get to say yes.</p>
+
+<p>Two modules that each looked correct, written to the same spec, that had never been run against each other. The incompatibility only became visible at the moment we tried to make one call the other.</p>
+
+<p>So we did not collapse them. Floors now resolve above policy-allow — which fixes the hole — and a floor forces an <em>ask</em>, including for hard-deny categories, which preserves the existing design. The honest consequence, which is now a comment in the source rather than a thing we know and haven't written down: <strong>on the decision path, the hard-deny list does not deny. It asks.</strong> The outright refusals that do exist come from purpose-built checks elsewhere — the catastrophic denylist, secret paths, the network guard, boundary containment, scope deviation.</p>
+
+<p>Reconciling the two properly is a scoring change with a wide blast radius. It is not in this fix. What is in this fix is a parity test that pins them together: when an assessment carries a floor, the decision point must not allow. The duplication is the defect; the test is the guard until the duplication goes.</p>
+
+<h2>Why we didn't just remove the cap</h2>
+
+<p>The one-line fix is to stop capping floor categories. We didn't, and the reason is a trade worth stating.</p>
+
+<p>The regex that sets category 6 includes the bare word <code>delete</code>. Uncapping would force an approval on any request whose input mentions deleting something — including a note that says "delete this paragraph later." Our own hardening backlog already lists approval fatigue as an open item: <em>a reflexive click on a crowded queue approves an irreversible action.</em></p>
+
+<p>Trading a silent allow for a reflexive click is not a fix. It moves the failure somewhere harder to see.</p>
+
+<p>So the signal is split by strength. <code>drop table</code>, <code>truncate</code>, <code>unlink</code>, <code>rm -rf</code>, <code>shred</code>, <code>mkfs</code>, <code>dd if=</code> — no benign reading in a tool argument — reach the floor trigger. <code>delete</code>, <code>overwrite</code>, bare <code>rm</code> stay in-band as composite signal only. A test pins the split in both directions, so neither a future tidy-up that widens it nor one that narrows it passes quietly.</p>
+
+<p>Category 12 we deliberately did <strong>not</strong> fix the same way, and disclosed instead. Its producing pattern includes <code>POST </code> and <code>attachment</code>, and a hard-deny is unappealable — a false positive there is catastrophic rather than annoying. A real exfiltration producer needs taint tracking: classified data actually crossing an egress boundary, not a keyword match. That is written down as a gap with a named prerequisite, which is the most we can honestly claim today.</p>
+
+<h2>A constant that passed its own test</h2>
+
+<p>Third finding, smaller, and the most familiar shape.</p>
+
+<p>The deletion assessor returned <code>reversible: true</code>. Not computed — the literal.</p>
+
+<p>It was <em>accurate</em>. The only effect path in governed deletion is a move to trash, so a permitted delete genuinely is recoverable. And it is still the same defect as the hardcoded disclosure flag we wrote about in v0.27.0: a field that cannot be false carries no information. It reported "reversible" for hard-denied paths that have no effect to reverse, and it would have gone on reporting it the day somebody added a permanent-delete branch, with nothing to notice.</p>
+
+<p>There was a test asserting it. The test passed. It only ever checked a case where <code>true</code> was the right answer — which is how a constant survives a suite for eight months. It is derived now, and the falsifying cases are in the suite alongside a test that the field takes both values at all.</p>
+
+<h2>One finding we withdrew</h2>
+
+<p>Worth including, because a post that only lists confirmed hits is selling something.</p>
+
+<p>An early version of the floor suite reported that writing to <code>/etc/passwd</code> was allowed. That looked alarming for about a minute. The probe had granted <code>write: ['/']</code> as the boundary — the whole filesystem — so <code>/etc/passwd</code> was inside the operator's own grant and containment was right to pass it. Bad probe, not a defect.</p>
+
+<p>"The test found something" and "the system is broken" are different claims, and a suite about floors is exactly where conflating them would be expensive. The corrected probe is in the file with a comment explaining the mistake.</p>
+
+<h2>The artifact worth keeping</h2>
+
+<p>The fixes matter less than the suite we had to build to find them. It drives the whole decision point with real tool calls and asks, per floor: <em>does some input actually trip this?</em> Every answer is a demonstration rather than a flag.</p>
+
+<p>And it records, per row, <strong>which mechanism really decides</strong> — because the answer surprised us:</p>
+
+<pre><code>#1  file/storage         → boundary containment, not the floor
+#6  reversibility        → the category floor  (the only one)
+#8  execution            → the catastrophic denylist
+#11 credentials          → the secret-path check
+#29 self-modification    → tier escalation by filename
+#10 oversight            → nothing. no producer anywhere.
+#12 egress               → partial; internal hosts only</code></pre>
+
+<p>Of seven declared floors, exactly one is carried by the floor mechanism the matrix advertises. The others are enforced — where they are enforced — by purpose-built checks that never consult a category score, and two are gaps.</p>
+
+<p>That is not a disaster: the protections mostly exist, and the purpose-built checks are good. But the matrix's floor column reads like one uniform control and is, in production, four different ones plus two holes. Nothing in the codebase said so until now, and a count that cannot drift is pinned by a test, so the day someone wires a real producer for category 10 the claim above has to be rewritten rather than left to rot.</p>
+
+<p>Categories 5, 10, 26, 29 and 35 have no producer anywhere. They are rows in a table and documentation of intent. Saying that plainly costs us something in a governance product, and the alternative costs more.</p>
+
+<h2>What this one generalises to</h2>
+
+<p>The v0.27.0 lesson was: green tests are not evidence of an enforced control. The follow-up was: a reachability test is only evidence for the controls it was told about.</p>
+
+<p>This adds a third clause, and it is the sharpest of them. <strong>A control can be wired, tested, and still unreachable — because reachability of the <em>code</em> is not reachability of the <em>condition</em>.</strong></p>
+
+<p>Every floor here was referenced from shipped source. The reachability suite was satisfied. The scorer's own tests fed it a category at 10 and watched the floor fire correctly, so the scorer was satisfied too. Both were right. Neither could see that no input in the real world could put a 10 in that slot.</p>
+
+<p>The test that finds this class is the one that drives the whole system from the outside with an input a user could actually send, and asks whether the thing you claim happens, happens. We had a lot of tests. We did not have that one for floors, and the floors are the strongest claim the risk model makes.</p>
+
+<p>Three fixes, two disclosures, one withdrawn finding. The withdrawn one is in the suite as a comment, the disclosures are in inventories that fail when they go stale, and the serious fix had a test that failed first.</p>
+
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>
