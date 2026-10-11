@@ -94,7 +94,19 @@ export function assessDeletion(target: DeletionTarget, cfg: DeletionConfig, prob
   else if (tier === 'high') decision = 'ask';
   else decision = 'allow';
 
-  return { tier, decision, hard, reversible: true, files: m.files, bytes: m.bytes, truncated: m.truncated, isDirectory, exists, protectedHits, reasons };
+  // `reversible` used to be the literal `true`.
+  //
+  // It was ACCURATE — `governedDelete`'s only effect path is `ops.moveToTrash`, a soft delete — and it
+  // was still the F-10 shape: an unconditional field reads as a finding while being unfalsifiable. It
+  // reported "reversible" for a HARD-DENIED path that has no effect to reverse, and it would have gone
+  // on reporting it the day somebody added a permanent-delete branch, with no test to notice. A field
+  // that cannot be false carries no information.
+  //
+  // Derived now from what actually makes it true: a restorable copy will exist afterwards only if the
+  // operation proceeds at all, the target is there, and it is a file routed to the trash.
+  const reversible = decision !== 'deny' && exists && !isDirectory;
+
+  return { tier, decision, hard, reversible, files: m.files, bytes: m.bytes, truncated: m.truncated, isDirectory, exists, protectedHits, reasons };
 }
 
 export interface DeleteOps { moveToTrash(path: string, trashDir: string): string; }

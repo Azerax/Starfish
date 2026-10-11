@@ -375,6 +375,43 @@ export class PDP {
     const score = assessment?.score;
     if (tier === 'injection') return { allow: false, reason: 'prompt-injection content — rejected (highest tier)', riskTier: tier, score };
     if (pol === 'deny') return { allow: false, reason: 'policy-deny', riskTier: tier, score };
+
+    // ---- F-12 (2026-10-11): floors must outrank an explicit ALLOW policy. ----
+    //
+    // These two checks used to sit BELOW `if (pol === 'allow') return allow`, which meant an operator
+    // allow-rule returned before any floor was consulted — silently disabling every category floor AND
+    // every hard-deny for that tool, at any tier below critical. `DROP TABLE users` with an allow rule
+    // was allowed with the reason "medium-risk allowed by policy".
+    //
+    // `score.ts:verdictFor` already implements this order correctly, and its docstring says so: "Order
+    // is load-bearing ... so no value of tolerance can ever auto-run a floor". It had NO shipped caller.
+    // The PDP carried a second, divergent copy of the same policy, and the copy in production was the
+    // one with the hole. `pdp.verdict-parity.conformance.test.ts` now pins the two together so they
+    // cannot drift apart again — the duplication is the real defect and the parity test is the guard.
+    //
+    // Floors are resolved here, above policy-allow and far above the tolerance ceiling, so neither an
+    // allow rule nor a widened tolerance can satisfy one.
+    //
+    // NOTE — a floor forces an ASK, not a deny, and that includes a category in HARD_DENY_IDS. That is
+    // a deliberate divergence from `verdictFor`, which denies on `hardDeny`. The first cut of this fix
+    // copied verdictFor faithfully and broke three existing tests, which is how the incompatibility
+    // surfaced: `risk.ts` assigns the TIER CAP to the primary category, and for an exec tool the
+    // primary category is #8 — a hard-deny category. So every critical-tier exec scores #8 = 9 and
+    // trips `hardDeny`. Denying on that would make `rm -rf ./build` unapprovable, when the design
+    // position (pdp.risk.conformance.test.ts, TC-2.2) is that it is a real destructive action and a
+    // legitimate one, so it escalates to a human.
+    //
+    // Two modules that each looked correct and had never been run against each other. The honest
+    // consequence, recorded rather than quietly fixed: **on the PDP path, HARD_DENY_IDS does not cause
+    // a deny — it causes an ask.** The outright denials that do exist come from the bespoke floors
+    // earlier in ingress() (catastrophic shell, secret paths, netguard, boundary, scope deviation).
+    // Reconciling the two is a scoring change with a wide blast radius and is NOT in this fix; it is
+    // pinned by pdp.verdict-parity.conformance.test.ts and pdp.floors.conformance.test.ts so the
+    // divergence cannot widen unnoticed.
+    if (assessment && (assessment.floors.length > 0 || assessment.hardDeny)) {
+      return { allow: false, ask: true, askOrigin: 'floor', reason: `floor category requires a human (${assessment.floors.join(', ')})`, riskTier: tier, score };
+    }
+
     // F-3: a critical ask is a FLOOR — no downstream friction profile may satisfy it automatically.
     if (tier === 'critical') return { allow: false, ask: true, askOrigin: 'floor', reason: 'critical — human approval required (no auto-allow)', riskTier: tier, score };
     // F8: an explicit operator 'ask' rule must be honoured even for a low-tier tool. Previously the

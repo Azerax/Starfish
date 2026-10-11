@@ -22,6 +22,30 @@ describe('assessDeletion — deterministic blast-radius + HARD RULES', () => {
     const r = assessDeletion({ path: '/proj/src/a.txt' }, CFG, probeOf({ '/proj/src/a.txt': { files: 1, bytes: 12 } }));
     expect(r.tier).toBe('low'); expect(r.decision).toBe('allow'); expect(r.hard).toBe(false); expect(r.reversible).toBe(true);
   });
+  // `reversible` was the literal `true` (deletion.ts). The assertion above passed for eight months
+  // because it only ever checked the case where `true` was the right answer — a constant surviving a
+  // test by being tested only where it happened to be correct. These are the falsifying cases: if the
+  // field ever goes back to being unconditional, these fail.
+  it('reversible is FALSE for a hard-denied path — there is no effect to reverse', () => {
+    const dir = assessDeletion({ path: '/proj/build' }, CFG, probeOf({ '/proj/build': { dir: true, files: 6 } }));
+    expect(dir.decision).toBe('deny');
+    expect(dir.reversible, 'a hard-denied directory delete reported itself reversible').toBe(false);
+
+    const sys = assessDeletion({ path: '/etc/passwd' }, CFG, probeOf({ '/etc/passwd': { files: 1 } }));
+    expect(sys.decision).toBe('deny');
+    expect(sys.reversible, 'a hard-denied system path reported itself reversible').toBe(false);
+  });
+  it('reversible is FALSE for a target that does not exist — nothing is restorable', () => {
+    const r = assessDeletion({ path: '/proj/src/gone.txt' }, CFG, probeOf({}));
+    expect(r.exists).toBe(false);
+    expect(r.reversible).toBe(false);
+  });
+  it('reversible is not a constant — both values occur across the suite', () => {
+    const yes = assessDeletion({ path: '/proj/src/a.txt' }, CFG, probeOf({ '/proj/src/a.txt': { files: 1 } }));
+    const no = assessDeletion({ path: '/proj/build' }, CFG, probeOf({ '/proj/build': { dir: true } }));
+    expect(new Set([yes.reversible, no.reversible]).size, 'reversible took only one value — it is a constant again').toBe(2);
+  });
+
   it('HARD RULE: no folders — any directory is hard-denied', () => {
     const r = assessDeletion({ path: '/proj/build' }, CFG, probeOf({ '/proj/build': { dir: true, files: 6 } }));
     expect(r.hard).toBe(true); expect(r.decision).toBe('deny'); expect(r.reasons.join(' ')).toMatch(/folders cannot be deleted/);
