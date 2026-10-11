@@ -1,0 +1,20 @@
+# projectstarfish.ca -- Cloudflare Worker with static assets.
+#
+# This is NOT a Pages project. `wrangler pages deploy` and `wrangler pages project list` will not
+# find it (the only Pages project on this account is funeralopsai). The site is served by the Worker
+# `misty-bread-80fa`, which has projectstarfish.ca bound as a custom domain. Workers Static Assets
+# honours _headers and _redirects, which is why the live response carries the CSP from site/_headers
+# and looks like Pages from the outside.
+#
+# Deploy:   wrangler deploy          (from the repo root)
+#
+# `name` MUST stay exactly "misty-bread-80fa". Change it and wrangler creates a NEW worker instead of
+# updating the live one -- a second site nobody is looking at, with no error to tell you.
+name = "misty-bread-80fa"
+compatibility_date = "2026-08-20"
+
+# Assets-only worker: no `main` entrypoint, Cloudflare serves the directory directly.
+[assets]
+directory = "./site"
+# Serve site/404.html for unknown paths rather than a bare Cloudflare error.
+not_found_handling = "404-page"

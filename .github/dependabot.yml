@@ -1,0 +1,38 @@
+# ssf.md 3.3 — automated dependency updates.
+#
+# Dependabot only OPENS PULL REQUESTS; it changes nothing on its own. Every proposed bump still has to
+# pass `npm run ci` (typecheck + unit + conformance + determinism + dep-direction lint + secret/IP scans
+# + SBOM/licence) under branch protection before it can merge. Major-version PRs are left for manual
+# review rather than being auto-anything.
+#
+# It also keeps the Vulnerabilities count from regrowing, which is the half of ssf.md PR2 that stays
+# relevant: `npm audit --omit=dev` currently reports 0 production vulnerabilities, so the value here is
+# preventing drift rather than clearing a backlog.
+version: 2
+updates:
+  # Root monorepo (npm workspaces: packages/*)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Dev-only churn is the bulk of the noise and none of it ships in packages/cli, so group it into
+      # one PR per week instead of one per package.
+      dev-dependencies:
+        dependency-type: "development"
+
+  # The desktop app carries its own lockfile and is installed separately.
+  - package-ecosystem: "npm"
+    directory: "/packages/desktop/app"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Keeps the SHA pins from 3.2 current. Without this, pinning by SHA trades a repointable tag for a
+  # frozen dependency that silently stops receiving security fixes — the pin is only safe if something
+  # is responsible for moving it.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

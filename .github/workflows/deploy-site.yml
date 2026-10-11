@@ -1,0 +1,162 @@
+# Publish projectstarfish.ca.
+#
+# The site is a Cloudflare WORKER with static assets (`misty-bread-80fa`), not a Pages project.
+# `wrangler pages deploy` / `wrangler pages project list` will not find it. See wrangler.toml.
+#
+# This workflow replaces the manual Deploy-Site.ps1 run, and deliberately carries forward the three
+# guards that script existed for — they matter MORE in CI, because nobody is watching the output:
+#
+#   1. NAME GUARD. wrangler.toml's own warning: change `name` and wrangler creates a NEW worker
+#      instead of updating the live one — "a second site nobody is looking at, with no error to tell
+#      you." A silent success is the failure mode, so the name is asserted before deploying.
+#   2. PUBLISH-ROOT AUDIT. Workers Static Assets uploads everything in the directory, so a stray
+#      archive becomes a public URL. Refused before upload, not discovered after.
+#   3. POST-DEPLOY VERIFICATION. "No unbacked word" applies to deployments too — an upload that
+#      reported success is not evidence the site changed. The live page is fetched and compared
+#      against the committed source.
+#
+# PREREQUISITES (both are hard blockers):
+#   * wrangler.toml MUST be committed. A checkout without it has no config, and `wrangler deploy`
+#     would either fail or invent a new worker.
+#   * Repo secrets: CLOUDFLARE_API_TOKEN (scoped to Workers Scripts:Edit on this account only) and
+#     CLOUDFLARE_ACCOUNT_ID.
+
+name: Deploy site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - 'wrangler.toml'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you deploying manually?'
+        required: false
+        default: 'manual redeploy'
+
+# Least privilege (docs/../ssf.md §3.1). This job reads the repo and talks to Cloudflare; it writes
+# nothing back to GitHub.
+permissions:
+  contents: read
+
+# Never let two deploys race to the same worker. Do NOT cancel in progress — a half-finished asset
+# upload is worse than a queued one.
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+env:
+  EXPECTED_WORKER: misty-bread-80fa
+  LIVE_URL: https://projectstarfish.ca
+  SITE_DIR: site
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # ssf.md 3.2 — SHA-pinned, consistent with ci.yml, release.yml and codeql.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Guard 1 — config present, and the worker name is EXACTLY the live one
+        run: |
+          set -euo pipefail
+          if [ ! -f wrangler.toml ]; then
+            echo "::error::wrangler.toml is missing from the checkout."
+            echo "It may exist locally but be untracked — commit it. Without it, wrangler has no"
+            echo "config and would deploy to a worker nobody is looking at."
+            exit 1
+          fi
+          name="$(grep -E '^[[:space:]]*name[[:space:]]*=' wrangler.toml | head -1 | sed -E 's/.*=[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')"
+          echo "wrangler.toml name = '$name'"
+          if [ "$name" != "$EXPECTED_WORKER" ]; then
+            echo "::error::Worker name is '$name' but the live site is '$EXPECTED_WORKER'."
+            echo "Deploying under a different name CREATES A NEW WORKER and reports success."
+            echo "If this rename is deliberate, update EXPECTED_WORKER in this workflow in the same commit."
+            exit 1
+          fi
+          dir="$(grep -E '^[[:space:]]*directory[[:space:]]*=' wrangler.toml | head -1 | sed -E 's/.*=[[:space:]]*"?\.?\/?([^"]*)"?[[:space:]]*$/\1/')"
+          echo "assets directory = '$dir'"
+
+      - name: Guard 2 — publish-root audit (everything here becomes public)
+        run: |
+          set -euo pipefail
+          if [ ! -d "$SITE_DIR" ]; then echo "::error::$SITE_DIR not found"; exit 1; fi
+          echo "--- files that would go live ---"
+          find "$SITE_DIR" -type f | sort
+          echo "-------------------------------"
+          echo "total: $(find "$SITE_DIR" -type f | wc -l) file(s), $(du -sh "$SITE_DIR" | cut -f1)"
+          # Anything here would be served at a public URL. Refuse rather than warn.
+          junk="$(find "$SITE_DIR" -type f \( \
+              -iname '*.zip' -o -iname '*.tgz' -o -iname '*.tar' -o -iname '*.tar.gz' -o -iname '*.7z' -o -iname '*.rar' \
+              -o -iname '*.bak' -o -iname '*.old' -o -iname '*.orig' -o -iname '*.swp' -o -iname '*~' \
+              -o -iname '.env' -o -iname '.env.*' -o -iname '*.pem' -o -iname '*.key' -o -iname '*.pfx' \
+              -o -iname 'id_rsa*' -o -iname '*.sqlite' -o -iname '*.db' -o -iname '.DS_Store' \
+            \) )"
+          if [ -n "$junk" ]; then
+            echo "::error::Refusing to publish — these would become public URLs:"
+            echo "$junk"
+            exit 1
+          fi
+          # A secret-shaped string in shippable HTML is also a refusal.
+          if grep -rIlE '(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' "$SITE_DIR" ; then
+            echo "::error::Refusing to publish — credential-shaped string found in the publish root."
+            exit 1
+          fi
+          echo "publish root clean."
+
+      - name: Record the badge we expect to see live
+        id: expect
+        run: |
+          set -euo pipefail
+          # Self-updating assertion: whatever version badge is committed is what must be served.
+          # Hardcoding claim strings here would rot; this cannot.
+          #
+          # The badge lives in its own <span>, separate from the brand link — so match the span text
+          # only. "project-starfish v0.28" appears in the RENDERED page but never in the source.
+          badge="$(grep -oE '>v[0-9]+\.[0-9]+[^<]*<' "$SITE_DIR/index.html" | head -1 | sed 's/^>//; s/<$//' || true)"
+          if [ -z "$badge" ]; then
+            badge="$(grep -oE 'v[0-9]+\.[0-9]+ · [^<]*' "$SITE_DIR/index.html" | head -1 || true)"
+          fi
+          if [ -z "$badge" ]; then
+            echo "::warning::Could not extract a version badge from $SITE_DIR/index.html — post-deploy check will fall back to a title match."
+          fi
+          echo "badge=$badge" >> "$GITHUB_OUTPUT"
+          echo "expecting live badge: '$badge'"
+
+      - uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+      - name: Guard 3 — verify the LIVE site actually changed
+        run: |
+          set -euo pipefail
+          badge='${{ steps.expect.outputs.badge }}'
+          echo "Waiting for edge propagation..."
+          for i in 1 2 3 4 5 6; do
+            sleep 10
+            body="$(curl -fsSL --max-time 20 "$LIVE_URL" || true)"
+            if [ -z "$body" ]; then echo "attempt $i: no response yet"; continue; fi
+            if [ -n "$badge" ]; then
+              if printf '%s' "$body" | grep -qF "$badge"; then
+                echo "✓ live site is serving the committed badge: $badge"
+                exit 0
+              fi
+              echo "attempt $i: live page reachable but badge not found yet"
+            else
+              if printf '%s' "$body" | grep -q '<title>Project Starfish'; then
+                echo "✓ live site reachable (no badge to compare)"
+                exit 0
+              fi
+            fi
+          done
+          echo "::error::Deploy reported success but $LIVE_URL is not serving the committed content."
+          echo "The most likely cause is the one wrangler.toml warns about: assets went to a"
+          echo "different worker than the one bound to this domain. Check the Cloudflare dashboard"
+          echo "for a worker other than '$EXPECTED_WORKER' created recently."
+          exit 1
