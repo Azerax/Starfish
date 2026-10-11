@@ -28,6 +28,19 @@ export interface ToolCall {
   agentId: string;
   tool: string;
   input: Record<string, unknown>;
+  /**
+   * @deprecated v0.28 — becoming REQUIRED. GOVERNANCE.md principle 2 is "all work is a task", and an
+   * untasked call cannot be correlated to anything, so this field is on a migration path:
+   *
+   *   v0.28  `taskBindingMode: 'observe'` available. Default stays 'off' — no behaviour change.
+   *          Untasked calls are audited as `task-binding:untasked-call`, attributed to agent+tool.
+   *   v0.29  default becomes 'observe'. Still admits untasked calls; now everyone sees who they are.
+   *   v0.30  default becomes 'required', and this field becomes non-optional. `TaskBoundToolCall`
+   *          becomes an alias of `ToolCall`.
+   *
+   * Promotion is gated on `pdp.taskBindingMigration().ready` holding across a release — see
+   * taskmigration.ts. New code should use {@link TaskBoundToolCall} and pass a taskId today.
+   */
   taskId?: string;
   capabilityId?: string;
   /** Provenance lineage: this call's parameters derive from content read out of governed memory.
@@ -39,10 +52,30 @@ export interface ToolCall {
   memoryDerived?: boolean;
 }
 
+/**
+ * A ToolCall that carries its task, which is what every call will be required to be from v0.30.
+ *
+ * This exists so new code can be strict TODAY without a breaking change to `ToolCall`. Accept this
+ * type in new APIs; at v0.30 `ToolCall` gains the requirement and this becomes a plain alias, so
+ * every call site written against it needs no edit. `InquiryRequest.taskId` (inquiry.ts) is already
+ * required on the same reasoning.
+ */
+export type TaskBoundToolCall = ToolCall & { taskId: string };
+
+/** Narrow an untrusted ToolCall to a TaskBoundToolCall. Returns undefined rather than throwing, so
+ *  a caller decides whether a missing task is a deny or a legacy admission. */
+export function asTaskBound(call: ToolCall): TaskBoundToolCall | undefined {
+  return typeof call.taskId === 'string' && call.taskId.length > 0 ? (call as TaskBoundToolCall) : undefined;
+}
+
 // 'threat' (TIF-4, docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md) — the Threat Evidence lifecycle's own
 // domain (evidence.ts's EvidenceLifecycle: evidence:observe/reproduce/corroborate/approve/publish/
 // deploy/retire/revoke/expire). Additive: existing domains and every existing consumer are unchanged.
-export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure','threat'] as const;
+// 'completion' (docs/adr/0003-completion-receipt.md) — the completion-receipt lifecycle
+// (completion.ts: completion-opened / completion-advanced / completion-transition-refused). Its own
+// domain rather than a reuse of 'task' because the subject is one EFFECT's observed outcome, not the
+// task's state: a task can be open while an effect is verified, and vice versa. Additive.
+export const AUDIT_DOMAINS = ['task','agent','tool','governance','memory','message','system','failure','threat','completion'] as const;
 export type AuditDomain = typeof AUDIT_DOMAINS[number];
 
 export interface AuditEvent {

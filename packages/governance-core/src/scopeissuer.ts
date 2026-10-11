@@ -21,6 +21,7 @@
 // would have made non-deviation impossible to enable without also mandating task binding everywhere.
 // `strict: true` requires a taskId on every call, i.e. the composition, for deployments that want it.
 import { ScopeContractLedger, type ScopeContract, type ScopeVerdict } from './scope';
+import type { ScopeBinding } from './pdp';
 import type { ToolCall, ToolDef, AgentDef, BoundarySet } from './types';
 import type { Registry } from './registry';
 import type { AuditLog } from './audit';
@@ -30,7 +31,20 @@ export type ScopeMode = 'off' | 'contracted' | 'strict';
 export interface ScopeIssuerOptions {
   mode?: ScopeMode;                       // default 'contracted'
   defaultCallBudget?: number;             // D4 ceiling applied to auto-derived contracts (default: none)
-  allowCommandsByDefault?: boolean;       // D3: auto-derived contracts permit no commands unless true
+  /**
+   * @deprecated v0.28 — this option has never had any effect, and it is kept only so that passing it
+   * is not a breaking change. It is scheduled for removal.
+   *
+   * It was meant to mean "auto-derived contracts may run any command". D3 cannot express that: the
+   * gate requires exact membership in `allowedCommands`, there is no wildcard, and there is no
+   * "commands this agent may run" anywhere in `AgentDef` to mirror. Both branches therefore
+   * normalised to `[]` in `derive()`, so `true` and `false` behaved identically.
+   *
+   * Making it work would mean adding a wildcard that undoes the one place auto-derivation
+   * deliberately TIGHTENS (see the class doc), so the honest fix is to remove the option rather than
+   * implement it. `scopeissuer.conformance.test.ts` pins the no-op so nobody "fixes" it into working.
+   */
+  allowCommandsByDefault?: boolean;
 }
 
 /** What a task needs to know to have a contract derived for it. */
@@ -85,7 +99,21 @@ export class ScopeIssuer {
    *  approval replayed after a restart doesn't fail the task. */
   issue(input: DerivationInput): ScopeContract {
     const existing = this.ledger.get(input.taskId);
-    if (existing) return existing;
+    if (existing) {
+      // Idempotency keys on taskId alone, which is right for a replayed approval and WRONG to do
+      // silently when the caller asked for something different. Returning the original is still the
+      // fail-safe choice — a re-issue must never widen a contract, and only `amend()` (proposer ≠
+      // approver) may change one at all. But a caller that believes it just narrowed a contract has
+      // not, so the divergence is recorded rather than swallowed.
+      if (this.divergesFrom(existing, input)) {
+        this.audit.append({
+          actor: input.proposer, domain: 'task', action: 'scope:issue-divergent', target: input.taskId,
+          decision: 'deny', riskTier: 'medium',
+          reason: 'a contract already exists for this task and the re-issue asked for different terms — existing contract kept unchanged; use amend() for a governed change',
+        });
+      }
+      return existing;
+    }
 
     const agentDef = this.agents.get(input.agentId);
     const allowedTools = input.allowedTools
@@ -137,9 +165,44 @@ export class ScopeIssuer {
     return this.ledger.check(call, paths);
   }
 
+  /** Did a re-issue ask for materially different terms than the contract that already exists?
+   *  Compares only what the caller actually supplied — an omitted field is "no opinion", not a change.
+   *  Order-insensitive on the list fields, matching the seal's own canonicalisation. */
+  private divergesFrom(existing: ScopeContract, input: DerivationInput): boolean {
+    const sameSet = (a: readonly string[], b: readonly string[]): boolean =>
+      a.length === b.length && [...a].sort().join('\u0000') === [...b].sort().join('\u0000');
+    if (input.allowedTools && !sameSet(existing.allowedTools, input.allowedTools)) return true;
+    if (input.allowedCommands && !sameSet(existing.allowedCommands, input.allowedCommands)) return true;
+    if (input.boundary) {
+      const wanted = [...new Set([...input.boundary.write, ...input.boundary.visibility])];
+      if (!sameSet(existing.pathScope, wanted)) return true;
+    }
+    if (input.budgetCalls !== undefined && existing.budget.calls !== input.budgetCalls) return true;
+    if (input.planHash !== undefined && existing.planHash !== input.planHash) return true;
+    if (input.proposer !== existing.proposer) return true;
+    return false;
+  }
+
+  /** H5 — stamp the input files a task picked. Delegated unchanged to the ledger; exposed here so the
+   *  PDP can reach it through the binding, because until v0.28 nothing called it at all. */
+  stampInputs(taskId: string, paths: string[]): void { this.ledger.stampInputs(taskId, paths); }
+
+  /** H5 — re-verify a task's stamped inputs at time-of-use. Fail-closed: a task with no contract
+   *  reports not-ok, which the PDP turns into a deviation deny. */
+  verifyInputs(taskId: string): { ok: boolean; changed: boolean; reason: string } {
+    return this.ledger.verifyInputs(taskId);
+  }
+
   /** The binding shape `PDP` expects. */
-  binding(): { enforce: boolean; provider: { check(call: ToolCall, paths: string[]): ScopeVerdict } } {
-    return { enforce: this.enforce, provider: { check: (c, p) => this.check(c, p) } };
+  binding(): ScopeBinding {
+    return {
+      enforce: this.enforce,
+      provider: {
+        check: (c, p) => this.check(c, p),
+        stampInputs: (t, p) => this.stampInputs(t, p),
+        verifyInputs: (t) => this.verifyInputs(t),
+      },
+    };
   }
 
   snapshot(): ScopeContract[] { return this.ledger.snapshot(); }
