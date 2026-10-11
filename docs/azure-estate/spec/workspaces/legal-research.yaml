@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=../estate.schema.json
+#
+# One logical AI workspace. Compiles to:
+#   · one Foundry project (its own managed identity)
+#   · one Entra security group + an access review on it
+#   · one dedicated AI Search index
+#   · RBAC at agent scope (CLI-only — the reason this tool exists)
+#   · an AI Gateway token limit scoped to this project and deployment
+#   · runtime gate wrappers on every write and external tool
+
+apiVersion: estate/v1
+kind: Workspace
+
+metadata:
+  name: legal-research
+  estate: contoso
+  owner: legal-ops@contoso.com
+  description: Contract and precedent lookup for the legal team.
+  dataClassification: confidential
+  foundryResource: fdy-contoso-cc
+
+access:
+  entraGroup: sg-ai-legal-research
+  createGroupIfMissing: true
+  role: Foundry User                 # required for invoke on a published agent
+  scope: agentApplication            # narrowest scope; not assignable in either portal
+  conditionalAccessPolicy: require-compliant-device
+  reviewCadenceMonths: 6
+
+model:
+  deployment: frontier-chat          # references the estate's shared pool
+  limits:
+    tokensPerMinute: 60000
+    quotaPeriod: Monthly
+    quotaTokens: 40000000
+  semanticCache: false               # legal answers should not be served from a cache
+
+knowledge:
+  - name: contracts
+    store: dedicated                 # the only permitted value
+    index: idx-legal-contracts
+    source:
+      type: adlsGen2
+      uri: abfss://legal@stcontosolegal.dfs.core.windows.net/contracts
+      aclSource: posix               # defence in depth; the group grant is the primary control
+    trust: untrusted
+    refreshSchedule: "0 3 * * *"
+
+  - name: precedent
+    store: dedicated
+    index: idx-legal-precedent
+    source:
+      type: adlsGen2
+      uri: abfss://legal@stcontosolegal.dfs.core.windows.net/precedent
+      aclSource: posix
+    trust: untrusted
+    refreshSchedule: "0 4 * * 0"
+
+tools:
+  - name: matter-lookup
+    type: mcp
+    endpoint: https://mcp.contoso.com/matters
+    effect: read
+    auth: agentIdentityToken
+    downstreamGrants:
+      - resource: srch-contoso-cc/idx-legal-contracts
+        role: Search Index Data Reader
+      - resource: srch-contoso-cc/idx-legal-precedent
+        role: Search Index Data Reader
+
+  - name: matter-note-write
+    type: mcp
+    endpoint: https://mcp.contoso.com/matters
+    effect: write                    # triggers new-write-tool gate at deploy time
+    auth: agentIdentityToken         # and humanConfirm on every call at runtime
+    downstreamGrants:
+      - resource: mcp.contoso.com/matters
+        role: MatterNote.Write
+
+publish:
+  asAgentApplication: true
+  agentName: legal-research-assistant
+  sponsor: legal-ops@contoso.com
+
+governance:
+  inherit: true
+  # Tightening only. This workspace holds privileged material, so a second
+  # approver is required before anything leaves the tenant.
+  runtimeGates:
+    highStakes:
+      - action: external
+        requires: secondApprover
+        timeoutSeconds: 600
+        onTimeout: deny
+
+chargebackCode: CC-4471
