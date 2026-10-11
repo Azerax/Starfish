@@ -32,6 +32,13 @@ export interface ScopeContract {
   budget: { calls?: number };
   planHash: string;
   hash: string;                     // immutability seal over the fields above
+  /** INFORMATIONAL ONLY — not an enforcement flag, and deliberately not sealed.
+   *  Set true at derive() and never read as a condition anywhere. The immutability it describes is
+   *  enforced by `hash` (checked on every `check()`) and by `amend()` being the only mutation path,
+   *  NOT by this boolean. Documented explicitly in v0.28 because a field named `frozen` that nothing
+   *  consults reads as a guarantee while providing none — the same unfalsifiable-disclosure shape as
+   *  the hardcoded `scopeNonDeviation: false` that was F-10. Do not add a check on it; add a check on
+   *  the seal. */
   frozen: boolean;
   used: { calls: number };          // meter; advances as calls are admitted in-scope
   inputs: FileStamp[];              // H5: stamps of picked input files (runtime, not sealed) — TOCTOU guard
