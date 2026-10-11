@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threats as governed evidence, not a signature list · Project Starfish</title>
+<meta name="description" content="v0.26.0: the Threat Immunity Fabric. A detection becomes governed evidence with a lifecycle — observe, reproduce, corroborate, approve, publish, deploy, retire — under dual control, sealed, on the hash chain. And structurally incapable of being a second decision engine.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/threat-evidence-lifecycle.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-08-01</div><h1>Threats as governed evidence, not a signature list</h1><div class="dek">v0.26.0 introduces the Threat Immunity Fabric: a detection stops being a flat rule you either trust or don't, and becomes an evidence object with a lifecycle, a quorum, dual control, a seal, and a place on the hash chain. Four of ten increments shipped. The most important property is what it structurally cannot do.</div>
+<p>Every threat-intelligence system has the same shape: something notices an attack, and that observation becomes a rule everyone runs. The part that usually goes unexamined is the middle — how an observation earns the authority to change what a system refuses. In most products the answer is "a vendor said so," and the rule arrives as a signature you either trust wholesale or disable wholesale.</p>
+<p>Starfish already applies a governed lifecycle to memory writes and tool calls: proposer ≠ approver, quorum where stakes are high, content-bound approvals, everything audited. Threat detections were the one thing still handled ad hoc. This release fixes that asymmetry.</p>
+<p>The honest framing from the design plan up front: <strong>most of the architecture already existed.</strong> Of eighteen proposed sections, seven needed no new architecture at all — just wiring and naming over gateways already shipped — seven were extensions of existing modules, and four were genuinely new. What was actually missing was a governed evidence lifecycle to carry a detection from "something looked wrong" to "adopted rule."</p>
+<h2>The lifecycle</h2>
+<p>Eight stages, with the legal transitions expressed as an explicit frozen edge table rather than inferred from ordering:</p>
+<pre><code>observed     → reproduced | revoked
+reproduced   → corroborated | revoked
+corroborated → approved | revoked
+approved     → published | revoked
+published    → deployed | retired | revoked
+deployed     → retired | revoked
+retired      → (terminal)
+revoked      → (terminal)</code></pre>
+<p>Three things in that table are deliberate.</p>
+<p><strong><code>revoked</code> is reachable from every non-terminal stage.</strong> Revocation must be faster than the ordinary path and must never be gated behind reaching a particular stage first. If you have to promote a bad rule through validation before you can withdraw it, your withdrawal mechanism is theatre.</p>
+<p><strong><code>published</code> is the only stage with three outbound edges.</strong> Deployment is optional — published evidence can retire without ever being deployed anywhere.</p>
+<p><strong>Terminal means terminal, not deleted.</strong> A revoked or retired record stays in the ledger; it simply cannot move again. Nothing is ever hard-removed.</p>
+<h2>What each stage actually demands</h2>
+<p><strong>Observe</strong> mints the envelope and seals it. Critically, this is not an authorization — containment happens <em>before</em> this call, by the caller. Observing only records what was seen and what was already contained.</p>
+<p><strong>Reproduce</strong> accepts a <code>{ok, detail}</code> verdict from whoever ran the replay. The module never runs anything itself, and <strong>a failed reproduction does not advance the stage</strong> — it audits a denial and leaves the record where it was. The project's "no unbacked word" principle applies to evidence exactly as it applies to an agent's claims.</p>
+<p><strong>Corroborate</strong> requires distinct validator identities, and the publisher cannot be one of them. Attempting it audits a denial and throws. The quorum default is two, on the same reasoning the confidence engine uses: corroboration from a single validator is not corroboration. Submissions are idempotent, so the same validator calling twice does not manufacture a quorum.</p>
+<p><strong>Approve</strong> enforces two separate rules that are easy to conflate: the approver must not be the publisher, <em>and</em> the approver must be in the approver set. A validator becoming the approver is fine. What must never happen is a publisher approving its own evidence.</p>
+<p><strong>Publish</strong> marks a record ready for a broker to distribute. It performs no network I/O — the governance core stays network-free, the same discipline the external-source gateway holds.</p>
+<p><strong>Deploy</strong> records that a receiving organization turned a recommendation into a running local action. It records the fact; it does not perform it. More on that below, because it is the crux.</p>
+<p>Refusals are audited <em>before</em> the throw. Publisher self-corroboration, publisher self-approval, approval by a non-approver, and failed reproduction all leave a <code>decision: 'deny'</code> entry on the chain. The ledger records attempted violations, not just successful transitions — which is the difference between an audit trail and a changelog.</p>
+<h2>The seal, and the one subtlety in it</h2>
+<p>Each envelope carries a sha256 seal over its observe-time facts, re-verified on <em>every</em> lookup — so the seal is checked before any transition, revoke or expire, not merely on demand. A mismatch means an out-of-band edit rather than a lifecycle step.</p>
+<p>The subtlety is what is deliberately <em>excluded</em> from the seal. <code>reproductionCaseRef</code> is by definition unknown until <code>reproduce()</code> runs, so sealing it at observe time would make every successful reproduction look like tampering on the very next transition. The <code>validation</code> block is excluded for the same reason — the lifecycle methods only ever write there. What stays sealed is what the observation actually fixed: the content commitment and the decision receipt.</p>
+<p>That content commitment is a hash, not content. <strong>The raw candidate material never travels in the envelope.</strong> You can share an indicator of a prompt-injection payload without shipping the payload.</p>
+<p>Indicators come in six channels — exact hashes, normalized fragments, fuzzy fingerprints, semantic intents, structural features, behavioural indicators — so a detection can be shared at whatever fidelity is defensible rather than being forced into a single exact-match form.</p>
+<h2>The property that matters most is a negative one</h2>
+<p>A threat fabric is an obvious route to a second decision engine. High confidence that something is malicious feels like it should authorize a response. The plan refused that from the start, and the refusal is structural rather than a promise:</p>
+<div class="pull">No envelope, however high its confidence or however many validators signed it, calls the policy decision point. It can only add weight to a risk category the existing scorer already reads.</div>
+<p>Concretely: <code>FabricAction</code> — <code>observe | warn | restrict | quarantine | block-local | block-tenant | block-domain</code> — is <em>advisory input</em>. Nothing in this release calls <code>pdp.decide()</code>. The types module imports type-only and has zero logic. And <code>buildDecisionReceipt</code> can only wrap a <code>RiskAssessment</code> the one scorer already produced — it copies a score in, it cannot originate one. There is no code path by which the fabric computes risk.</p>
+<p>Severity reuses the existing risk vocabulary rather than inventing a second scale, with one exclusion that shows the care taken: <code>injection</code> is excluded from threat severity, because in the scorer that value means "off-scale hard reject," not a graded severity a validator assigns.</p>
+<p>Two detector classes are deliberately unbuilt for the same reason. Semantic detection needs a model call, and the core stays network-free and off the PDP's synchronous path — the 10ms gate target is treated as a floor, not a target to negotiate away. Canary detection depends on a deception cell that is still design-only.</p>
+<h2>Four of ten, and which four</h2>
+<p><strong>Shipped:</strong> the envelope and decision-receipt schema; structural and behavioural detector inputs; the lifecycle state machine; and ledger wiring — every transition audited under a new <code>threat</code> domain, which was the only vocabulary addition needed, because the hash chain and optional external anchoring already existed.</p>
+<p><strong>Not built:</strong> the reproduction sandbox; role-scoped trust-fabric identity; the cross-organization broker; the local adoption engine; progressive deployment staging; anti-poisoning and publisher reputation; and the governed detector-learning loop.</p>
+<p>The gap worth naming is the <strong>local adoption engine</strong>. It is the only increment that would let a threat recommendation change a decision — and even then by adding category evidence to the single scorer's input, never by ruling on a call. Today <code>deploy()</code> records that adoption happened while no mechanism performs it. It sits two increments deep behind identity and the broker, both of which are blocked on real decisions: how long a key-rotation epoch should be, and whether the threat-feed manifest lives in this GitHub org or fully outside it.</p>
+<p>Everything through the shipped four runs <strong>fully local, with zero cross-organization sharing, and is independently useful</strong>. The later increments are what would turn it into a fabric.</p>
+<h2>The sequencing deviation, stated rather than buried</h2>
+<p>The lifecycle shipped without the reproduction sandbox that the plan's own build order put first. That was a deliberate scope call, not an oversight: <code>reproduce()</code> is a pure state transition accepting a result from whoever calls it, so today that caller has to be a human validator or an external process. The sandbox is the prerequisite for <em>automating</em> reproduction — not for the lifecycle gate itself, which is why the gate could ship ahead of it.</p>
+<p>The alternative was scored and rejected. Dropping the reproduced stage entirely scored lowest of five options, for a specific reason: it violates the project's own "no unbacked word" principle, because corroboration is not reproduction. Two people agreeing they saw something is not the same as the thing happening again.</p>
+<p>When the sandbox does land it composes existing modules rather than adding primitives — egress denial from the network guard, scratch-directory-only filesystem from the boundary engine, capture-not-apply from containment. A disposable no-egress context that captures a candidate's <em>proposed</em> effects rather than letting them happen.</p>
+<p>One more non-goal worth repeating, because it is the same residual as everywhere else: no hardware-backed signing keys this pass. Software Ed25519, with TPM/HSM treated as a later hardening item in the same tier as OS-level sandboxing. The honest ceiling on all of this is still that Starfish governs a cooperative process and does not contain a hostile one.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>
