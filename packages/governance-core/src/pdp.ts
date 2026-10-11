@@ -14,13 +14,44 @@ import { scanEgress } from './containment';
 import { isCatastrophicShell, commandStrings } from './shellguard';
 import { isBlockedHost } from './netguard';
 import { ExecProvenance } from './execprovenance';
+import { UntaskedCallTracker, TASK_BINDING_MODES, type TaskBindingMode, type TaskBindingMigrationReport } from './taskmigration';
 
-export interface TaskBinding { enforce: boolean; provider: { hasActiveTask(agentId: string, taskId?: string): boolean }; }
+export interface TaskBinding {
+  /** Which rung of the migration ladder is live. See taskmigration.ts for the rung semantics.
+   *  Absent = derived from the legacy `enforce` flag, so pre-v0.28 callers keep working unchanged. */
+  mode?: TaskBindingMode;
+  /** @deprecated v0.28 — use `mode`. `true` maps to 'required', `false`/absent to 'off'. Retained
+   *  for at least one minor release per docs/SEMVER_AND_WIRE_COMMITMENTS.md "Deprecation policy". */
+  enforce?: boolean;
+  provider: { hasActiveTask(agentId: string, taskId?: string): boolean };
+}
+
+/** Resolve the live rung from either the new `mode` or the deprecated `enforce` flag.
+ *  `mode` wins when both are present. Fail-safe: an unrecognised mode resolves to 'required'
+ *  (the strictest rung), never to 'off' — a typo must not silently disable a gate. */
+export function resolveTaskBindingMode(tb: TaskBinding | undefined): TaskBindingMode {
+  if (!tb) return 'off';
+  if (tb.mode !== undefined) return TASK_BINDING_MODES.includes(tb.mode) ? tb.mode : 'required';
+  return tb.enforce ? 'required' : 'off';
+}
 // verify-before-invoke: re-checks a skill's integrity at call time (tamper → not ok).
 export interface IntegrityGate { verify(capabilityId: string): { ok: boolean; changed?: string[]; reason?: string }; }
 // non-deviation: the task's Scope Contract narrows the agent's general grants (D1–D4). The provider is
 // stateful (it meters budget), so decide() stays a function of (input, contract-state).
-export interface ScopeBinding { enforce: boolean; provider: { check(call: ToolCall, paths: string[]): ScopeVerdict }; }
+export interface ScopeBinding {
+  enforce: boolean;
+  provider: {
+    check(call: ToolCall, paths: string[]): ScopeVerdict;
+    /** H5 input re-provenance (attest.ts). Optional so a hand-built binding stays valid.
+     *  `stampInputs` records the content hash of files this task PICKED; `verifyInputs` re-checks them
+     *  at time-of-use. A file swapped in between — a cloud-sync race, a shared drive, an attacker — is
+     *  a deviation, not trusted input. Wired in `ingress()`: stamp on an allowed read, verify before
+     *  exec. Until v0.28 these existed, were correct, and were called by nothing — the same
+     *  correct-but-unwired shape as F-7/F-8/F-10, which is why reachability.conformance now covers them. */
+    stampInputs?(taskId: string, paths: string[]): void;
+    verifyInputs?(taskId: string): { ok: boolean; changed: boolean; reason: string };
+  };
+}
 
 export class PDP {
   private risk: RiskEngine;
@@ -35,6 +66,9 @@ export class PDP {
   /** Q4: deny agents that declare no capability allowlist, instead of granting them everything. */
   private strictAgentAllowlist = false;
   private unrestrictedNoted = new Set<string>();
+  /** Attributed record of calls that arrived with no taskId, so promoting taskBindingMode to
+   *  'required' is an evidenced decision. See taskmigration.ts. */
+  private untasked = new UntaskedCallTracker();
   private riskTolerance: 'low' | 'medium' = 'low';   // operator setting; default Low (deny-by-default posture)
   private safeMode = false;
   private safeModeReason = '';
@@ -74,6 +108,15 @@ export class PDP {
   setRiskTolerance(t: 'low' | 'medium'): void { this.riskTolerance = t === 'medium' ? 'medium' : 'low'; }
   getRiskTolerance(): 'low' | 'medium' { return this.riskTolerance; }
 
+  /** Which rung of the `ToolCall.taskId` migration ladder is live. Derived from the live binding,
+   *  never stored as a literal (the F-10 lesson in boot.ts:30-35). */
+  getTaskBindingMode(): TaskBindingMode { return resolveTaskBindingMode(this.taskBinding); }
+
+  /** Is this deployment safe to promote to taskBindingMode 'required'? Answered from what was
+   *  actually observed — in 'off' mode the answer is always "not ready", because nothing was
+   *  watching and absence of evidence is not evidence of absence. */
+  taskBindingMigration(): TaskBindingMigrationReport { return this.untasked.report(this.getTaskBindingMode()); }
+
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
     if (this.safeMode) {
       const sd: Decision = { allow: false, reason: `safe-mode: ${this.safeModeReason || 'governance integrity failure'}` };
@@ -109,9 +152,38 @@ export class PDP {
         return { allow: false, reason: `integrity: ${call.capabilityId} tampered${which} — quarantined`, riskTier: 'critical' };
       }
     }
-    // task-bound purpose ("no task, no tool")
-    if (this.taskBinding?.enforce && !this.taskBinding.provider.hasActiveTask(call.agentId, call.taskId)) {
-      return { allow: false, reason: 'no active task (no task, no tool)' };
+    // task-bound purpose ("no task, no tool"). Three rungs — see taskmigration.ts.
+    //
+    // The distinction that makes 'observe' safe: a call that CLAIMS a taskId must have a valid
+    // active one in EVERY rung above 'off'. Only a call with no taskId at all is treated as a
+    // legacy caller. A bad taskId is a violation, not a migration case, and is denied either way.
+    // Same shape as scopeMode 'contracted' (scopeissuer.ts header).
+    const tbMode = resolveTaskBindingMode(this.taskBinding);
+    if (tbMode !== 'off' && this.taskBinding) {
+      const claimsTask = typeof call.taskId === 'string' && call.taskId.length > 0;
+      if (claimsTask) {
+        if (!this.taskBinding.provider.hasActiveTask(call.agentId, call.taskId)) {
+          return { allow: false, reason: 'no active task (no task, no tool)' };
+        }
+      } else if (tbMode === 'required') {
+        return { allow: false, reason: 'no active task (no task, no tool)' };
+      } else {
+        // 'observe': a legacy untasked caller. Admitted — this rung admits exactly what 'off'
+        // admits — but recorded so the promotion to 'required' can be evidenced rather than
+        // guessed. Audited once per (agent, tool) pair, mirroring the once-per-agent discipline
+        // used for the `agent-unrestricted` grant below, so a chatty legacy agent cannot flood
+        // the ledger.
+        const firstTime = this.untasked.note(call.agentId, call.tool, new Date().toISOString());
+        if (firstTime) {
+          try {
+            this.audit.append({
+              actor: call.agentId, domain: 'governance', action: 'task-binding:untasked-call',
+              target: call.tool, riskTier: 'medium',
+              reason: 'call arrived with no taskId — allowed under taskBindingMode="observe"; will be DENIED once the mode is promoted to "required"',
+            });
+          } catch { /* the deprecation notice is telemetry, not a gate — never fail a call on it */ }
+        }
+      }
     }
     let tool: ToolDef | undefined;
     try {
@@ -242,6 +314,24 @@ export class PDP {
             reason: `self-authored execution: this task wrote ${selfAuthored.length} file(s) the runner would execute (${shown}${selfAuthored.length > 3 ? ', …' : ''}) — human approval required (no auto-allow)`,
           };
         }
+        // H5 — INPUT RE-PROVENANCE AT TIME-OF-USE. A file this task read earlier can change before it
+        // is acted on: a cloud-sync write, a shared drive, or an attacker swapping it (TOCTOU). The
+        // stamps were taken when the file was PICKED (on the allowed read, below); this is the USE.
+        // A changed hash is a deviation, not trusted input, so it DENIES rather than asking — unlike
+        // the two floors above, there is no legitimate reading of "the bytes are not the bytes I
+        // approved". Costs nothing when nothing was stamped: verifyInputs over an empty set is ok.
+        //
+        // Gated on `enforce`, not merely on the method existing. Two reasons, and the first cost a
+        // regression to learn: `verifyInputs` fails closed when a task has no contract, which is right
+        // for the ledger and wrong here — with the gate OFF every exec carrying a taskId would deny.
+        // And when the gate is ON, `check()` above has already refused a missing contract, so by this
+        // point a contract exists and a not-ok verdict can only mean the bytes actually changed.
+        if (this.scopeGate?.enforce && call.taskId && this.scopeGate.provider.verifyInputs) {
+          const iv = this.scopeGate.provider.verifyInputs(call.taskId);
+          if (!iv.ok) {
+            return { allow: false, riskTier: 'high', reason: `scope-deviation (input-changed): ${iv.reason}` };
+          }
+        }
       }
     } catch {
       return { allow: false, reason: 'evaluator-error (fail-closed)' };
@@ -257,6 +347,21 @@ export class PDP {
       for (const key of tool.pathParams) {
         const v = call.input[key];
         if (typeof v === 'string') this.execProvenance.note(call.taskId, v);
+      }
+    }
+    // H5 — the PICK half of input re-provenance, and the mirror image of the block above. An ALLOWED
+    // read is the moment this task chose a file; stamp its content so a later exec in the same task
+    // can prove the bytes did not change underneath it (verified in the exec floor above). Stamped
+    // only on allow, for the same reason: a denied read never happened and must not seed a stamp.
+    if (decision.allow && tool.category === 'read' && call.taskId && this.scopeGate?.provider.stampInputs) {
+      const picked: string[] = [];
+      for (const key of tool.pathParams) {
+        const v = call.input[key];
+        if (typeof v === 'string') picked.push(v);
+      }
+      if (picked.length) {
+        try { this.scopeGate.provider.stampInputs(call.taskId, picked); }
+        catch { /* stamping is evidence-gathering, never a gate — a failed stamp must not deny a read */ }
       }
     }
     return decision;

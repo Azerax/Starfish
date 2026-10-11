@@ -20,6 +20,7 @@ import { fileIntegrityGate } from './integrity';
 import { saveJson, loadJson } from './persistence';
 import { verifySelfIntegrity } from './selfintegrity';
 import { ScopeIssuer, type ScopeMode } from './scopeissuer';
+import type { TaskBindingMode } from './taskmigration';
 import { Anchorer, NoopAnchor, makeAnchorAdapter, type AnchorReceipt } from './anchor';
 import { readFileSync, existsSync } from 'node:fs';
 import type { AuditEvent } from './types';
@@ -34,7 +35,8 @@ import type { ToolDef, AgentDef } from './types';
 // while being unfalsifiable — the flag stayed false whatever the gate actually did.
 export interface EnforcementPosture {
   integrity: boolean;            // verify-before-invoke wired (needs skillsRoot)
-  taskBinding: boolean;          // "no task, no tool" wired
+  taskBinding: boolean;          // "no task, no tool" wired (true for 'observe' and 'required')
+  taskBindingMode: TaskBindingMode; // WHICH rung — 'observe' records untasked calls but admits them
   scopeNonDeviation: boolean;    // D1–D4 scope contract enforcement wired (F-10: now actually wireable)
   scopeMode: ScopeMode;          // 'off' | 'contracted' | 'strict' — WHICH non-deviation policy is live
   strictAgentAllowlist: boolean; // Q4: an agent with no declared allowedTools is denied, not granted all
@@ -50,7 +52,7 @@ export interface Governor {
   posture: EnforcementPosture; safeMode: boolean;
 }
 
-export function loadGovernor(governanceDir: string, auditPath: string, opts?: { enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; scopeMode?: ScopeMode; scopeCallBudget?: number; strictAgentAllowlist?: boolean; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number } }): Governor {
+export function loadGovernor(governanceDir: string, auditPath: string, opts?: { taskBindingMode?: TaskBindingMode; /** @deprecated v0.28 — use `taskBindingMode: 'required'`. */ enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; scopeMode?: ScopeMode; scopeCallBudget?: number; strictAgentAllowlist?: boolean; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number } }): Governor {
   const tools = new Registry<ToolDef>(join(governanceDir, 'tools.json'), (t) => t.id);
   const agents = new Registry<AgentDef>(join(governanceDir, 'agents.json'), (a) => a.id);
   const policy = new PolicyEngine(loadPolicies(join(governanceDir, 'policies.json')));
@@ -70,7 +72,13 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
   const capabilities = new CapabilityLedger(audit);
   const monitor = new SecurityMonitor(auditPath, audit);
   const services = new ServiceRegistry(audit);
-  const taskBinding = opts?.enforceTaskBinding ? { enforce: true, provider: tasks } : undefined;
+  // Task-binding migration ladder (taskmigration.ts). `taskBindingMode` is the forward option;
+  // `enforceTaskBinding` is retained for one minor release per the deprecation policy and maps to
+  // 'required'. The default stays 'off' in v0.28 so this release changes NO existing behaviour —
+  // the intended sequence is: v0.28 opt into 'observe', v0.29 default to 'observe', v0.30 default
+  // to 'required' once taskBindingMigration().ready has held across a release.
+  const taskBindingMode: TaskBindingMode = opts?.taskBindingMode ?? (opts?.enforceTaskBinding ? 'required' : 'off');
+  const taskBinding = taskBindingMode === 'off' ? undefined : { mode: taskBindingMode, provider: tasks };
   const integrity = opts?.skillsRoot ? fileIntegrityGate(capabilities, opts.skillsRoot) : undefined;
   // F-10: non-deviation is finally WIRED. `scope.ts` was fully built and tested but unreachable
   // because nothing issued contracts, so switching the gate on would have denied everything.
@@ -91,6 +99,7 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
   const posture: EnforcementPosture = {
     integrity: !!integrity,
     taskBinding: !!taskBinding,
+    taskBindingMode: pdp.getTaskBindingMode(),   // derived from the live binding, never a literal (F-10)
     scopeNonDeviation: scope.enforce,  // F-10: derived from the live gate, never hardcoded again
     scopeMode: scope.getMode(),        // and WHICH policy, so 'on' is not mistaken for 'strict'
     strictAgentAllowlist: pdp.isStrictAgentAllowlist(),   // Q4: undeclared allowlist = deny, not grant
@@ -142,8 +151,15 @@ export function persistGovernor(g: Governor, stateDir: string): void {
   saveJson(join(stateDir, 'wiki.snapshot.json'), g.wiki.snapshot());
   // F-10: scope contracts must survive a restart. Without this an in-flight task comes back with no
   // contract and, under 'contracted' mode, every one of its calls is denied — the gate would look
-  // broken rather than fail-safe. The seal is stored with the contract, so a hand-edited state file
-  // is caught by `check()`'s tamper test rather than silently trusted.
+  // broken rather than fail-safe.
+  //
+  // The seal is stored with the contract, so a hand-edited state file is caught by `check()`'s tamper
+  // test — but ONLY for the seven sealed fields (taskId, proposer, allowedTools, pathScope,
+  // allowedCommands, budget, planHash). `used`, `inputs` and `frozen` are deliberately outside the
+  // seal (see scope.ts: sealing an observation would make a no-actor method a mutation path for a
+  // sealed object, routing around proposer ≠ approver). The honest consequence, corrected here in
+  // v0.28 after this comment was found to overclaim: a hand-edited state file CAN reset the call
+  // meter or rewrite the input stamps and still pass the tamper test. It cannot widen any authority.
   saveJson(join(stateDir, 'scope.contracts.json'), g.scope.snapshot());
 }
 export function restoreGovernor(g: Governor, stateDir: string): void {
