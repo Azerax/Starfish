@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What a hash chain cannot see · Project Starfish</title>
+<meta name="description" content="A deep dive on the audit ledger. A hash chain proves what came before each record and says nothing about what came after — so truncation is invisible from inside the artifact. How the head anchor closes that, and why the ledger is a gate rather than a log.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/what-a-chain-cannot-see.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-09-27</div><h1>What a hash chain cannot see</h1><div class="dek">A deep dive on the audit ledger. The chaining is the easy part. The interesting parts are what a chain is structurally incapable of noticing, the one number that fixes it, what happens when that number's own write fails — and why an unwritable audit log denies the decision.</div>
+<p>Every entry in the ledger commits to its predecessor:</p>
+<pre><code>const base = { ts: new Date().toISOString(), seq: this.seq, prevHash: this.prevHash, ...safe };
+const hash = sha256(this.prevHash + JSON.stringify(base));
+const ev = { ...base, hash };</code></pre>
+<p>JSONL, one event per line, <code>fsync</code> per event. The chain seeds from the literal string <code>'GENESIS'</code> rather than a hash, so event zero's preimage contains it twice — once as the raw prefix, once inside the serialized body. Verification recomputes both assertions per event: that the recorded <code>prevHash</code> matches the running head, and that re-hashing the event without its hash field reproduces the hash.</p>
+<p>That catches edits, reordering, insertions, and deletion of anything that isn't a contiguous suffix. It is the part every tamper-evident log gets right.</p>
+<h2>The blind spot is structural, not an oversight</h2>
+<p>A hash chain is an assertion about what came <em>before</em> each record. It contains no statement whatsoever about what came <em>after</em>.</p>
+<p>Lop off the last five lines and every surviving event still links correctly to its predecessor and still re-hashes correctly. The file is a valid chain. It is just a shorter one. There is nothing inside the artifact that can distinguish "this log has two events" from "this log had seven and someone deleted five."</p>
+<div class="pull">A chain detects mutation. Truncation is not mutation — it is absence, and you cannot detect absence from the inside.</div>
+<p>Detecting it requires an out-of-band claim about the expected length. So alongside the log sits one small file containing exactly that: <code>{seq, headHash}</code>, rewritten and fsynced after every append. At construction, the ledger reads it and compares.</p>
+<pre><code>const anchor = this.readAnchor();
+if (anchor && this.seq - 1 < anchor.seq) { /* truncated or deleted */ }</code></pre>
+<p>Strictly less-than, so an anchor lagging <em>behind</em> the log is tolerated — it can legitimately be one write stale if its last write failed. Only an anchor <em>ahead</em> of the recovered head trips.</p>
+<p>Note what this is not. It is one number and one hash in a separate file on the same disk. It is a tripwire, not a witness. Against carelessness, a crash, or a partial edit it works. Against someone who deletes both files it reports clean — and the test that proves the guard works survives precisely because the attacker in it deletes only the log.</p>
+<h2>Five states, and why "fresh install" is one of the dangerous ones</h2>
+<p>Recovery runs <strong>unconditionally</strong> at construction. That word is the whole story, and the comment explaining it is the strongest line in the file:</p>
+<p>Recovery used to be gated on the log or the segment index existing. So deleting the log outright skipped recovery entirely — the anchor, the one artifact proving events had existed, was never read. Integrity reported clean. Verification returned true. The sequence restarted at zero.</p>
+<div class="pull">Telemetry that vanishes must be at least as loud as telemetry that reports failure.</div>
+<p>The ledger now distinguishes five states, and the difference between the last two is deliberate:</p>
+<table>
+<tr><td><strong>clean</strong></td><td>a genuinely fresh install — and a test asserts this produces no false positive</td></tr>
+<tr><td><strong>torn</strong></td><td>one unparseable <em>final</em> line: a crash artifact. Tolerated, flagged, and physically healed so the next append starts on a clean line</td></tr>
+<tr><td><strong>corrupt</strong></td><td>an unparseable <em>earlier</em> line: nothing a crash produces. Flagged, and deliberately <em>not</em> repaired</td></tr>
+<tr><td><strong>truncated</strong></td><td>anchor ahead of the log, log still present</td></tr>
+<tr><td><strong>deleted</strong></td><td>anchor present, no log and no segments at all</td></tr>
+</table>
+<p>The torn-versus-corrupt split is nine lines of parsing that carry a physical argument: a partial write at the end of a file is what a power failure looks like. A broken line in the middle is not. So one is healed and one is quarantined, and corruption outranks a torn tail — a corrupt file is never rewritten.</p>
+<p>The last two get separate messages on purpose, because an operator needs to read total absence as destruction rather than as a first run. Any of the four unhealthy states boots the governor into <strong>safe mode</strong>, where the decision point denies everything until an operator re-attests.</p>
+<h2>The failure of the thing that detects failure</h2>
+<p>The anchor's own write can fail. A read-only directory, a full disk. And it must not fail the append, because the chain still works perfectly without it.</p>
+<p>So the write swallows its exception — but records that it did:</p>
+<pre><code>catch (e) {
+  this.anchorDegraded = `anchor unwritable (${e.message}) — tail truncation is no longer detectable`;
+}</code></pre>
+<p>Boot then surfaces that as an audit event at high severity. The reasoning is the second-order version of the first problem: <em>"best effort" was hiding the difference between "anchoring is off" (a choice) and "anchoring is broken" (a failure).</em> A silently unwritable anchor is a silently degraded guarantee — the chain keeps verifying, so nothing looks wrong, while truncation quietly stops being detectable.</p>
+<p>That is the same question asked twice, one level apart. First: what would it look like if the log vanished rather than reported an error? Then: what would it look like if the mechanism that answers <em>that</em> question vanished?</p>
+<h2>Rotation, and the joint that has to be a real hash link</h2>
+<p>Size-based, checked after each append, disabled by default. Rotation seals the live file into a segment by atomic rename and records a root: first and last sequence, the incoming <code>prevHash</code>, the outgoing <code>lastHash</code>, a hash of the segment, and the filename.</p>
+<p>Two details make it safe. It <strong>never rotates an unhealthy tail</strong> — a torn or corrupt file is not sealed, which is why segments are always clean. And it touches neither the sequence counter nor the running head, both of which live in memory, so the next append continues as though nothing happened and the live file's first event points into the sealed segment.</p>
+<p>Across a restart the joint is restored from the index rather than memory, with a branch that exists for exactly one moment: immediately after rotation the live file does not exist, so the head comes from the last segment's recorded hash.</p>
+<p>Verification then threads the running head through each segment in order and hands it to the live tail. The joints are real hash links, not bookkeeping.</p>
+<p>Two honest observations for anyone reading the source. The per-segment content hash is <em>recorded but never recomputed</em> — the real segment check is that the recomputed head matches the recorded one, which makes that field decorative for integrity purposes. And the segment index itself is plain, unchained, unsigned JSON; an unparseable index degrades to an empty list, which does not silently pass, because the live tail's first event then fails to link to <code>'GENESIS'</code>. Controlled degradation rather than a hole, but worth knowing.</p>
+<p>Also worth saying plainly: rotation bounds the <em>live file</em>, not verification. A full verify re-reads every segment and re-hashes every event, every time.</p>
+<h2>Redaction has to happen before hashing, which forecloses something</h2>
+<p>Secrets are stripped from the reason and target fields, and recursively from the free-form detail object, to a bounded depth of six. The patterns are the usual suspects — PEM private key blocks, AWS access keys, provider API keys, GitHub and Slack tokens, JWTs, and a line-anchored assignment form that keeps the key name and redacts only the value.</p>
+<p>Detail needed covering separately for a reason that generalises: reason and target are flat strings, one call each and you are done. Detail is an arbitrary-shaped record populated by dozens of call sites. Guarding only the two fields you were thinking about left the one field with unbounded shape completely open.</p>
+<p>The architectural consequence is the interesting part. Redaction happens <em>before</em> the event is hashed, so the chain commits to the redacted text — and a test asserts the log still verifies afterwards. Which means you cannot scrub a secret from a past event without invalidating every hash from that point forward.</p>
+<p><strong>Append-only and "please remove that from the log" are mutually exclusive.</strong> This design picks append-only and pushes redaction to the write boundary, permanently. There is no retroactive fix available, by construction.</p>
+<p>Two gaps I would rather state than leave for a reader to find: the free-form <code>action</code> field is not redacted, and a string nested deeper than six levels inside <code>detail</code> escapes redaction — an explicit trade of a bounded leak at pathological depth against a hard recursion bound.</p>
+<h2>Notarization is a different thing from the head anchor</h2>
+<p>Two unrelated mechanisms share a word, and conflating them makes the design incoherent.</p>
+<p>The <strong>head anchor</strong> is local, on by default, and answers "was this log truncated." <strong>Notarization</strong> is external, <em>off</em> by default, and answers a different question: is the record tamper-evident against the operator who holds the keys — the designated-third-party gap that regulated retention rules care about.</p>
+<p>It commits a Merkle root plus a head pointer. Both, deliberately, because a root alone has the same blind spot a chain does: it fingerprints the set without pinning its length. The file backend chains anchors to each other, giving a chain of roots over a chain of events. Only roots ever leave the machine — never audit content.</p>
+<p>The whole thing is best-effort: a failed commit is recorded as an audit event and execution continues. Notarization can never block a decision, because fail-closed is a property of the decision point, not of the notary. And the adapter factory fails <em>soft</em> to a no-op rather than erroring, for the same reason.</p>
+<p>Two cryptographic notes a careful reader will spot. The Merkle construction duplicates the last leaf on odd levels and uses unprefixed concatenation with no leaf/internal domain separation — the shape behind a known malleability class elsewhere. Here the leaves are themselves chain hashes over distinct events, so practical exposure is small, but the root is not a second-preimage-resistant commitment in the strict sense. And a single-leaf root returns that leaf unchanged rather than a hash of it.</p>
+<h2>The ledger is a gate, not a log</h2>
+<p>The append function throws on write failure. Deliberately, and the ordering around it is the design:</p>
+<pre><code>appendFileSync(fd, ...); fsyncSync(fd);
+this.seq++; this.prevHash = hash;   // only AFTER the write succeeded</code></pre>
+<p>A failed append leaves the in-memory chain state untouched, so the next attempt reuses the same sequence number and the same head. No gap, no fork, no phantom event the chain believes exists but the file does not contain.</p>
+<p>And the caller fails closed. The decision point computes its verdict, attempts the record, and returns the verdict <em>only if the record was written</em>. An allow that cannot be recorded becomes a denial.</p>
+<p>That is what "no silent execution" has to mean to be worth anything: the record is a <em>precondition</em> of the act, not a side effect of it. A log you cannot write is an inconvenience. A gate you cannot write is a closed gate.</p>
+<p>It also has an availability cost that should be stated as a property rather than discovered: a wedged audit log is a total denial of service. That is the right trade for a governance system, and it is a trade.</p>
+<p>The sharpest finding in this whole area came from noticing the two enforcement rings disagreed about it. The decision point failed closed on an unwritable audit. The layer that actually <em>performs</em> effects swallowed the failure and carried on — so an unwritable audit denied every future decision while still executing work already authorized, with no record of either. Both rings now audit before acting, and abort if the record cannot be written.</p>
+<h2>What this does not defend against</h2>
+<p>The chain is plain SHA-256. No HMAC, no signature. Anyone with write access to the log can rewrite history from <code>'GENESIS'</code> forward, recompute every hash, and produce a self-consistent chain that verifies.</p>
+<p><strong>The chain proves internal consistency, not authenticity.</strong> Chain plus head anchor is tamper-evident against carelessness and partial edits — not against a competent attacker with filesystem write access.</p>
+<p>What actually raises that bar is the operator-signed integrity manifest, whose expected public key is supplied out-of-band precisely so an attacker cannot re-sign with their own, and external notarization where only roots leave the machine. Both are opt-in. That is the honest ceiling: local integrity artifacts sit inside the operator's own write reach, which is exactly why the third-party gap exists as a named concept rather than being papered over.</p>
+<p>Two smaller ones. Timestamps come from the local clock — hashed, so they cannot be edited afterwards, but never attested and never checked for monotonicity against the sequence, so a rolled-back clock produces a log that verifies perfectly with non-monotonic times. And the design assumes a single writer: each instance keeps its head in memory and appends without locking, so two instances on one path would fork the chain.</p>
+<p>None of that makes the ledger less useful for what it is for. It makes the difference between "tamper-evident" and "tamper-proof" a real distinction rather than a marketing one — and a governance product that blurs those two is not one to trust with the other claims either.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

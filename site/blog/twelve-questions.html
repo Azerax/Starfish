@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twelve questions, and the three modules nothing called · Project Starfish</title>
+<meta name="description" content="v0.27.0: an external reviewer asked, of each control, not whether it exists but what happens when it is absent, disabled, failed, or lying. Ten findings. Three were correct, fully-tested modules with zero production callers — and a green suite could not tell the difference.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/twelve-questions.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-08-23</div><h1>Twelve questions, and the three modules nothing called</h1><div class="dek">An external reviewer asked, of each control, not whether it exists but what happens when it is absent, disabled, failed, or lying. Ten findings. Four were defects a fully green suite had never caught — and three of those were correct, fully-tested modules with zero production callers.</div>
+<p>In August, <strong>u/WillowEmberly</strong> posted twelve questions about Starfish's governance model. They were not the usual questions. Every audit we had run — the MOSAIC paper sweep, the persona threat model, our own four-sweep self-audit — asked whether a control <em>existed</em> for a given attack. These asked what each control does <em>at its edges</em>.</p>
+<p>That turned out to be a different question with different answers. Here they are as posed:</p>
+<ol>
+<li>Which guarantees depend on application semantics rather than independent isolation?</li>
+<li>Which controls share upstream assumptions?</li>
+<li>What happens when telemetry disappears rather than reports failure?</li>
+<li>What authority increases when configuration is absent?</li>
+<li>Which recovery paths bypass forward-path governance?</li>
+<li>Who verifies the verifier?</li>
+<li>Which components can still become indispensable chokepoints?</li>
+<li>What happens if the audit subsystem itself becomes unavailable?</li>
+<li>Can an operator distinguish control absent, disabled, failed, and not applicable?</li>
+<li>How much of the security model survives if the model learns the policy implementation?</li>
+<li>Which controls reduce probability of harm versus actually reduce available authority?</li>
+<li>What is the smallest exploit chain from model output to irreversible host effect?</li>
+</ol>
+<p>We answered them against the code, not the design docs — compiling and driving the real modules in a scratch harness, with probe transcripts reproduced inline. The write-up is preserved in the present tense of the review, describing the code as the reviewer found it, because that is the honest way to publish it.</p>
+<h2>Question 3 was the sharpest, and the answer was a defect</h2>
+<p>"What happens when telemetry disappears rather than reports failure?"</p>
+<p>Starfish handles <em>damage</em> to the audit log well. Mid-file corruption enters safe mode. A torn tail enters safe mode. Tail truncation is caught by a head anchor written alongside the log. All of that was tested and worked.</p>
+<p>Deleting the log outright was undetected. Recovery was gated on the log or the segment index existing, so with the file simply gone, the anchor — the one artifact proving events had ever existed — was never read. Integrity reported clean. <code>verify()</code> returned true. The sequence number restarted at zero.</p>
+<pre><code>PROBE A anchor on disk = {"seq":1,"headHash":"9d127e14b4a3..."}
+PROBE A integrity after log deletion = {"ok":true,"reason":"clean"}
+PROBE A verify()  = true
+PROBE A seq restarts at = 0</code></pre>
+<p>The anchor proving one event existed was sitting in the same directory, unread. It is total absence that is indistinguishable from a fresh install.</p>
+<p>Then the second finding, which is why this one is worth a whole section. With the audit file absent, the security monitor returned all-zero counters and zero findings — and <code>reconcile({allClear: true})</code> <em>passed</em>. The watcher-discrepancy alarm, the control whose entire job is catching a compromised watcher reporting all-clear, was disarmed by the same deletion it exists to detect.</p>
+<div class="pull">Absence reads as health, at both layers. One deletion defeated the watcher and its invigilator.</div>
+<p>Both are fixed: recovery always runs, an anchor with no log reports <code>audit-deleted</code> and boots into safe mode, and a log that existed and is now gone is a critical <code>audit-vanished</code> finding that reconciliation refuses to corroborate.</p>
+<p>The self-indictment is the useful part. Our own boot code had already got this reasoning <em>right</em> for state files — an <code>UNREADABLE</code> sentinel distinct from absent, added precisely because a swallowing loader conflated them. That reasoning was correct and was simply never applied to the audit log itself.</p>
+<h2>An operator's explicit rule, silently voided by a friction setting</h2>
+<p>A convenience profile converted a PDP <code>ask</code> into <code>allow</code> for in-boundary writes, keyed only on "is this an ask, and is it a write." The PDP's decision shape could not distinguish <em>routine medium-risk write</em> from <em>an operator wrote a policy rule explicitly demanding review</em>. Both are <code>{allow: false, ask: true}</code>.</p>
+<pre><code>writes=ask  -> {"permissionDecision":"ask",   "reason":"policy requires human review (ask)"}
+writes=auto -> {"permissionDecision":"allow", "reason":"in-boundary write auto-allowed (backed up)"}</code></pre>
+<p>Same policy both times. An operator wrote a rule demanding review, and a friction setting elsewhere in the config silently voided it.</p>
+<p>The fix adds <code>askOrigin: 'risk' | 'policy' | 'floor'</code> to the decision, and only <code>'risk'</code> is relaxable. Which is a small type change carrying a real principle: a decision needs to record <em>why</em> it became an ask, or downstream code cannot tell operator intent from routine friction.</p>
+<p>The same profile justified itself on the grounds that writes were backed up first. The backup was best-effort, its return value was not checked before allowing, and failure rendered identically to not-applicable — a bare boolean where <code>false</code> meant both "no existing file to back up" and "the backup threw." So an unrecoverable overwrite was logged as <code>new file</code>. An operator reading that log could not tell a safe creation from a destroyed original. Now tri-state: <code>backed | not-applicable | failed</code>, and <code>failed</code> escalates rather than auto-allowing.</p>
+<h2>The finding that changed how we test</h2>
+<p>Three of the ten were the same failure mode, and it is not a bug in the usual sense.</p>
+<ul>
+<li><strong>Scope non-deviation</strong> — the D1–D4 contract check, seal verification, budget metering. Seven green tests. Zero production callers.</li>
+<li><strong>The monitor's sweep</strong> — every runtime rule we have: probing, enumeration, boundary-escape, watcher-discrepancy. Invoked only by its own conformance suite.</li>
+<li><strong>Registry integrity re-check</strong> — the out-of-band-edit detector. One caller, in a test.</li>
+</ul>
+<p>All three passed CI continuously while being inert in the shipped product.</p>
+<div class="pull">Our conformance tests instantiate subsystems directly, which proves a module <em>works</em>. It cannot prove a module <em>runs</em>. Green tests are not evidence of an enforced control.</div>
+<p>The scope case is the instructive one, because it explains <em>why</em> it stayed unwired for months rather than being an oversight. The contract ledger fails closed when a task has no contract — correctly. And nothing issued contracts. Turning the gate on would have denied every call in the system. <strong>The missing piece was an issuer, not a flag.</strong> Meanwhile the site described non-deviation as a live control.</p>
+<p>The fix is a contract issuer that auto-derives from what governance already knows, so nobody hand-authors one: permitted tools from the agent's declared tools, path scope from the union of the boundary roots, call budget from config. With one asymmetry worth noting — <strong>command permissions are the one place derivation tightens</strong>: an auto-derived contract permits <em>no</em> commands until the task names them. Issuance is idempotent, so an approval replayed after a restart does not fail the task, and contracts persist and restore, because an in-flight task returning from a restart contract-less would have every call denied and the gate would look broken rather than fail-safe.</p>
+<p>It also ships with an applicability mode rather than a boolean, and the middle rung is the whole design: a call <em>carrying</em> a task id must have a contract or it is denied; a call with <em>no</em> task id has no mission to deviate from and falls through to standing grants, boundary and floors. Conflating that with "no task, no tool" — a different control that already exists — would have made non-deviation impossible to enable without also mandating task binding everywhere.</p>
+<h2>A test that reads source, because only source can testify</h2>
+<p>The durable output of this release is 107 lines of test that would have caught three of the ten findings.</p>
+<p><code>reachability.conformance.test.ts</code> walks every shipped <code>.ts</code> file under <code>packages/</code>, excludes test files and type declarations, strips comments, and asserts that each enforcement control is <em>referenced from a non-test file</em>. It checks that the monitor's sweep has a production caller, that registry re-attestation has one, that the PDP source itself references the catastrophic-shell and blocked-host floors, and that boot both constructs the scope issuer and derives its posture from the live gate.</p>
+<p>That last assertion has a detail worth keeping. Its first version scanned raw source — and tripped on the <em>comment in boot.ts explaining the old defect</em>. A test failing on its own documentation. Hence <code>stripComments</code>, and a note preserved in the file: an over-broad source assertion is its own kind of false signal.</p>
+<p>It is deliberately a source-level check rather than a runtime one, because the failure mode is an absent call site, and only the source can testify to that.</p>
+<h2>The blind spot was wider than governance</h2>
+<p>Wiring the release script surfaced a fourth instance of the same shape, outside the governance layer entirely. Our TypeScript config, test config, dependency-direction lint and IP scan all scoped to <code>packages/</code>. The Azure and Foundry tree sits outside it.</p>
+<p>So <strong>22 files of Marketplace-facing TypeScript were checked by nothing, and five smoke tests had never been executed by anything.</strong> All now covered and wired into CI — and everything passed first run. The code was fine. It was simply unguarded, which is exactly why nobody noticed.</p>
+<h2>The exploit chain, and what it cost to close</h2>
+<p>Question 12 asked for the smallest chain from model output to irreversible host effect. The answer was two hops, no human, at Medium risk tolerance:</p>
+<pre><code>step1  fs.write evil.test.js  -> allow  (medium, score 40)
+step2  run_tests              -> allow  (high,   score 60)</code></pre>
+<p>Medium's ceiling is 70. Writing a file inside the project boundary is legitimate. Running the test suite is the tool doing exactly its job — the runner executes what it discovers, including the file just written. Neither hop subverts anything. <strong>Only the sequence is an attack, and per-call risk scoring cannot see a sequence.</strong></p>
+<p>The fix tracks, per task, which files a governed write actually produced, and if an exec tool would execute one of them, that call requires a human — and risk tolerance cannot satisfy it. Same floor pattern as the existing secret-read check: <em>a floor is a thing that convenience settings may not lift.</em></p>
+<p>Deliberately an escalation, not a denial. Writing a test and then running it is ordinary developer work; what is removed is the ability to close that loop with nobody watching. One approval, once.</p>
+<p>The runner-file predicate is over-inclusive on purpose, and the reasoning is stated in the source: a false positive costs one operator approval, a false negative costs arbitrary code execution. The asymmetry decides the tuning. Scoping is per-task, because the dangerous property is that the same unit of work both authored and ran the code — a file written by an earlier, separately-approved task is part of the project, and treating it as tainted forever would make the control unusable.</p>
+<h2>What did not change</h2>
+<p>The conclusion of question 12 stands exactly as written. Self-authored execution gates a <em>sequence</em>; it is not a boundary. Once code executes as the user, every in-process control is moot.</p>
+<div class="pull">Starfish governs a cooperative process. It does not contain a hostile one.</div>
+<p>That is the T-25 residual, and it is now the only headline one. No amount of further in-process work moves that line — which is why it stays the headline rather than being quietly absorbed into a list of fixes.</p>
+<p>Question 10's answer also stands: the heuristic layer does not survive a reader. The risk regexes, the catastrophic-shell denylist, the egress scan and the new runner predicates are denylists, and a denylist you have read is a puzzle, not a wall. The controls that <em>do</em> survive are the authority-reducing ones — boundary containment, default-deny, the rule that memory content can never authorize a tool call, the deletion hard rules, the exec templates, and now scope contracts. The architecture separates those two classes cleanly, which is good. The marketing should not average them.</p>
+<p>Three behaviour changes came with the release, and one is a genuine removal of capability: a catastrophic shell command is now <em>refused</em> rather than escalated. If you relied on approving one, you cannot any more.</p>
+<h2>Why this is worth writing up at all</h2>
+<p>Ten findings, nine of which were not previously tracked. Four were defects our own green suite had never caught. That is not a comfortable thing to publish, and publishing it is the point: a governance product that cannot show you where its own edges were is not one to trust with a boundary.</p>
+<p>The most valuable output is not any individual fix. It is that we now have a test asserting our controls are <em>reached</em>, and a standing awareness that the gap between "design intent" and "wired reality" is a category of defect our previous test strategy was structurally unable to see.</p>
+<p>Thanks to u/WillowEmberly, whose questions produced two of the findings and prompted everything else here.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

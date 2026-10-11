@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volume buys nothing: aggregating confidence against a Sybil · Project Starfish</title>
+<meta name="description" content="A deep dive on confidence aggregation. An arithmetic mean is trivially gamed by flooding near-identical corroboration. Replacing it with per-source caps, content dedup, trust ceilings and capped conflict penalties — and failing to zero rather than to the worst case.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/volume-buys-nothing.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-09-27</div><h1>Volume buys nothing</h1><div class="dek">A deep dive on confidence aggregation. How much should a system believe a claim, given the evidence for it? An average is the obvious answer and it can be moved to any value you like by an attacker with a text editor.</div>
+<p>Governed memory promotes claims to knowledge, and at low stakes it can do that without a human. Which makes the confidence number an <em>authorization input</em>, and therefore something an attacker wants to control.</p>
+<p>The original implementation took the arithmetic mean of the supporting evidence's confidences. That is trivially gamed: flood N near-identical corroborating items and the average converges on whatever value you submitted. Ten copies of the same sentence, pasted by ten identities, reads as overwhelming agreement.</p>
+<div class="pull">Volume buys nothing. Only independent, trusted breadth does.</div>
+<p>Getting there took five separate mechanisms, because there are five separate ways to fake agreement.</p>
+<h2>First: which direction is dangerous?</h2>
+<p>The risk scorer fails malformed input to <strong>10</strong>, the worst score, because high risk is the cautious direction. This module does the exact opposite and fails to <strong>zero</strong>.</p>
+<p>Same principle, opposite pole. Here high confidence is what unlocks auto-promotion, so a broken value must never buy any. Every normalisation step in the module is a variation on that:</p>
+<pre><code>pointsOf()  non-finite, wrong type, out of range  →  0 points
+trustOf()   unrecognised trust class              →  'tainted'
+sourceOf()  missing or blank source id            →  one synthetic anonymous source
+hashOf()    missing content hash                  →  one bucket per source</code></pre>
+<p>The last two are the interesting ones, because they are not merely clamping — they are closing a bypass.</p>
+<p>If a missing <code>sourceId</code> were treated as its own identity, submitting a hundred unattributed items would look like a hundred independent sources. So <strong>all anonymous items collapse into exactly one source</strong>. Anonymity cannot manufacture independence.</p>
+<p>If a missing <code>contentHash</code> made every item unique, omitting the hash would defeat deduplication entirely. So items without a usable hash <strong>collapse to a single bucket per source</strong>. You cannot opt out of dedup by leaving a field blank.</p>
+<p>Both are the same move: the absence of a field must not be more powerful than any value you could put in it.</p>
+<h2>Second: the same statement counts once</h2>
+<p>Evidence is deduplicated by content hash before anything is counted. Ten identities submitting identical text produce one item.</p>
+<p>The subtlety is in the sort:</p>
+<pre><code>const sorted = [...items].sort((a, b) =>
+  a.contentHash.localeCompare(b.contentHash) ||
+  a.sourceId.localeCompare(b.sourceId) ||
+  a.id.localeCompare(b.id));</code></pre>
+<p>Deduplication keeps the first occurrence, so without a sort the survivor would depend on the order the caller happened to pass items in. Sorting first makes the result a deterministic function of the <em>set</em>. Two callers holding the same evidence in different orders compute the same confidence — which matters because this number gates an approval, and an approval that depends on iteration order is not reproducible.</p>
+<h2>Third: a source contributes its best item, not its sum</h2>
+<p>Per source, the contribution is the maximum of that source's items, capped at <strong>60 points</strong>.</p>
+<p>Max rather than sum, deliberately: a single source submitting a thousand items contributes exactly what its strongest one does. And the cap means <em>no single source can ever reach the auto-approve bar on its own</em>, however confident it claims to be. A perfectly trusted source asserting 100% confidence contributes 60.</p>
+<p>That is the structural version of "one witness is not corroboration." It is not a policy sitting on top of the arithmetic; it is arithmetic that cannot express the thing you want to forbid.</p>
+<h2>Fourth: independence has a definition, and it excludes almost everyone</h2>
+<p>Breadth is rewarded — 15 points per independent source beyond the first, capped at 40. But "independent" is narrow, and two filters do the work.</p>
+<p>Only <strong>trusted</strong> and <strong>observed</strong> sources count. An attacker holding a hundred distinct <em>external</em> identities gains no independence at all, which collapses the cheapest Sybil strategy: registering more accounts.</p>
+<p>And a source must have contributed <strong>non-zero points</strong>. Without that clause, submitting sources whose evidence is malformed or worthless would still buy the full diversity bonus — corroboration by parties who corroborated nothing. It is a one-line condition guarding an attack that is easy to miss precisely because the items being submitted are garbage rather than lies.</p>
+<h2>Fifth: trust sets a ceiling the bonus cannot climb past</h2>
+<p>Each trust class carries a maximum:</p>
+<pre><code>trusted   100
+observed   85
+external   67
+tainted    40
+
+auto-approve bar: 90</code></pre>
+<p>Read those two together and a structural property falls out. The ceiling is the <em>best</em> trust class present, and <strong>observed tops out at 85, below the bar of 90.</strong></p>
+<p>So evidence that is merely observed can never auto-promote. Not with three sources, not with thirty. No quantity of observation reaches the threshold, because the threshold is above the ceiling that observation can produce. Auto-promotion structurally requires at least one <em>trusted</em> source — and separately requires breadth, because one trusted source caps at 60.</p>
+<p>The arithmetic lands exactly where it was aimed:</p>
+<pre><code>1 independent source   60 + 0        =  60
+2 independent sources  60 + 15       =  75
+3 independent sources  60 + 30       =  90   ← exactly the bar
+4+                     60 + 40 (cap) = 100</code></pre>
+<p>Three independent sources, at least one of them trusted, with no conflicts and nothing tainted. That is the shape of a claim this system will promote without asking a human, and every one of those four conditions is a separate mechanism rather than a tuned coefficient.</p>
+<h2>The conflict penalty is capped, which is the non-obvious half</h2>
+<p>Conflicting evidence weakens a claim. The natural implementation accumulates the penalty — and that hands an attacker the mirror-image of the original attack. If conflicts summed, flooding twenty mediocre objections would destroy any inconvenient true claim.</p>
+<p>So the penalty is the <em>worst single</em> conflict, capped at 40. One devastating conflict and twenty mediocre ones weigh the same.</p>
+<p>Note the symmetry: support uses max-per-source and caps the total, conflict uses max-overall and caps the total. Both directions refuse to let volume substitute for quality — because both directions are attack surfaces, and a system that hardens only the one it thought of first is a system with an inverted exploit.</p>
+<h2>Auto-eligibility is conjunctive on purpose</h2>
+<pre><code>const autoEligible = enoughPoints && enoughSources && unconflicted && untainted;</code></pre>
+<p>Four clauses, each refusing a distinct attack, and points alone are never sufficient. A claim can sit at 100 points and still be ineligible because one tainted item is present, or because a conflict exists, or because the breadth came from two sources rather than three.</p>
+<p>The alternative — a single score compared against a threshold — is what the per-source cap and the trust ceilings exist to prevent, so collapsing back to a single number at the final step would undo the whole design.</p>
+<p>And the result carries an ordered, deterministic <code>reasons</code> array explaining which clause failed. Not a log line — a field on the returned object, so the caller that refuses an auto-promotion can say why in the same breath.</p>
+<h2>Integer points end to end</h2>
+<p>Everything is integer points from 0 to 100. Confidence arrives as a 0&ndash;1 float and is converted immediately; the 0&ndash;1 view exposed on the result is derived <em>from</em> the integer, not carried alongside it.</p>
+<p>This is deliberate, and copied from the risk scorer: <strong>no float ever reaches a threshold comparison.</strong> A claim at 89.999999999 is not a claim that might round over the bar depending on accumulated error. It is 90 points or it is not.</p>
+<p>The module is otherwise a pure function — no I/O, no clock, no locale, no randomness. A conformance test runs a thousand identical calls and asserts byte-identical output, and another asserts invariance to input order. Both are cheap, and both are the kind of property that quietly stops being true a year later without them.</p>
+<h2>What it does not do</h2>
+<p>This measures <em>corroboration</em>, not truth. Three independent trusted sources that are all wrong produce a confidently promoted falsehood, and nothing here can detect that. What the module guarantees is narrower and worth stating precisely: <strong>the number cannot be raised by volume, by duplication, by anonymity, by registering identities, or by submitting worthless items in bulk.</strong> Raising it requires genuinely distinct sources that the system independently classifies as trustworthy.</p>
+<p>Trust classes are system-stamped from the source registry, never proposer-declared — which is what keeps the ceiling meaningful. An attacker who can write his own trust class has defeated the ceiling and everything resting on it, so that boundary is doing more work than its one line suggests.</p>
+<p>And the auto-approve path exists for <em>low-stakes</em> promotion only. Everything else routes to a human regardless of score. The confidence number decides how much friction is spared, not whether the rules apply — which is the same division of labour the risk scorer uses, pointed in the opposite direction.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>

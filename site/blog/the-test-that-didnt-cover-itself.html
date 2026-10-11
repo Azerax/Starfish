@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The test that didn't cover itself · Project Starfish</title>
+<meta name="description" content="We built a test to catch correct-but-unwired modules. It works. It is also a hand-written list, so it could only catch the instances someone remembered — and there was a live one in a module the suite was written about.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/the-test-that-didnt-cover-itself.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-09-28</div><h1>The test that didn't cover itself</h1><div class="dek">In August an external review found three correct, fully-tested modules that nothing called, and we built a test to make that impossible. The test works. It is also a hand-written list — so it could only ever catch the instances someone remembered to add.</div>
+<p>The most useful thing to come out of the v0.27.0 adversarial review was not a fix. It was a category: <strong>a correct, fully-tested module that nothing calls.</strong> Three of the ten findings were that shape. Scope non-deviation had seven green tests and zero production callers. The monitor's sweep was invoked only by its own conformance suite. Registry re-attestation had one caller, in a test.</p>
+<p>All three passed CI continuously while being inert in the shipped product, because conformance tests instantiate subsystems directly — which proves a module <em>works</em> and cannot prove a module <em>runs</em>.</p>
+<p>So we wrote <code>reachability.conformance.test.ts</code>: walk every shipped source file, strip comments, and assert that each enforcement control is referenced from a non-test file. We called it the most valuable thing in the release. It would have caught three of the ten findings.</p>
+<p>It still would. It is also, on inspection, a list of controls that a human typed out — and a test built from a remembered enumeration can only find the things on the enumeration.</p>
+<div class="pull">A test that catches "a module nothing calls" cannot catch "a module nothing calls, that nobody thought to assert."</div>
+<p>So we pointed the suite's own question at the modules it did not cover.</p>
+<h2>H5, input re-provenance</h2>
+<p><code>attest.ts</code> exists to close a time-of-check-to-time-of-use gap. A file a task picks can change before the task acts on it — a shared drive, a cloud sync rewriting underneath you, or an attacker swapping it. So it stamps a file's content hash when it is picked, and re-verifies at use. A changed hash is treated as a deviation rather than as trusted input.</p>
+<p>The module is 42 lines and it is good. It hashes as <code>latin1</code> rather than <code>utf8</code>, because latin1 maps each byte to exactly one code unit — hashing as UTF-8 would collapse every invalid byte sequence onto the replacement character and make distinct binary files hash identically. One word, and it is the difference between a binary-safe stamp and a broken one. The contract ledger wraps it in two methods that audit a deviation at high severity.</p>
+<p>Nothing called either of them. Not the decision point, not the agent loop, not the SDK, not a test. Grep the whole packages tree and the only other mention is a comment in the wiki gate explaining why the wiki uses a different primitive.</p>
+<p>Implemented, correct, audited when called, wired to nothing. <strong>The exact shape of the three findings, one layer below the suite written to catch them.</strong></p>
+<h2>Why it wasn't wired, and where it belongs</h2>
+<p>The same reason scope non-deviation sat dark for months: the enabling half didn't exist. There was no point in the call flow that said <em>these are this task's input files</em>, so there was nothing to stamp, and a verify with nothing stamping it always passes.</p>
+<p>Except the seam was already there, and already had a precedent sitting next to it.</p>
+<p>The decision point already collects a call's declared path parameters. It already records, per task and only on allow, which files a write produced — that is how self-authored execution detects the two-hop chain. Same file, same shape, twenty lines away.</p>
+<p>So: <strong>an allowed read is when a task picked a file. An exec is when it acts on what it picked.</strong></p>
+<pre><code>allowed read  + taskId  →  stampInputs(taskId, paths)     the PICK
+exec          + taskId  →  verifyInputs(taskId)           the USE</code></pre>
+<p>Stamped only on allow, for the same reason a denied write never taints a task: a read that was refused never happened. Verified in the exec floor block, alongside the secret-read and self-authored checks.</p>
+<p>And it <em>denies</em> rather than asking, which is a deliberate departure from the two floors beside it. Those escalate because reading a <code>.env</code> or running a test you just wrote are legitimate things a human might approve. There is no legitimate reading of "these are not the bytes I approved."</p>
+<p>It costs nothing when nothing was stamped, because verifying an empty set passes.</p>
+<h2>The bug we introduced, and the test that caught it</h2>
+<p>This is the part worth publishing.</p>
+<p>The first version of the wiring gated the verify on the <em>method existing</em> rather than on whether the scope gate was enforcing. That looks harmless. It is not, because <code>verifyInputs</code> fails closed when a task has no contract — correct behaviour for the ledger, and wrong as a precondition in the decision point.</p>
+<p>Result: with non-deviation switched <strong>off</strong>, every exec call carrying a task id was denied.</p>
+<p>Three tests failed immediately. All three were the Q12 targeting tests — the ones written in August to prove that self-authored execution is <em>narrow</em>, that an ordinary source write doesn't gate the runner and one task's write doesn't taint another's. They exist to catch a control being over-broad.</p>
+<p>Four months later they caught a completely unrelated control being over-broad, in a different mechanism, introduced by a different change.</p>
+<div class="pull">A test that pins what a control must <em>not</em> do outlives the reason you wrote it.</div>
+<p>The fix is one condition: gate on whether the scope gate enforces. When it is off, H5 is off too, because H5 is part of non-deviation and should follow its mode. When it is on, the contract check has already refused a missing contract upstream — so by the time verification runs, a contract exists and a failure can only mean the bytes actually changed. There is a regression test for the off case now.</p>
+<h2>Four smaller things, found the same way</h2>
+<p><strong>A dead option.</strong> The issuer took <code>allowCommandsByDefault</code>, documented as "auto-derived contracts permit no commands unless true." Both branches normalised to an empty list, so <code>true</code> and <code>false</code> behaved identically. It had never done anything.</p>
+<p>Making it work would mean adding a wildcard to the command check — which would undo the one place auto-derivation deliberately tightens. So it is deprecated rather than implemented, with the reasoning written down, and a test pins the no-op so nobody later "fixes" it into working.</p>
+<p><strong>A field named for a guarantee it doesn't provide.</strong> Contracts carry <code>frozen: boolean</code>, set true at derivation and never read as a condition anywhere. The immutability it describes is real — it is enforced by the seal and by amendment being the only mutation path — but not by that boolean. A field called <code>frozen</code> that nothing consults reads as a guarantee while providing none, which is precisely the unfalsifiable-disclosure shape of the hardcoded flag that was finding F-10. Now documented as informational, with an explicit note: don't add a check on this, add a check on the seal.</p>
+<p><strong>A comment that overclaimed.</strong> Boot said the stored seal means a hand-edited state file is caught by the tamper test rather than silently trusted. True for the seven sealed fields. False for the three unsealed ones — so a hand-edited state file <em>can</em> reset a contract's call meter or rewrite its input stamps and still verify.</p>
+<p>Those three are outside the seal for a good reason, and it is worth stating because it is the kind of trade that looks like an oversight. Sealing an observation would mean a method taking no actor at all became a mutation path for a sealed object — routing around proposer-is-not-approver through the back door. The correct decision has a cost, and the cost is that the meter is editable. What a hand-edited file cannot do is widen any authority.</p>
+<p><strong>A silent divergence.</strong> Contract issuance is idempotent on task id, which is right for an approval replayed after a restart. It was also silent when a caller asked for <em>different</em> terms — so code that believed it had just narrowed a contract had not. It still returns the original, because a re-issue must never widen anything, but the divergence is now audited instead of swallowed.</p>
+<h2>What we actually learned</h2>
+<p>The five fixes are not the interesting output. The interesting output is that the reachability suite had a blind spot of exactly the kind it was built to remove, and the blind spot was structural rather than careless: <strong>its coverage is a hand-maintained enumeration, and an enumeration is a memory.</strong></p>
+<p>That generalises past this codebase. Every "assert the thing is wired" check has this property. You can only assert reachability for controls you listed, so the check is exactly as complete as someone's recall on the day they wrote it — and it degrades silently as the codebase grows, because a new unwired module does not fail anything.</p>
+<p>We have not solved that. The suite now covers one more module and asserts both halves of it, because a verify with nothing stamping it always passes and a stamp nothing verifies is dead weight — either alone would be reachability theatre. But the next module nobody remembers will be found the same way this one was: by someone asking what the list is missing.</p>
+<p>The honest version of the v0.27.0 lesson turns out to be one clause longer than we wrote it. Green tests are not evidence of an enforced control — and a reachability test is only evidence for the controls it was told about.</p>
+<p>Two of these five were live gaps in enforcement. Three were documentation claiming more than the code delivered. That ratio is about right for a self-audit, and both categories matter: in a governance product, a comment that overstates a guarantee is a defect, because the comment is what the next person builds on.</p>
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>
