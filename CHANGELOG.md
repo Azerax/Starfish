@@ -4,6 +4,119 @@ All notable changes to Project Starfish are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims at
 [Semantic Versioning](https://semver.org/). Dates are YYYY-MM-DD.
 
+## [Unreleased]
+
+### Security
+- **Supply-chain posture — `ssf.md` PR 1 applied in full** (a named `ROADMAP.md` "Toward 1.0" item).
+  Zero runtime impact: every change is additive or a permission narrowing, and none of it touches
+  `packages/*`, the CLI surface, the wire contract or governance behaviour.
+  - Least-privilege `GITHUB_TOKEN`: `permissions: contents: read` on `ci.yml`, which was the only
+    workflow inheriting broad default scopes.
+  - **All actions pinned by commit SHA** across `ci.yml`, `release.yml`, `codeql.yml` and
+    `deploy-site.yml` — no mutable `@vN` tag remains in any workflow. Pins resolved live at apply time,
+    each annotated with its intended version, and kept on the current major so behaviour is identical.
+  - `.github/dependabot.yml` — root workspaces, the desktop app's own lockfile, and `github-actions`.
+    That third one matters: pinning by SHA trades a repointable tag for a frozen dependency, so a pin is
+    only safe if something is responsible for moving it.
+  - `.github/workflows/codeql.yml` — SAST was 0/10. Informational only, deliberately not a required
+    check until its noise level is known.
+
+  *Correction to `ssf.md` itself:* PR 2's premise is stale. `npm audit --omit=dev` now reports **0
+  production vulnerabilities**, not the 21 at baseline — those were dev-only or have since resolved. The
+  triage procedure is preserved for if the count regrows, with the status recorded in place rather than
+  quietly edited, because a remediation plan that overstates the problem it solves is the same class of
+  defect as a comment that overstates a guarantee.
+- **H5 (input re-provenance) closed** in `docs/HARDENING_BACKLOG.md` and `ROADMAP.md`. Its acceptance
+  criterion — "a file swapped mid-task is caught and the action halts" — is met and proven by
+  `scope.inputs.conformance.test.ts`. Both documents had continued to list it as open Phase-1 work.
+- **H5 input re-provenance is wired.** `attest.ts` — the time-of-check-to-time-of-use guard that stamps
+  a file's content hash when a task picks it and re-verifies at use — was implemented, correct,
+  audited when called, and **called by nothing**. The same correct-but-unwired shape as F-7/F-8/F-10,
+  one layer below `reachability.conformance.test.ts`, which did not cover it because its coverage is a
+  hand-written enumeration.
+
+  Wired at the seam that already existed in `pdp.ts`, mirroring `execProvenance`: **stamp on an allowed
+  read (the pick), verify before exec (the use)**, both per-task and both only on allow. It *denies*
+  rather than escalating — unlike the secret-read and self-authored floors beside it, there is no
+  legitimate reading of "these are not the bytes I approved." Costs nothing when nothing was stamped.
+
+  Reachability now asserts **both halves plus the PDP as the enforcement point**; either alone would be
+  theatre, since a verify with nothing stamping it always passes and a stamp nothing verifies is dead
+  weight. New suite: `scope.inputs.conformance.test.ts` (13 tests).
+
+  *Regression caught by the existing suite, recorded because it is the point:* the first version gated
+  the verify on the method existing rather than on `scopeGate.enforce`. Because `verifyInputs` fails
+  closed for a task with no contract — right for the ledger, wrong as a PDP precondition — **every exec
+  carrying a taskId was denied with non-deviation switched off.** The three Q12 targeting tests from
+  v0.27.0, written to prove self-authored execution is narrow, caught an unrelated over-broad denial
+  four months later. Fixed, with a regression test for mode `off`.
+
+### Deprecated
+- **`ScopeIssuerOptions.allowCommandsByDefault`** — never had any effect. Both branches normalised to
+  `[]` in `derive()`, so `true` and `false` behaved identically. D3 has no wildcard and there is no
+  per-agent command grant to mirror, so "permit any command" is not expressible — and implementing it
+  would undo the one place auto-derivation deliberately tightens. Deprecated rather than implemented;
+  a conformance test pins the no-op so it is not later "fixed" into working.
+
+### Fixed
+- **`ScopeContract.frozen` documented as informational.** Set true at derivation, never read as a
+  condition anywhere. The immutability is real and is enforced by the seal plus amendment being the
+  only mutation path — not by the boolean. A field named for a guarantee it does not provide is the
+  unfalsifiable-disclosure shape of F-10; the comment now says to check the seal, not the flag.
+- **`boot.ts` no longer overclaims the seal's reach.** It said a hand-edited `scope.contracts.json` is
+  caught by the tamper test. True for the seven sealed fields; false for `used`, `inputs` and `frozen`,
+  which are outside the seal deliberately — sealing an observation would make a no-actor method a
+  mutation path for a sealed object, routing around proposer ≠ approver. A hand-edited file can reset
+  the call meter; it cannot widen any authority. Both halves now stated.
+- **A divergent contract re-issue is audited, not swallowed.** `issue()` is idempotent on taskId, which
+  is right for a replayed approval and silent when the caller asked for different terms. Still returns
+  the existing contract — a re-issue must never widen — but now emits `scope:issue-divergent`.
+
+### Added
+- **Bounded semantic inquiry** (`packages/governance-core/src/inquiry.ts`). Typed questions in,
+  advisory signals out. Three closed question kinds (`choice` / `level` / `likelihood`), an
+  `InquiryProvider` boundary, a deterministic fixture provider keyed by `questionId:version`, a
+  rules-only provider, and an optional System One-compatible HTTP **request builder** — the core
+  builds, a higher ring sends, so ring 1 stays network-free. Rationale and rejected alternatives in
+  `docs/adr/0002-semantic-signal-boundary.md`.
+
+  *The load-bearing property is raise-only monotonicity.* `foldInquiry()` contributes to exactly one
+  of the 50 risk categories and can only ever **raise** it, so the worst a compromised, miscalibrated
+  or hostile provider can do is make Starfish more cautious. It can cost availability; it can never
+  buy authority. `InquirySignal` has no `allow`/`deny`/`ask`/`approve` field at all, so constitutional
+  principle 7 is structural rather than advisory — asserted by a conformance test.
+
+  Fail-closed follows `score.ts` (unknown → 10, the dangerous end), not `confidence.ts` (→ 0). Absent,
+  late, malformed, abstained and low-confidence signals all contribute the failsafe score. Silence is
+  treated as danger, not permission.
+- **Vendor-neutral MCP control-plane boundary** (`controlplane.ts`). Starfish decides, *then* the call
+  is forwarded. An external plane's `allowed` never overrides a Starfish deny; its `denied` does stop
+  an allowed call — denials compose, grants do not. `docker-sibling` and `in-process` sandboxes are
+  refused in prod regardless of what a registry entry claims about itself. A thrown forward yields
+  `forwarded-lost`, not `forwarded-error`, because "we do not know" is not "it did not happen".
+  Includes `FakeMcpControlPlane`. **No Obot dependency** — constitutional principle 12.
+
+### Deprecated
+- **`ToolCall.taskId` is becoming required**, and `TaskBinding.enforce` is superseded by
+  `TaskBinding.mode` / `loadGovernor({ taskBindingMode })`. A three-rung ladder, mirroring the
+  existing `ScopeMode` shape: `'off'` (pre-0.28 behaviour exactly) → `'observe'` → `'required'`.
+
+  `'observe'` admits **precisely** the calls `'off'` admits and records more, so it weakens nothing.
+  A call with no taskId is allowed and attributed; a call that *claims* a taskId is still checked, in
+  every rung above `'off'` — a bad taskId is a violation, not a legacy caller.
+
+  *This release changes no behaviour:* the default remains `'off'`. Intended sequence — 0.28 opt into
+  `'observe'`; 0.29 default to `'observe'`; 0.30 default to `'required'` and make the field
+  non-optional, at which point `TaskBoundToolCall` becomes a plain alias of `ToolCall`.
+
+  Promotion is **evidenced, not scheduled**. `pdp.taskBindingMigration()` reports readiness derived
+  from what was observed, names the offending agent+tool pairs, and returns `ready: false` in `'off'`
+  mode *because nothing was watching* — absence of evidence is not evidence of absence. That guard
+  exists because of F-10 (`boot.ts:30-35`): a hardcoded `false` that "read as an honest disclosure
+  while being unfalsifiable". `EnforcementPosture.taskBindingMode` is derived from the live binding.
+
+  New code should accept `TaskBoundToolCall` and pass a taskId today; `asTaskBound()` narrows.
+
 ## [0.27.0] - 2026-08-20
 
 External adversarial review. Twelve questions posed publicly by **u/WillowEmberly** asked, of each

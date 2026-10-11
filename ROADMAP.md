@@ -93,7 +93,7 @@ deliberately, because a governance product that hides its own residuals is not c
 | **H2** | Signed update + blocklist enforcement — a known-bad skill/version should refuse to run. | 1.0 / release mechanics |
 | **H3** | Eval mode + production-target guard — nothing currently distinguishes a throwaway evaluation from a live production wiring. | Phase 2 |
 | **H4** | Elevated-launch handling — running as admin/root widens blast radius with no user signal. | Phase 2 |
-| **H5** | Input re-provenance — a shared/cloud file changed between "picked" and "used". | Phase 1 |
+| ~~**H5**~~ | ~~Input re-provenance — a shared/cloud file changed between "picked" and "used".~~ **Closed in v0.28.0:** an allowed read stamps the file's content hash, an exec re-verifies it, and a mid-task swap is denied. The module existed and was correct since Phase 1; what shipped in v0.28.0 is the wiring, plus reachability coverage so it cannot fall inert again. | **Shipped** |
 | **H6** | Distinct critical confirmation — approval fatigue lets a reflexive click approve an irreversible action. | Phase 2 / UI |
 
 Full detail and acceptance criteria: [`docs/HARDENING_BACKLOG.md`](docs/HARDENING_BACKLOG.md).

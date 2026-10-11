@@ -1,0 +1,814 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://intelicore.ai/schemas/estate/v1",
+  "title": "AI Estate Spec v1",
+  "description": "Declarative definition of a company's LLM estate on Microsoft Foundry. One Estate document per client tenant; one Workspace document per logical AI workspace. Governance controls derive from Project Starfish and are enforced at two distinct layers: deploy-time change gates (orchestration) and runtime action gates (individual actions).",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Estate"
+    },
+    {
+      "$ref": "#/$defs/Workspace"
+    }
+  ],
+  "$defs": {
+    "apiVersion": {
+      "const": "estate/v1"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]{1,46}[a-z0-9])?$",
+      "description": "Lowercase kebab-case. Used to derive Azure resource names, so keep it short."
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "dataClassification": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "description": "Drives governance defaults. 'confidential' and above force content safety, forbid prompt-content logging, and require an explicit approver on every change gate."
+    },
+    "gateResolution": {
+      "type": "string",
+      "enum": [
+        "humanApproval",
+        "acknowledgement",
+        "block"
+      ],
+      "description": "humanApproval = a named approver must sign off before apply. acknowledgement = the operator must explicitly confirm they have read the warning; recorded in the audit log. block = the plan is refused outright, no override."
+    },
+    "Estate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "platform",
+        "governance"
+      ],
+      "properties": {
+        "apiVersion": {
+          "$ref": "#/$defs/apiVersion"
+        },
+        "kind": {
+          "const": "Estate"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "tenantId"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/identifier"
+            },
+            "tenantId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F-]{36}$",
+              "description": "Target Entra tenant. The generator refuses to apply a plan whose signed-in tenant does not match this value \u2014 the single guard against deploying one client's estate into another's tenant."
+            },
+            "client": {
+              "type": "string",
+              "description": "Human-readable client name for reports and audit trail."
+            },
+            "deliveredBy": {
+              "type": "string"
+            },
+            "dataClassification": {
+              "$ref": "#/$defs/dataClassification"
+            }
+          }
+        },
+        "platform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subscriptionId",
+            "location",
+            "foundryResources"
+          ],
+          "properties": {
+            "subscriptionId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F-]{36}$"
+            },
+            "location": {
+              "type": "string",
+              "description": "Primary Azure region, e.g. canadacentral."
+            },
+            "resourceGroup": {
+              "type": "string"
+            },
+            "foundryResources": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Microsoft.CognitiveServices/accounts (kind: AIServices). More than one is only needed when workspaces must be isolated onto separate AI Gateways, since a gateway binds at resource level, not project level.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/identifier"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "localKeysDisabled": {
+                    "type": "boolean",
+                    "const": true,
+                    "description": "Not configurable. Key-based auth bypasses RBAC entirely and grants full access; leaving it on defeats every access control in this spec."
+                  },
+                  "aiGateway": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "mode"
+                    ],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "managed",
+                          "existing",
+                          "none"
+                        ],
+                        "description": "managed = let Foundry provision an APIM Basic v2. existing = attach an APIM instance you already own (v2 tiers only, same tenant and subscription). none = no per-workspace token limits, which the validator will flag against any workspace declaring model.limits."
+                      },
+                      "existingApimResourceId": {
+                        "type": "string"
+                      },
+                      "sku": {
+                        "type": "string",
+                        "enum": [
+                          "BasicV2",
+                          "StandardV2",
+                          "PremiumV2"
+                        ]
+                      }
+                    }
+                  },
+                  "maxDeployments": {
+                    "type": "integer",
+                    "default": 32,
+                    "maximum": 32,
+                    "description": "Hard Azure ceiling. The validator sums distinct model deployments across all workspaces bound to this resource and fails the plan before apply if the total exceeds it."
+                  }
+                }
+              }
+            },
+            "modelDeployments": {
+              "type": "array",
+              "description": "The shared pool. Workspaces reference these by name; they never declare their own. This is what keeps you under the 32-deployment ceiling while workspaces scale to hundreds.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "model",
+                  "foundryResource"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/identifier"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "Publisher/model/version as it appears in the catalogue."
+                  },
+                  "foundryResource": {
+                    "$ref": "#/$defs/identifier"
+                  },
+                  "skuType": {
+                    "type": "string",
+                    "enum": [
+                      "GlobalStandard",
+                      "DataZoneStandard",
+                      "Standard",
+                      "GlobalProvisioned",
+                      "DataZoneProvisioned"
+                    ]
+                  },
+                  "capacity": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "spilloverTo": {
+                    "type": "string",
+                    "description": "Name of a standard deployment of the same model and version on the same resource. Emits spilloverDeploymentName so provisioned capacity bursts to pay-go instead of returning 429."
+                  }
+                }
+              }
+            },
+            "search": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "service",
+                "tier"
+              ],
+              "properties": {
+                "service": {
+                  "$ref": "#/$defs/identifier"
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "basic",
+                    "standard",
+                    "standard2",
+                    "standard3"
+                  ],
+                  "description": "Sets the index ceiling: basic 15, standard 50, standard2 200, standard3 200. Because every workspace gets its own dedicated index, this is an early architectural decision, not a billing one. The validator counts workspaces against it."
+                }
+              }
+            },
+            "observability": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "logAnalyticsWorkspace": {
+                  "type": "string"
+                },
+                "appInsights": {
+                  "type": "string"
+                },
+                "costManagementScope": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "governance": {
+          "$ref": "#/$defs/Governance"
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Azure Policy assignments emitted at subscription or resource-group scope. Model allowlisting is a GA built-in and is strictly better than trying to enforce the same thing in your own tooling.",
+          "properties": {
+            "allowedModelPublishers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowedModelAssetIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "denyPreviewModels": {
+              "type": "boolean",
+              "default": true
+            },
+            "onlyAllowDirectFromAzure": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "Governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leastPrivilege",
+        "changeGates",
+        "audit",
+        "dataHandling"
+      ],
+      "description": "Starfish controls, expressed declaratively. Estate-level values are the baseline; a workspace may tighten them but never loosen them \u2014 the validator rejects any workspace override that widens a control.",
+      "properties": {
+        "leastPrivilege": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxRoleScope"
+          ],
+          "properties": {
+            "maxRoleScope": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "project",
+                "account"
+              ],
+              "default": "agent",
+              "description": "The widest scope any workspace grant may use. 'agent' is narrowest and is CLI-only to assign, which is precisely why this tool exists. Setting 'account' should require a change gate."
+            },
+            "downstreamGrants": {
+              "type": "string",
+              "enum": [
+                "explicit",
+                "inherit"
+              ],
+              "default": "explicit",
+              "description": "explicit = every grant a project's managed identity receives on Search, Storage or Cosmos must be enumerated in the workspace spec. Nothing is granted implicitly."
+            },
+            "separateProjectPerAccessPattern": {
+              "type": "boolean",
+              "const": true,
+              "description": "Not configurable. All unpublished agents in a Foundry project share one managed identity, so two agents needing different downstream access must be two projects. The validator fails any workspace declaring tools with divergent downstream grants."
+            }
+          }
+        },
+        "changeGates": {
+          "type": "array",
+          "description": "DEPLOY-TIME governance. Evaluated against the plan diff before apply. This is the orchestration layer \u2014 the place where a change to how agents are wired is reviewed, as distinct from reviewing an individual agent action at runtime.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "when",
+              "requires"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "description": {
+                "type": "string"
+              },
+              "when": {
+                "type": "string",
+                "description": "Predicate over the plan diff. Supported terms: access.groupWidened, access.scopeWidened, access.roleEscalated, tools.added, tools.effectIncludes(read|write|external), knowledge.sourceAdded, knowledge.classificationRaised, model.limitsRaised, model.limitsRemoved, feature.usesPreview, governance.controlWeakened, resource.localKeysEnabled. Combine with && and ||."
+              },
+              "requires": {
+                "$ref": "#/$defs/gateResolution"
+              },
+              "approvers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/email"
+                },
+                "description": "Required when requires = humanApproval. Approval is recorded against the plan hash in the audit log."
+              },
+              "threshold": {
+                "type": "object",
+                "description": "Optional numeric trigger. The gate only fires when the named quantity in the diff meets or exceeds the value.",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "runtimeGates": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "RUNTIME governance. Declared here, enforced in the tool layer \u2014 Azure has no native per-action approval for agents, so each gate compiles to a wrapper on the named tool (a Logic App approval step, or a confirm turn in the calling app). The spec's job is to make the requirement explicit and auditable, and to fail the build when a tool that needs a gate does not have one.",
+          "properties": {
+            "highStakes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "requires"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "description": "Matches tools[].name or a tool effect class, e.g. 'external' to cover every outbound tool."
+                  },
+                  "requires": {
+                    "type": "string",
+                    "enum": [
+                      "humanConfirm",
+                      "secondApprover",
+                      "denyAlways"
+                    ]
+                  },
+                  "threshold": {
+                    "type": "object",
+                    "description": "Gate fires only above this magnitude, e.g. { recordCount: 1 } to confirm every write, or { recordCount: 50 } to confirm only bulk operations.",
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "timeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 30
+                  },
+                  "onTimeout": {
+                    "type": "string",
+                    "enum": [
+                      "deny",
+                      "escalate"
+                    ],
+                    "default": "deny"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "destination",
+            "retentionDays"
+          ],
+          "properties": {
+            "destination": {
+              "type": "string",
+              "enum": [
+                "logAnalytics",
+                "storage",
+                "eventHub"
+              ]
+            },
+            "retentionDays": {
+              "type": "integer",
+              "minimum": 30
+            },
+            "includePromptContent": {
+              "type": "boolean",
+              "default": false,
+              "description": "Logging prompt and completion content makes the audit log a copy of whatever users typed into it. Forced false when dataClassification is confidential or restricted."
+            },
+            "specChangeLog": {
+              "type": "string",
+              "enum": [
+                "git"
+              ],
+              "description": "The spec repository's own history is the change audit trail. Every apply records the commit SHA, the plan hash, the gates that fired and who cleared them."
+            },
+            "recordGateDecisions": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "dataHandling": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Data is information, not instructions. These controls exist because retrieved documents and tool output are attacker-influenceable in a way the system prompt is not.",
+          "properties": {
+            "treatRetrievedContentAsUntrusted": {
+              "type": "boolean",
+              "default": true
+            },
+            "treatToolOutputAsUntrusted": {
+              "type": "boolean",
+              "default": true
+            },
+            "forbidPrivilegeEscalationFromContent": {
+              "type": "boolean",
+              "const": true,
+              "description": "Not configurable. No retrieved document or tool result may cause a tool to be invoked that the workspace's declared tool list does not already contain, nor raise an approval threshold. Compiles to a deny-list assertion in the agent wrapper and a test in the generated test suite."
+            },
+            "contentSafety": {
+              "type": "string",
+              "enum": [
+                "required",
+                "optional",
+                "off"
+              ],
+              "default": "required",
+              "description": "Emits the llm-content-safety policy at the gateway, covering prompts, completions and MCP tool traffic. Forced to 'required' when dataClassification is confidential or above."
+            }
+          }
+        }
+      }
+    },
+    "Workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "access",
+        "model"
+      ],
+      "description": "One logical AI workspace. Compiles to one Foundry project, one Entra security group, one or more dedicated knowledge indexes, a set of RBAC assignments at the narrowest available scope, and a gateway token limit.",
+      "properties": {
+        "apiVersion": {
+          "$ref": "#/$defs/apiVersion"
+        },
+        "kind": {
+          "const": "Workspace"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "estate",
+            "owner",
+            "dataClassification"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/identifier"
+            },
+            "estate": {
+              "$ref": "#/$defs/identifier"
+            },
+            "owner": {
+              "$ref": "#/$defs/email",
+              "description": "Accountable human. Becomes the default approver and the sponsor on any agent identity this workspace publishes."
+            },
+            "description": {
+              "type": "string"
+            },
+            "dataClassification": {
+              "$ref": "#/$defs/dataClassification"
+            },
+            "foundryResource": {
+              "$ref": "#/$defs/identifier",
+              "description": "Defaults to the estate's first Foundry resource."
+            }
+          }
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entraGroup",
+            "role",
+            "scope"
+          ],
+          "description": "One workspace, one group. There is deliberately no user list \u2014 'who can use this' must have exactly one answer, and that answer must be a group membership so that removal takes effect immediately via Graph rather than waiting on a reindex.",
+          "properties": {
+            "entraGroup": {
+              "type": "string",
+              "pattern": "^sg-[a-z0-9-]+$"
+            },
+            "createGroupIfMissing": {
+              "type": "boolean",
+              "default": true
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "Foundry Agent Consumer",
+                "Foundry User",
+                "Foundry Project Manager"
+              ],
+              "description": "Note: Foundry Agent Consumer does NOT grant invoke on a published Agent Application \u2014 that requires Foundry User. The validator raises an error if scope is agentApplication and role is Foundry Agent Consumer."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "project",
+                "agentApplication"
+              ],
+              "description": "agentApplication is narrowest and is assignable only via CLI/REST, not either portal."
+            },
+            "conditionalAccessPolicy": {
+              "type": "string",
+              "description": "Applied to the agent identity blueprint. Preview surface \u2014 the validator warns rather than fails if unavailable."
+            },
+            "reviewCadenceMonths": {
+              "type": "integer",
+              "enum": [
+                3,
+                6,
+                12
+              ],
+              "default": 6,
+              "description": "Emits an Entra access review on the group."
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "deployment"
+          ],
+          "properties": {
+            "deployment": {
+              "$ref": "#/$defs/identifier",
+              "description": "Must name an entry in estate.platform.modelDeployments. Workspaces reference shared deployments; they never create their own."
+            },
+            "limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Emitted as an AI Gateway token limit scoped to this project and deployment. Because Foundry quota is pooled at subscription level and not partitioned per project, these limits are the only thing preventing one workspace from starving the rest.",
+              "properties": {
+                "tokensPerMinute": {
+                  "type": "integer",
+                  "minimum": 1000
+                },
+                "quotaPeriod": {
+                  "type": "string",
+                  "enum": [
+                    "Hourly",
+                    "Daily",
+                    "Weekly",
+                    "Monthly",
+                    "Yearly"
+                  ]
+                },
+                "quotaTokens": {
+                  "type": "integer",
+                  "minimum": 1000
+                }
+              }
+            },
+            "semanticCache": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "knowledge": {
+          "type": "array",
+          "description": "Every workspace gets its own indexes. There is no shared store, by decision: cross-workspace sharing would require document-level permission filters, which remain a preview API, and the built-in AI Search agent tool queries with the project's managed identity and cannot carry a user identity at all. Duplicating a corpus is cheaper than being wrong about who can read it.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "store",
+              "index",
+              "source"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/identifier"
+              },
+              "store": {
+                "type": "string",
+                "const": "dedicated",
+                "description": "Not configurable. Dedicated index per workspace: isolation is structural, no token plumbing is required, relevance statistics stay uncontaminated by other workspaces' documents, and the whole path is GA."
+              },
+              "index": {
+                "type": "string",
+                "description": "Index name on the estate's Search service. Counts against the tier's index ceiling."
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adlsGen2",
+                      "blob",
+                      "sharepoint",
+                      "push"
+                    ]
+                  },
+                  "uri": {
+                    "type": "string"
+                  },
+                  "aclSource": {
+                    "type": "string",
+                    "enum": [
+                      "posix",
+                      "none"
+                    ],
+                    "description": "Only meaningful for adlsGen2. With a dedicated index the group grant already gates access, so document ACLs are defence in depth rather than the primary control."
+                  }
+                }
+              },
+              "trust": {
+                "type": "string",
+                "const": "untrusted",
+                "description": "Not configurable. Retrieved content is data, never instructions."
+              },
+              "refreshSchedule": {
+                "type": "string",
+                "description": "Cron expression for the indexer run."
+              }
+            }
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "effect"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/identifier"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "mcp",
+                  "openapi",
+                  "function",
+                  "codeInterpreter",
+                  "fileSearch"
+                ]
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write",
+                  "external"
+                ],
+                "description": "Declared blast radius. read = retrieves only. write = mutates a system of record. external = reaches outside the tenant. Drives which change gates and runtime gates apply, so understating it is the most consequential lie a spec can tell."
+              },
+              "auth": {
+                "type": "string",
+                "enum": [
+                  "agentIdentityToken",
+                  "managedIdentity",
+                  "apiKey"
+                ],
+                "default": "agentIdentityToken"
+              },
+              "downstreamGrants": {
+                "type": "array",
+                "description": "Every role this workspace's managed identity needs on a downstream resource. Required when governance.leastPrivilege.downstreamGrants is 'explicit'.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "resource",
+                    "role"
+                  ],
+                  "properties": {
+                    "resource": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "publish": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Publishing an agent creates an Agent Application with a fresh Entra agent identity, and permissions do NOT transfer. The generator treats publish as a state transition that re-emits every grant.",
+          "properties": {
+            "asAgentApplication": {
+              "type": "boolean",
+              "default": false
+            },
+            "agentName": {
+              "$ref": "#/$defs/identifier"
+            },
+            "sponsor": {
+              "$ref": "#/$defs/email",
+              "description": "Defaults to metadata.owner. Required by Entra Agent ID governance."
+            }
+          }
+        },
+        "governance": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Workspace-level tightening of the estate baseline. Any value that would widen an estate control is rejected by the validator rather than silently applied.",
+          "properties": {
+            "inherit": {
+              "type": "boolean",
+              "const": true
+            },
+            "additionalChangeGates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Governance/properties/changeGates/items"
+              }
+            },
+            "runtimeGates": {
+              "$ref": "#/$defs/Governance/properties/runtimeGates"
+            }
+          }
+        },
+        "chargebackCode": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

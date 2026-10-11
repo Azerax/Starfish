@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../estate.schema.json
+apiVersion: estate/v1
+kind: Workspace
+
+metadata:
+  name: hr-assist
+  estate: contoso
+  owner: hr-ops@contoso.com
+  description: Policy and handbook lookup for all staff.
+  dataClassification: internal
+  foundryResource: fdy-contoso-cc
+
+access:
+  entraGroup: sg-ai-hr-assist
+  createGroupIfMissing: true
+  role: Foundry User
+  scope: agentApplication
+  reviewCadenceMonths: 12
+
+model:
+  deployment: fast-chat
+  limits:
+    tokensPerMinute: 120000
+    quotaPeriod: Monthly
+    quotaTokens: 90000000
+  semanticCache: true
+
+knowledge:
+  - name: handbook
+    store: dedicated
+    index: idx-hr-handbook
+    source:
+      type: adlsGen2
+      uri: abfss://hr@stcontosohr.dfs.core.windows.net/handbook
+      aclSource: none
+    trust: untrusted
+    refreshSchedule: "0 5 * * 1"
+
+tools:
+  - name: hr-case-lookup
+    type: mcp
+    endpoint: https://mcp.contoso.com/hr
+    effect: read
+    auth: agentIdentityToken
+    downstreamGrants:
+      - resource: srch-contoso-cc/idx-hr-handbook
+        role: Search Index Data Reader
+
+publish:
+  asAgentApplication: true
+  agentName: hr-assistant
+  sponsor: hr-ops@contoso.com
+
+governance:
+  inherit: true
+
+chargebackCode: CC-2200

@@ -415,3 +415,86 @@ all five native gates re-run green.
 **What this pass does NOT change:** T-25. Self-authored execution gates a *sequence*; it is not a
 boundary. Once code runs as the user every in-process control is moot, and no further in-process work
 moves that line.
+
+---
+
+## Bounded semantics + the taskId deprecation ladder (2026-09-26) ✅
+
+Two boundaries admitted something Starfish had kept out until now: a **probabilistic input**, and an
+**external control plane**. The interesting part was not building them. It was that the codebase had
+already specified how, and the specification was a refusal.
+
+### The design was already written, as a comment saying "not here"
+
+`detectors.ts:1-8`, shipped months ago: a constrained semantic classifier *"is deliberately not
+implemented here — it would need a model call, and governance-core stays network-free and off the
+PDP's synchronous hot path by design."* And two lines later, where instead: new signals are *"INPUTS to
+the one risk scorer (score.ts), never a second scoring path."*
+
+So the obvious build — a `DecisionProvider` the PDP consults, returning allow/deny — was already
+ruled out in writing, twice, by a file whose entire job is to explain why it is small.
+`pdp.determinism.test.ts` pins 1000 identical calls to byte-identical JSON, which closes the
+question: a network call on that path is not a tradeoff, it is a test failure.
+
+Reconnaissance found several other things the brief assumed were missing and were not:
+`score.ts:104` already has a complete ordered reducer (`verdictFor`), `confidence.ts` already does
+robust aggregation with an ordered reason trail, `wikigate.ts` already binds approvals to a content
+hash with `sealApproval`/`verifyBinding`. Building any of those again would have produced a second
+engine, which is the failure mode the one-scorer rule exists to prevent.
+
+### What the two boundaries share
+
+**Monotonicity.** A semantic signal can raise a risk category and never lower it. An external plane
+can subtract authority and never add it. Denials compose; grants do not.
+
+That is the property that makes an untrusted input admissible at all. The worst a compromised,
+miscalibrated or actively hostile provider achieves is **lost availability, never lost authority** —
+and because `InquirySignal` has no allow/deny/ask/approve field anywhere on it, principle 7 is
+enforced by the shape of the type rather than by a reviewer noticing. A conformance test asserts the
+absence of those fields, which is a slightly odd test to write and the one most likely to catch a
+future well-meaning "just add a verdict field for convenience".
+
+The tempting symmetry — let a high-confidence benign signal *lower* a score — is rejected in ADR
+0002. It converts model confidence into permission, which turns provider compromise from an
+availability problem into a privilege-escalation path.
+
+### The deprecation ladder, and the trap inside it
+
+`ToolCall.taskId` has been optional since the beginning while principle 2 says all work is a task.
+Closing that needs a migration, and the ladder mirrors `ScopeMode` deliberately: `off` → `observe` →
+`required`.
+
+The subtlety that makes `observe` safe: a call that *claims* a taskId is still checked in every rung
+above `off`. Only a **missing** taskId is a legacy caller. A bad taskId is a violation, not a
+migration case — the same distinction `scopeMode: 'contracted'` already draws. So `observe` admits
+precisely what `off` admits and records more, which is why it cannot weaken the floor.
+
+**The trap was F-10 again, in a new costume.** A migration-readiness flag is exactly the kind of
+thing that reports "ready" because nothing was watching — the same unfalsifiable-disclosure shape as
+the hardcoded `scopeNonDeviation: false`. So readiness in `off` mode is always **false**, with the
+reason *"absence of recorded untasked calls is not evidence that none occur."* Getting that backwards
+would have made the 0.30 flip a coin toss dressed as a decision.
+
+Attribution over counting: the report names the offending agent+tool pairs, because a count tells you
+legacy callers exist and a name tells you whom to fix. Audited once per pair, mirroring the
+once-per-agent `agent-unrestricted` discipline, so a chatty agent cannot flood the ledger while every
+call is still counted. The default rung is frozen by a conformance test, so promoting it at 0.29 is a
+hand edit with a reviewer, not drift.
+
+### Documentation honesty — C-7 stays qualified
+
+Worth recording because the instinct runs the other way: **this ladder does not license upgrading the
+site copy.** C-7 in `SITE_CLAIMS_AUDIT.md` was "No task, no tool" asserted unconditionally while
+`enforceTaskBinding` shipped off. The ladder gives that a migration path; it does not flip the
+default. The qualification added to `index.html`, `README.md` and `SECURITY.md` in v0.27.0 remains
+correct and must survive until 0.30. A roadmap is not a shipped default.
+
+**Verified:** `npm run ci` green on Windows, all ten steps. 117 new tests across four files
+(inquiry 41, taskmigration 36, controlplane 33, determinism 6). `pdp.determinism` still green — the
+untasked tracker mutates a counter, not a return value, consistent with the `audit.append` and
+`execProvenance.note` side effects already on that path. `reachability.conformance` green.
+
+**What this pass does NOT change:** nothing calls `foldInquiry()` yet — it is reachable and tested but
+no production path folds a signal into a decision, so 0.28 decisions are identical to 0.27.0's. The
+calibration *schema* exists; the statistics do not. No Obot adapter and no Obot dependency. T-25
+unchanged.

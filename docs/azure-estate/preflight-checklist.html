@@ -1,0 +1,430 @@
+<title>Pre-Implementation Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#FCFCFB; --surface:#FFFFFF; --sunk:#F1F2F0;
+  --ink:#14161A; --ink-2:#4B5158; --muted:#868D93;
+  --rule:#D9DCDE; --rule-strong:#B4B9BC;
+  --accent:#1D5C8F; --accent-soft:#E3EDF5;
+  --block:#A3231A; --block-soft:#FAE7E4;
+  --test:#7A4A12; --test-soft:#F6EEE1;
+  --ok:#2F6B3F; --ok-soft:#E6F0E8;
+  --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#16181A; --surface:#1E2124; --sunk:#111315;
+  --ink:#EDEEEC; --ink-2:#C4C8CA; --muted:#8B9196;
+  --rule:#2F3336; --rule-strong:#4A4F53;
+  --accent:#79B4E3; --accent-soft:#182734;
+  --block:#EE8B7E; --block-soft:#331B18;
+  --test:#D3A45E; --test-soft:#2C2418;
+  --ok:#7FC08E; --ok-soft:#1B2A1F;
+}}
+:root[data-theme="dark"]{
+  --paper:#16181A; --surface:#1E2124; --sunk:#111315;
+  --ink:#EDEEEC; --ink-2:#C4C8CA; --muted:#8B9196;
+  --rule:#2F3336; --rule-strong:#4A4F53;
+  --accent:#79B4E3; --accent-soft:#182734;
+  --block:#EE8B7E; --block-soft:#331B18;
+  --test:#D3A45E; --test-soft:#2C2418;
+  --ok:#7FC08E; --ok-soft:#1B2A1F;
+}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;margin:0;padding:0 18px 72px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto}
+
+header{padding:44px 0 18px;border-bottom:2px solid var(--ink)}
+h1{font-size:30px;font-weight:700;letter-spacing:-.022em;margin:0 0 8px;line-height:1.08;text-wrap:balance}
+.sub{color:var(--ink-2);font-size:15.5px;margin:0;max-width:66ch}
+
+/* progress */
+.prog{position:sticky;top:0;z-index:5;background:var(--paper);padding:12px 0 10px;border-bottom:1px solid var(--rule);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.bar{flex:1 1 200px;height:6px;background:var(--sunk);border:1px solid var(--rule);border-radius:2px;overflow:hidden;min-width:140px}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+.pcount{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pcount b{color:var(--ink);font-weight:500}
+.pblock{font-family:var(--mono);font-size:12px;color:var(--block);white-space:nowrap}
+button{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--ink-2);background:var(--surface);border:1px solid var(--rule-strong);border-radius:2px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+section{padding-top:34px}
+h2{font-size:19px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px;display:flex;gap:12px;align-items:baseline;padding-bottom:8px;border-bottom:1px solid var(--rule-strong)}
+h2 .n{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--accent);flex:none}
+.slede{color:var(--muted);font-size:13.5px;margin:10px 0 0;max-width:72ch}
+
+ul.items{list-style:none;padding:0;margin:14px 0 0}
+li.item{display:grid;grid-template-columns:26px 1fr;gap:14px;padding:15px 0;border-bottom:1px solid var(--rule);align-items:start}
+li.item:last-child{border-bottom:none}
+.cb{appearance:none;-webkit-appearance:none;width:20px;height:20px;margin:2px 0 0;border:2px solid var(--rule-strong);border-radius:2px;background:var(--surface);cursor:pointer;flex:none;position:relative}
+.cb:hover{border-color:var(--accent)}
+.cb:checked{background:var(--ok);border-color:var(--ok)}
+.cb:checked::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--surface);border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+.cb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.body{min-width:0}
+.body h3{font-size:15px;font-weight:600;margin:0 0 4px;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+.body p{margin:0;font-size:14px;color:var(--ink-2);max-width:74ch}
+.body .why{margin-top:5px;font-size:13.5px;color:var(--muted)}
+.body code{font-family:var(--mono);font-size:12.5px;background:var(--sunk);border:1px solid var(--rule);border-radius:2px;padding:.06em .32em}
+li.item.done .body h3,li.item.done .body p{opacity:.5}
+
+.tag{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border:1px solid currentColor;border-radius:2px;white-space:nowrap;flex:none}
+.tag.block{color:var(--block);background:var(--block-soft)}
+.tag.test{color:var(--test);background:var(--test-soft)}
+.tag.info{color:var(--muted)}
+
+/* the drive map spec gets a panel, since it is the item everything else waits on */
+.panel{margin:14px 0 0;background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;padding:14px 16px}
+.panel h4{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+.panel ul{margin:0;padding-left:18px}
+.panel li{font-size:13.5px;color:var(--ink-2);margin-bottom:6px}
+.panel li b{color:var(--ink);font-weight:600}
+.panel p{margin:9px 0 0;font-size:13.5px;color:var(--muted)}
+.panel pre{font-family:var(--mono);font-size:11.5px;line-height:1.6;margin:10px 0 0;padding:11px 12px;background:var(--sunk);border:1px solid var(--rule);border-radius:2px;overflow-x:auto;color:var(--ink-2);white-space:pre}
+.panel .tw{overflow-x:auto;margin:10px 0 0}
+.panel table{border-collapse:collapse;width:100%;min-width:400px;font-size:12.5px;font-family:var(--mono)}
+.panel th{text-align:left;font-weight:500;color:var(--muted);padding:5px 10px 5px 0;border-bottom:1px solid var(--rule-strong);white-space:nowrap}
+.panel td{padding:5px 10px 5px 0;border-bottom:1px solid var(--rule);color:var(--ink-2);vertical-align:top}
+
+.foot{margin-top:44px;padding-top:18px;border-top:2px solid var(--ink);font-size:13px;color:var(--muted);max-width:76ch}
+
+@media (max-width:600px){
+  body{padding:0 14px 56px;font-size:14.5px}
+  h1{font-size:24px}
+  header{padding-top:30px}
+  li.item{grid-template-columns:24px 1fr;gap:11px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Pre-Implementation Checklist</h1>
+  <p class="sub">Everything to gather, decide and prove before drawing a single container. Most of it is the client's to answer — which is exactly why it belongs at the front of an engagement. It ends in one signed artefact: the folder-to-container mapping, approved by name and recorded as a governance decision.</p>
+</header>
+
+<div class="prog">
+  <div class="bar"><i id="fill"></i></div>
+  <span class="pcount" id="count"></span>
+  <span class="pblock" id="blockers"></span>
+  <button id="reset">Clear all</button>
+</div>
+
+<div id="body"></div>
+
+<p class="foot">Items marked <span class="tag block">blocking</span> stop the design, not just delay it — a wrong answer to any of them means redrawing rather than adjusting. Items marked <span class="tag test">by test</span> cannot be answered from documentation; the docs are either silent or contradict themselves, so they need an hour in a real tenant.</p>
+</div>
+
+<script>
+const SECTIONS = [
+  {
+    title: "Survey",
+    lede: "What has to be visible before anything is designed. All read-only, all safe to run in a first meeting.",
+    items: [
+      {
+        id: "tree", tag: "block", t: "Drive tree map",
+        p: "A permission-aware survey of the knowledge store: the folder tree with counts, sizes, age spread and file types per folder — and, for each folder, whether its <em>internal permissions are uniform</em>.",
+        why: "Everything downstream is built on folder paths, so the drive's shape is the access model. Without this you are designing against an imagined structure.",
+        panel: {
+          h: "What the map has to contain",
+          items: [
+            "<b>Tree to full depth</b>, with file count, total size, oldest and newest modified date, and dominant file types per folder. Depth and breadth tell you whether this is three levels or twelve.",
+            "<b>Permission uniformity per folder.</b> The one that matters most: a folder whose documents do not all share the same access can never be a clean slice, because indexing it flattens those differences. Flag every folder where ACLs vary internally.",
+            "<b>Mixed-sensitivity folders</b> — the case where a folder boundary is coarser than the access boundary it would have to carry.",
+            "<b>Duplicates and near-duplicates</b>, so the same document is not indexed into three containers under three names.",
+            "<b>Dead weight</b> — folders where nothing has changed in years. Usually the largest share, and excluding them shrinks cost and improves answers at the same time.",
+          ],
+          note: "The permission-variance column is the deliverable. A tree alone is a file listing; a tree plus permission variance tells you which folders can be boundaries and which cannot.",
+        },
+      },
+      {
+        id: "estate", tag: "block", t: "Scan the existing AI estate",
+        p: "Run a discovery scan of the tenant before assuming it is empty. Undeclared projects, agents nobody claims, key-based auth still enabled, groups granted at account scope.",
+        why: "Designing a clean estate next to an undocumented one produces two estates. The scan is also the finding that usually sells the engagement.",
+      },
+      {
+        id: "source", tag: "block", t: "Confirm what the drive actually is",
+        p: "Blob or ADLS Gen2, or SharePoint? Get the storage account and container name, or the site and library URL.",
+        why: "Blob and ADLS indexing is GA. SharePoint indexing is preview, needs a sign-up form, and Microsoft's own docs steer to alternatives for production. This fork changes what can be promised.",
+      },
+      {
+        id: "volume", tag: "info", t: "Size and growth rate",
+        p: "Total document count and volume, plus how fast it grows. Rough is fine.",
+        why: "Drives indexing cost, embedding spend and how often indexers need to run. Embedding the same corpus into several indexes multiplies that spend.",
+      },
+    ],
+  },
+  {
+    title: "Access model",
+    lede: "The decisions only the client can make. Get these wrong and the folders are wrong, and folders are expensive to change later.",
+    items: [
+      {
+        id: "audiences", tag: "block", t: "List the audiences, not the use cases",
+        p: "Who is allowed to see what. One Entra group per audience, named, with an owner who approves membership.",
+        why: "A container is an audience, not a project. Two jobs for the same people is one container with two agents; the same job for two audiences is two containers.",
+      },
+      {
+        id: "align", tag: "block", t: "Check the folders against the audiences",
+        p: "For every intended container, does a single folder contain exactly its documents and nothing else? Note every case where the answer is no.",
+        why: "Prefix scoping has no exclusion — a parent folder always contains its children. Where a boundary does not line up with a folder, either the documents move or the two groups merge into one audience. There is no third option.",
+      },
+      {
+        id: "owners", tag: "info", t: "Name an owner per container",
+        p: "An accountable person, not a team alias.",
+        why: "Someone has to approve change gates, sponsor a published agent identity and answer the access review. Without a name those all stall.",
+      },
+      {
+        id: "classification", tag: "info", t: "Classify each container",
+        p: "Public, internal, confidential or restricted.",
+        why: "Drives whether content safety is mandatory and whether prompt content may be logged — at confidential and above, logging prompts turns the audit trail into a copy of whatever people typed.",
+      },
+    ],
+  },
+  {
+    title: "Platform",
+    lede: "Azure facts that cap the design. Cheap to check, expensive to discover late.",
+    items: [
+      {
+        id: "tier", tag: "block", t: "AI Search tier",
+        p: "Which tier, and how many indexes are already in use.",
+        why: "Each agent's slice consumes an index, an indexer, a data source <em>and</em> a skillset, and all four share one ceiling: 50 on S1, 200 on S2 and S3. The tier caps how many agents-with-knowledge the estate can hold.",
+      },
+      {
+        id: "authoptions", tag: "block", t: "Search authOptions allows RBAC",
+        p: "Confirm the service is set to <code>Both</code> or role-based access, not the key-only default.",
+        why: "Under key-only auth every Entra-authenticated request is rejected outright, so the index collector returns nothing and the service looks empty rather than misconfigured.",
+      },
+      {
+        id: "foundry", tag: "info", t: "Foundry resources and key auth",
+        p: "Which resources exist, and whether <code>disableLocalAuth</code> is set on each.",
+        why: "Key-based auth bypasses Azure RBAC entirely. While it is on, every access control in the design is decorative.",
+      },
+      {
+        id: "models", tag: "info", t: "Model deployments and quota",
+        p: "Which models, which SKUs, and the current subscription quota.",
+        why: "32 model deployments per Foundry resource against 250 projects, and quota is pooled at subscription level rather than per project — so one workspace's batch job can starve the rest without a gateway limit.",
+      },
+      {
+        id: "gateway", tag: "info", t: "AI Gateway available",
+        p: "Whether an APIM instance exists or Foundry should provision one.",
+        why: "The only per-workspace token limit. Without it, model.limits in the spec has nowhere to be enforced.",
+      },
+    ],
+  },
+  {
+    title: "Permissions to run any of this",
+    lede: "Ask once, ahead of the engagement, in the words the client's admin will recognise. Finding out on the call costs more than the permission does.",
+    items: [
+      {
+        id: "reader", tag: "block", t: "Reader on the subscription",
+        p: "Covers Foundry accounts, projects, deployments, connections and every role assignment.",
+        why: "Everything else keys off what this returns. Without it there is nothing to scan from.",
+      },
+      {
+        id: "graph", tag: "block", t: "Directory.Read.All",
+        p: "Application permission on Microsoft Graph, for resolving group names and member counts.",
+        why: "There is no lower-privileged alternative for the bulk principal lookup. It is the one permission that gets questioned, so raise it first and describe it as read-only directory metadata.",
+      },
+      {
+        id: "foundryuser", tag: "info", t: "Foundry User on the projects to be scanned",
+        p: "Data-plane read for agents and their tool bindings.",
+        why: "Agents are not in ARM. Without this the scan cannot see undeclared workspaces at all, and an empty result reads as a clean tenant.",
+      },
+      {
+        id: "searchreader", tag: "info", t: "Reader on the Search service",
+        p: "Reader, specifically — not Search Index Data Reader.",
+        why: "Search Index Data Reader can query documents but cannot read index definitions. It is a surprising split and the likeliest cause of an empty index list.",
+      },
+    ],
+  },
+  {
+    title: "Settle by test",
+    lede: "Documentation is silent or self-contradictory on these. An hour in a trial tenant answers all of them at once.",
+    items: [
+      {
+        id: "lighthouse", tag: "test", t: "Does the Foundry portal work cross-tenant?",
+        p: "Delegate one trial tenant to another through Azure Lighthouse and run all four collectors.",
+        why: "ARM operations should work through delegation, but Lighthouse does not cover data-plane operations handled by a resource instance — and two of the four collectors are pure data plane. A negative answer changes the whole delivery model.",
+      },
+      {
+        id: "prefix", tag: "test", t: "Is blob prefix filtering server-side?",
+        p: "Index a folder inside a large container and watch whether the indexer enumerates the whole container.",
+        why: "Undocumented either way. Determines the cost and duration of every scan on a big drive.",
+      },
+      {
+        id: "agentjoin", tag: "test", t: "How do the two views of an agent join?",
+        p: "Publish one agent and read both the data-plane list and the ARM application list side by side.",
+        why: "Different identifiers, and no documented way to correlate them. Get it wrong and the access column is wrong for exactly the workspaces that were configured most carefully.",
+      },
+      {
+        id: "collector", tag: "test", t: "Prove the collectors against a real tenant",
+        p: "One Foundry resource, two projects, one index, one agent. Record the run so it becomes a fixture.",
+        why: "Every endpoint and api-version in the tooling is currently an assumption drawn from documentation. Recording the first successful run means the next API change is caught by a test rather than by a client.",
+      },
+    ],
+  },
+  {
+    title: "Governance baseline",
+    lede: "Agree these before deploying, not after the first incident. They are cheap now and contentious later.",
+    items: [
+      {
+        id: "gates", tag: "info", t: "Who approves a change",
+        p: "Named approvers for widening access, adding a write or external tool, and pointing a container at new material.",
+        why: "A gate with no named approver is a gate that gets waived under deadline pressure.",
+      },
+      {
+        id: "runtime", tag: "info", t: "Which actions need a human",
+        p: "Every tool that writes to a system of record or reaches outside the tenant, and what happens when an approval times out.",
+        why: "Azure has no native per-action approval for agents, so this is built rather than configured. Default to deny on timeout — an agent that proceeds because nobody answered is worse than one with no gate, because the gate created confidence.",
+      },
+      {
+        id: "audit", tag: "info", t: "Where the audit trail goes and for how long",
+        p: "Log Analytics workspace, retention, and whether prompt content is logged.",
+        why: "Logging prompt content makes the audit log a copy of everything users typed into it. At confidential and above, that is a bigger liability than the gap it fills.",
+      },
+      {
+        id: "rebuild", tag: "info", t: "Agree that scope changes rebuild",
+        p: "Narrowing a folder path does not remove documents already indexed under the wider one.",
+        why: "A scope change is a rebuild plus an indexer reset, not an edit. Put an alias in front of each index so agents keep working while it happens.",
+      },
+    ],
+  },
+  {
+    title: "Sign-off and record",
+    lede: "The end of discovery, and the artefact everything after it rests on. Not an email — a decision recorded against the plan, with a name on it.",
+    items: [
+      {
+        id: "mapping", tag: "block", t: "Customer signs off the drive-to-container mapping",
+        p: "Present the mapping as an explicit table — every folder, the container it feeds, and the audience that container serves — and have a named person on the client side approve it.",
+        why: "This is the document that answers \"why could the marketing assistant see that\" six months from now. Without a signature on the mapping, that question has no owner.",
+        panel: {
+          h: "What gets signed",
+          table: [
+            ["Folder", "Container", "Audience", "Contains"],
+            ["/marketing", "Marketing", "sg-ai-marketing", "1,240 docs"],
+            ["/hr/handbook", "HR assistant", "sg-ai-hr", "86 docs"],
+            ["/hr/payroll", "Payroll support", "sg-ai-payroll", "2,110 docs"],
+          ],
+          note: "One row per slice, with the document count as of the survey date. The count matters: it is what makes \"this is what you approved\" checkable later rather than a matter of recollection.",
+        },
+      },
+      {
+        id: "gate", tag: "block", t: "Record the approval as a governance decision",
+        p: "The sign-off is a change gate that fires on the mapping, resolved by a named approver, and written to the audit log against the plan hash and the commit that produced it.",
+        why: "An approval in an inbox is not evidence. An approval bound to a specific plan hash is — it says which mapping was approved, not merely that one was.",
+        panel: {
+          h: "The gate",
+          code: `- id: knowledge-mapping
+  description: The folder each container may read.
+  when: knowledge.sourceAdded || knowledge.pathChanged
+  requires: humanApproval
+  approvers:
+    - data-owner@client.com      # theirs, not yours
+  record:
+    planHash: true               # which mapping, not just that one was approved
+    commit: true
+    countsAsOf: true             # document counts at the time of signing`,
+          note: "It fires again on every later change, which is the point — the mapping is approved as a state, not as a policy.",
+        },
+      },
+      {
+        id: "drift", tag: "info", t: "Agree what happens to folders created later",
+        p: "A container's path is a recursive prefix, so anything added under it after sign-off is indexed automatically. Decide now who watches for that and how often the survey is repeated.",
+        why: "The signature covers documents that existed on the survey date. If someone creates <code>/marketing/confidential-2027</code> next month, the marketing container picks it up with nobody approving anything. This is the single most likely way a signed mapping quietly stops being true.",
+      },
+      {
+        id: "handover", tag: "info", t: "Hand over the spec, not just the deployment",
+        p: "The client keeps the spec files and the generated infrastructure, in their own repository.",
+        why: "It makes the mapping reviewable by someone who was not in the room, survives your involvement ending, and turns the next change into a diff rather than an archaeology exercise.",
+      },
+    ],
+  },
+];
+
+const KEY = "preflight-v1";
+let done = new Set();
+try {
+  const raw = localStorage.getItem(KEY);
+  if (raw) done = new Set(JSON.parse(raw));
+} catch { /* private window, cleared storage, or a host that blocks it */ }
+
+const save = () => {
+  try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch { /* nothing to do; ticks are a convenience */ }
+};
+
+const all = SECTIONS.flatMap(s => s.items);
+
+function renderPanel(pn) {
+  const parts = [`<h4>${esc(pn.h)}</h4>`];
+  if (pn.items) parts.push(`<ul>${pn.items.map(x => `<li>${x}</li>`).join("")}</ul>`);
+  if (pn.table) {
+    const [head, ...rows] = pn.table;
+    parts.push(`<div class="tw"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>` +
+      `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+  }
+  if (pn.code) parts.push(`<pre>${esc(pn.code)}</pre>`);
+  if (pn.note) parts.push(`<p>${pn.note}</p>`);
+  return `<div class="panel">${parts.join("")}</div>`;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function build() {
+  const body = document.getElementById("body");
+  body.innerHTML = SECTIONS.map((s, si) => `
+    <section>
+      <h2><span class="n">${String(si + 1).padStart(2, "0")}</span><span>${esc(s.title)}</span></h2>
+      <p class="slede">${esc(s.lede)}</p>
+      <ul class="items">
+        ${s.items.map(it => `
+          <li class="item" data-id="${it.id}">
+            <input type="checkbox" class="cb" id="cb-${it.id}" aria-labelledby="t-${it.id}">
+            <div class="body">
+              <h3 id="t-${it.id}"><span>${esc(it.t)}</span><span class="tag ${it.tag}">${
+                it.tag === "block" ? "blocking" : it.tag === "test" ? "by test" : "useful"
+              }</span></h3>
+              <p>${it.p}</p>
+              <p class="why">${it.why}</p>
+              ${it.panel ? renderPanel(it.panel) : ""}
+            </div>
+          </li>`).join("")}
+      </ul>
+    </section>`).join("");
+
+  for (const it of all) {
+    const cb = document.getElementById("cb-" + it.id);
+    cb.checked = done.has(it.id);
+    cb.addEventListener("change", () => {
+      cb.checked ? done.add(it.id) : done.delete(it.id);
+      save(); paint();
+    });
+  }
+  paint();
+}
+
+function paint() {
+  for (const it of all) {
+    document.querySelector(`[data-id="${it.id}"]`).classList.toggle("done", done.has(it.id));
+  }
+  const n = all.filter(i => done.has(i.id)).length;
+  const blockers = all.filter(i => i.tag === "block" && !done.has(i.id)).length;
+  document.getElementById("fill").style.width = (n / all.length * 100) + "%";
+  document.getElementById("count").innerHTML = `<b>${n}</b> of ${all.length} done`;
+  document.getElementById("blockers").textContent = blockers
+    ? `${blockers} blocking item${blockers === 1 ? "" : "s"} outstanding`
+    : "no blockers outstanding";
+  document.getElementById("blockers").style.color = blockers ? "var(--block)" : "var(--ok)";
+}
+
+document.getElementById("reset").onclick = () => {
+  done = new Set(); save();
+  for (const it of all) document.getElementById("cb-" + it.id).checked = false;
+  paint();
+};
+
+build();
+</script>
