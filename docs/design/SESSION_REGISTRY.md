@@ -1,6 +1,7 @@
 # Session registry: which agent sessions need you
 
-**Status:** built on branch `feat/session-registry` (2026-11-07). This is the data groundwork that the calm
+**Status:** built on branch `feat/session-registry` (2026-11-07), in review as PR #3 against `master`.
+Not in an npm release yet. The devlog post is `site/blog/every-yes-was-a-finding.html`. This is the data groundwork that the calm
 v2 and v3 screens in [UI_V2_V3_HERDR_STUDY.md](UI_V2_V3_HERDR_STUDY.md) need. Nothing in the UI uses it yet.
 
 ## What it adds
