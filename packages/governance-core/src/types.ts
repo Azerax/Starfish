@@ -50,6 +50,10 @@ export interface ToolCall {
    *  agent reads it back that text becomes context. Without lineage the PDP cannot tell a call the
    *  operator asked for from one a stored page talked the agent into. */
   memoryDerived?: boolean;
+  /** The agent session this call belongs to (e.g. Claude Code's `session_id`). Attribution only:
+   *  it is written to the audit so a decision can be traced to its session, and never authorizes,
+   *  widens or narrows anything. */
+  sessionId?: string;
 }
 
 /**
@@ -82,6 +86,8 @@ export interface AuditEvent {
   ts: string; seq: number; prevHash: string;
   actor: string; domain: AuditDomain; action: string;
   target?: string; decision?: 'allow' | 'deny'; reason?: string; riskTier?: RiskTier;
+  /** The agent session the event belongs to, when known (additive; older lines simply lack it). */
+  sessionId?: string;
   detail?: Record<string, unknown>;
   hash: string;
 }

@@ -120,7 +120,7 @@ export class PDP {
   decide(face: Face, call: ToolCall, bs: BoundarySet): Decision {
     if (this.safeMode) {
       const sd: Decision = { allow: false, reason: `safe-mode: ${this.safeModeReason || 'governance integrity failure'}` };
-      try { this.audit.append({ actor: call.agentId, domain: 'governance', action: `${face}:${call.tool}`, target: this.resourceOf(call), decision: 'deny', reason: sd.reason }); } catch { /* already failing closed */ }
+      try { this.audit.append({ actor: call.agentId, domain: 'governance', action: `${face}:${call.tool}`, target: this.resourceOf(call), decision: 'deny', reason: sd.reason, sessionId: call.sessionId }); } catch { /* already failing closed */ }
       return sd;
     }
     const d = face === 'egress' ? this.egress(call) : this.ingress(call, bs);
@@ -136,6 +136,7 @@ export class PDP {
         decision: d.allow ? 'allow' : 'deny',
         reason: d.reason,
         riskTier: d.riskTier,
+        sessionId: call.sessionId,
       });
     } catch {
       return { allow: false, reason: 'audit-write-failed (fail-closed)' };

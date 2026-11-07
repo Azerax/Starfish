@@ -54,7 +54,8 @@ export { isCatastrophicShell, commandStrings } from './shellguard';   // F-11: f
 export { ExecProvenance, isRunnerExecutable, isRunnerTool } from './execprovenance';   // Q12
 export { sha256 } from './hash';
 export { ServiceRegistry, type ServiceInfo } from './services';
-export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind } from './broker';
+export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind, type DecisionChannel } from './broker';
+export { SessionRegistry, deriveSessionState, sortByAttention, readSessionSnapshot, sessionViewsFromSnapshot, SESSION_ATTENTION_ORDER, type SessionState, type SessionRecord, type SessionView, type SessionAsk, type AskOutcome, type SessionObservation, type SessionEventKind, type SessionChange, type SessionRegistryOptions, type SessionSnapshot } from './sessions';
 export { saveJson, loadJson } from './persistence';
 export { classifyNode, promoteCluster, type CanvasNode, type NodeRoute, type PromoteResult } from './planner';
 export { ProviderRegistry, AdapterRegistry, ANTHROPIC, OPENAI, GOOGLE, OPENROUTER, LOCAL, AVAILABLE_PROVIDERS, DEFAULT_ADAPTERS, anthropicAdapter, openaiAdapter, googleAdapter, localAdapter, routerAdapter, type Provider, type ProviderKind, type AgentRuntimeAdapter, type ChatTurn, type ChatRole, type RuntimeRequest, type BuildRequestInput, type AuthScheme , STARFISH_TOOL_SCHEMAS, type ToolSchema } from './provider';

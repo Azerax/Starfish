@@ -6,7 +6,37 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Session registry: which Claude Code sessions need you.** The overlay daemon now records every hook
+  event and writes `.starfish/state/sessions.json`.
+  - Each session has a derived state: blocked, done, working, idle or ended. It also records its
+    project, branch, host, model, the call in flight, any open ask, and counts of allowed, asked and
+    denied calls.
+  - `starfish sessions [--json] [--watch]` lists them most urgent first.
+  - The sidecar adds `GET /v1/sessions` and a `sessions` event on `/v1/stream`. Both are scoped per
+    identity like pending decisions.
+  - `@starfish/ui` gains an optional `httpBridge().sessions()`.
+
+  The tracking is observation only. The decision is sent before anything is recorded, and a test pins
+  the decision as identical with and without tracking. See `docs/design/SESSION_REGISTRY.md`.
+- **Claude Code asks are mirrored into the broker** on a new `claude-code` channel, tagged with the
+  session. `resolve()` refuses them, because they are answered in Claude Code's own prompt. The new
+  `settle()` closes them with the observed outcome: `ran`, `not-run` or `superseded`. `settle()` is
+  refused for every other channel.
+- **`sessionId` on audit lines.** `ToolCall.sessionId` and `AuditEvent.sessionId` are new and optional,
+  and the PDP, hook session and broker write them. Lines without a session are byte-identical to before.
+- `starfish install --claude-code` (project and managed) also registers `SessionStart`,
+  `UserPromptSubmit`, `Stop` and `SessionEnd`, for tracking only. The hook shim forwards
+  `tool_use_id`, `cwd`, `permission_mode`, `model` and `source`, and never the prompt text.
+
 ### Fixed
+
+- **An approved ask was audited as a no-silent-execution violation.** When Starfish answered `ask` and the
+  person approved in Claude Code, the tool's `PostToolUse` had no allowed `PreToolUse` before it.
+  `HookSession` logged it as an `orphan-post` failure, and the monitor counted it. The hook session now
+  accepts exactly one `PostToolUse` per asked `tool_use_id`. Unknown, reused or missing ids are still
+  flagged.
 
 - **F-12 — an explicit allow policy silently disabled every risk floor.** `PDP.combine()` returned on
   `pol === 'allow'` *before* consulting `assessment.floors` or `assessment.hardDeny`, so one operator

@@ -187,6 +187,16 @@ app is from a read of `packages/desktop/app/src/` and `packages/desktop/src/` on
 broker, Starfish can't show the herd, whatever the screen looks like. That is the real gap herdr exposes,
 and it is backend work, not CSS.
 
+**Update (2026-11-07):** the first four rows now have their data. The work is on branch
+`feat/session-registry`, described in [SESSION_REGISTRY.md](SESSION_REGISTRY.md).
+- There is a session registry with a snapshot, `starfish sessions`, and `GET /v1/sessions` plus a
+  `sessions` stream event on the sidecar.
+- Hook asks are mirrored into the broker. They are still answered in Claude Code.
+- The "waiting on you" state and its timer come from the registry.
+- `sessionId` is recorded on audit lines.
+
+Approving from Starfish itself, seen markers and desktop push are still open.
+
 ## Faults found in today's UI along the way
 
 From the same read. Each was checked in code; none was fixed here.

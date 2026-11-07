@@ -4,7 +4,7 @@
 //   starfish govern <pack-dir> [--apply] [--approve=id1,id2]
 // `init` walks first-run setup (customizable install dir), seeds fail-closed governance, then launches
 // the UI. `govern` brings a skill/agent build under governance. Apache-2.0. Local-only.
-import { AuditLog, CapabilityLedger, loadGovernor, loadPolicies, savePolicies, explainPolicy, simulatePolicyChange } from '@starfish/governance-core';
+import { AuditLog, CapabilityLedger, loadGovernor, loadPolicies, savePolicies, explainPolicy, simulatePolicyChange, SessionRegistry, DecisionBroker, sessionViewsFromSnapshot } from '@starfish/governance-core';
 import { govern, seedInstall, seedOverlay, isInitialized, readLock } from '@starfish/governance-overlay';
 import { resolve, join, dirname, sep } from 'node:path';
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, chmodSync } from 'node:fs';
@@ -23,7 +23,7 @@ const flag = (name) => argv.includes(`--${name}`);
 const opt = (name, def) => { const a = argv.find((x) => x.startsWith(`--${name}=`)); if (a) return a.split('=').slice(1).join('='); const i = argv.indexOf(`--${name}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : def; };
 
 function usage() {
-  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]\n  starfish serve  [--root <governed-root>] [--port N]   (loopback governance API for embedding)\n  starfish embed  [init|remove] [--dir <target>] [--sdk] [--dashboard]   (provision Starfish External into a repo)');
+  console.error('usage:\n  starfish init   [--dir <path>] [--operator <name>] [--theme fleet|ops] [--yes] [--no-launch]\n  starfish govern <pack-dir> [--apply] [--approve=id1,id2]\n  starfish serve  [--root <governed-root>] [--port N]   (loopback governance API for embedding)\n  starfish embed  [init|remove] [--dir <target>] [--sdk] [--dashboard]   (provision Starfish External into a repo)\n  starfish sessions [--root <project>] [--json] [--watch] [--all]   (governed Claude Code sessions, most urgent first)');
   process.exit(2);
 }
 
@@ -170,7 +170,13 @@ async function runDaemon() {
   // Boundary: the agent may read/write the PROJECT tree, but NEVER the .starfish governance home (deny).
   const boundaryFor = () => ({ visibility: [projectRoot], write: [projectRoot], deny: [home] });
   const wp = writeProfileFor(projectRoot); const bk = backupsFor(projectRoot);
-  const daemon = new PdpDaemon(governor, boundaryFor, undefined, { writeProfile: wp, projectRoot, backupDir: join(home, 'backups'), backups: bk });
+  // Session tracking (observation only): the registry snapshot at state/sessions.json is what
+  // `starfish sessions`, `starfish serve` and the desktop app read. The broker that mirrors Claude Code
+  // asks is in-memory on purpose: state/decisions.json belongs to `starfish serve`, and two processes
+  // writing one file would overwrite each other's pending decisions.
+  const sessions = new SessionRegistry({ persistPath: join(home, 'state', 'sessions.json') });
+  const askBroker = new DecisionBroker(governor.audit);
+  const daemon = new PdpDaemon(governor, boundaryFor, undefined, { writeProfile: wp, projectRoot, backupDir: join(home, 'backups'), backups: bk }, { sessions, broker: askBroker });
   const sock = pdpEndpoint(projectRoot);
   await daemon.listen(sock);
   try { writeFileSync(pidFile(projectRoot), String(process.pid)); } catch { /* noop */ }
@@ -257,7 +263,10 @@ async function runHook() {
   const ev = event || payload.hook_event_name || '';
   const isPre = ev === 'PreToolUse';
   const sessionId = payload.session_id || '';
-  const hp = { hook_event_name: ev, tool_name: payload.tool_name, tool_input: payload.tool_input, session_id: sessionId };
+  // Descriptive fields go along so the daemon can say which session is doing what (session registry).
+  // The prompt text and transcript path are NOT forwarded: nothing in Starfish needs them.
+  const hp = { hook_event_name: ev, tool_name: payload.tool_name, tool_input: payload.tool_input, session_id: sessionId,
+    tool_use_id: payload.tool_use_id, cwd: payload.cwd, permission_mode: payload.permission_mode, model: payload.model, source: payload.source };
   // Governance is opt-in PER PROJECT. Managed hooks fire machine-wide, so a project that has not been
   // brought under Starfish (no .starfish) passes through — we never brick ungoverned repos. Once a repo
   // is governed (.starfish present), enforcement is strict and fail-closed.
@@ -338,6 +347,10 @@ function managedPolicy() {
       PostToolUse: [hk('PostToolUse')],
       ConfigChange: [life('ConfigChange')],
       SessionStart: [life('SessionStart')],
+      // Observation only (session registry): who is working, who finished, who ended.
+      UserPromptSubmit: [life('UserPromptSubmit')],
+      Stop: [life('Stop')],
+      SessionEnd: [life('SessionEnd')],
     },
   };
 }
@@ -403,6 +416,9 @@ function installManaged() {
 }
 
 const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'];
+// Lifecycle events feed the session registry only (observation; they never block). No matcher: these
+// events do not take one.
+const LIFECYCLE_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop', 'SessionEnd'];
 function runInstall() {
   if (flag('managed')) { installManaged(); return; }
   const projectRoot = resolve(opt('root') || process.cwd());
@@ -417,10 +433,15 @@ function runInstall() {
     arr.push({ matcher: '*', hooks: [{ type: 'command', command: `starfish hook --event ${ev} --root "${projectRoot}"`, timeout: 10000 }] });
     cfg.hooks[ev] = arr;
   }
+  for (const ev of LIFECYCLE_EVENTS) {
+    const arr = (cfg.hooks[ev] || []).filter((g) => !JSON.stringify(g).includes('starfish hook'));
+    arr.push({ hooks: [{ type: 'command', command: `starfish hook --event ${ev} --root "${projectRoot}"`, timeout: 10000 }] });
+    cfg.hooks[ev] = arr;
+  }
   cfg.statusLine = { type: 'command', command: `starfish statusline --root "${projectRoot}"` };
   writeFileSync(p, JSON.stringify(cfg, null, 2));
   console.log('  Installed Starfish hooks + status line -> ' + p);
-  console.log('  Events: ' + HOOK_EVENTS.join(', ') + ' (deny-by-default, fail-closed).');
+  console.log('  Events: ' + HOOK_EVENTS.join(', ') + ' (deny-by-default, fail-closed); ' + LIFECYCLE_EVENTS.join(', ') + ' (session tracking, observe-only).');
   console.log('  Start the PDP:  starfish daemon --root "' + projectRoot + '"');
 }
 function runUninstall() {
@@ -584,6 +605,62 @@ async function runEmbed() {
 }
 
 
+// ---- sessions: which governed Claude Code sessions need you (reads the daemon's snapshot) ----
+const GLYPH = { blocked: '◆', done: '✓', working: '◐', idle: '○', ended: '·' };
+function ago(iso, now) {
+  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60); if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60); return h < 48 ? h + 'h' : Math.floor(h / 24) + 'd';
+}
+function waited(iso, now) { const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function sessionLines(views, now) {
+  const name = (v) => v.projectRoot ? v.projectRoot.split(/[\\/]/).filter(Boolean).pop() : (v.cwd || '?');
+  const label = (v) => (v.agentId + '  ' + name(v) + (v.branch ? ' (' + v.branch + ')' : '')).padEnd(46);
+  const out = [];
+  if (!views.length) { out.push('  No governed sessions seen yet. They appear once Claude Code runs in a governed project with the daemon up.'); return out; }
+  const needs = views.filter((v) => v.state === 'blocked');
+  const rest = views.filter((v) => v.state !== 'blocked');
+  if (needs.length) {
+    out.push('  needs you');
+    for (const v of needs) {
+      const a = v.pendingAsk;
+      const inProject = a.target && v.projectRoot && a.target.startsWith(v.projectRoot) && a.target.length > v.projectRoot.length;
+      const target = a.target ? (inProject ? a.target.slice(v.projectRoot.length + 1) : a.target).slice(0, 60) : '';
+      out.push('  ' + GLYPH.blocked + ' ' + label(v) + waited(a.since, now).padStart(6) + '  ' + a.tool + (target ? ': ' + target : '') + (a.riskTier ? '  [' + a.riskTier + ']' : ''));
+    }
+    out.push('    Answer in that Claude Code window; Starfish records what happens.');
+  } else {
+    out.push('  Nothing needs you.');
+  }
+  if (rest.length) {
+    out.push('');
+    out.push('  everyone else');
+    for (const v of rest) {
+      const what = v.state === 'working' ? 'working' + (v.currentTool ? ' · ' + v.currentTool : '')
+        : v.state === 'done' ? 'finished ' + ago(v.stoppedAt || v.lastActiveTs, now) + ' ago'
+        : v.state === 'ended' ? 'ended ' + ago(v.endedAt || v.lastActiveTs, now) + ' ago'
+        : 'idle ' + ago(v.lastActiveTs, now);
+      out.push('  ' + GLYPH[v.state] + ' ' + label(v) + '  ' + what);
+    }
+  }
+  return out;
+}
+function runSessions() {
+  const projectRoot = resolve(opt('root') || process.cwd());
+  const snap = join(overlayHome(projectRoot), 'state', 'sessions.json');
+  const read = () => sessionViewsFromSnapshot(snap, { includeEnded: flag('all') });
+  if (flag('json')) { process.stdout.write(JSON.stringify(read(), null, 2) + '\n'); return; }
+  const render = () => sessionLines(read(), Date.now()).join('\n');
+  if (!flag('watch')) { console.log(render()); return; }
+  let last = '';
+  const draw = () => {
+    const r = render();
+    if (r !== last) { last = r; process.stdout.write('\x1b[2J\x1b[H' + r + '\n\n  (watching ' + snap + ', Ctrl-C to stop)\n'); }
+  };
+  draw(); setInterval(draw, 1000);
+}
+
 function policyDir() {
   const R = resolve(opt('root') || process.cwd());
   if (existsSync(join(R, 'governance', 'policies.json'))) return join(R, 'governance');
@@ -647,4 +724,5 @@ else if (cmd === 'statusline') runStatusline();
 else if (cmd === 'serve') await runServe();
 else if (cmd === 'embed') await runEmbed();
 else if (cmd === 'policy') runPolicy();
+else if (cmd === 'sessions') runSessions();
 else usage();

@@ -4,6 +4,15 @@ export const WIRE = 1;
 export interface PendingItem { id: string; tool: string; actor: string; target?: string; reason?: string; riskTier?: string }
 export interface BudgetItem { scope: string; status: string; usd: number; usdLimit: number }
 export interface MonitorView { counters: { denials: number; boundaryEscapes: number; hashMismatches: number; budgetHard: number; orphanPosts: number; casualties: number }; safeMode: boolean }
+/** One agent session as the sidecar reports it (GET /v1/sessions, and the 'sessions' stream event).
+ *  `state` is already ordered for attention: blocked, done, working, idle. */
+export interface SessionItem {
+  sessionId: string; agentId: string; client: string; state: 'blocked' | 'done' | 'working' | 'idle' | 'ended';
+  projectRoot?: string; cwd?: string; branch?: string; host?: string; model?: string;
+  startedAt: string; lastActiveTs: string; currentTool?: string; stoppedAt?: string;
+  pendingAsk?: { decisionId?: string; tool: string; target?: string; riskTier?: string; reason: string; since: string };
+  counts: { allowed: number; asked: number; denied: number };
+}
 export interface StreamEvent { type: string; data: unknown }
 export interface UiBridge {
   health(): Promise<{ ok: boolean; wire: number }>;
@@ -11,6 +20,9 @@ export interface UiBridge {
   audit(): Promise<unknown[]>;
   budgets(): Promise<BudgetItem[]>;
   monitor(): Promise<MonitorView>;
+  /** Agent sessions, most urgent first. Asks shown here are answered in the agent's own window.
+   *  Optional so a bridge written before sessions existed still satisfies this interface. */
+  sessions?(): Promise<SessionItem[]>;
   resolve(id: string, verdict: 'approve' | 'deny', by: string): Promise<{ ok: boolean; reason: string }>;
   /** Live push subscription (SSE over fetch — the token stays in the Authorization header, never a query
    *  string). Auto-reconnects with exponential backoff. Returns an unsubscribe function. */
@@ -29,6 +41,7 @@ export function httpBridge(opts: { url: string; tokens: Record<string, string> }
     async audit() { try { return (await get('/v1/audit')) as unknown[]; } catch { return []; } },
     async budgets() { try { return (await get('/v1/budgets')) as BudgetItem[]; } catch { return []; } },
     async monitor() { try { return (await get('/v1/monitor')) as MonitorView; } catch { return { counters: { denials: 0, boundaryEscapes: 0, hashMismatches: 0, budgetHard: 0, orphanPosts: 0, casualties: 0 }, safeMode: false }; } },
+    async sessions() { try { return (await get('/v1/sessions')) as SessionItem[]; } catch { return []; } },
     async resolve(id, verdict, by) {
       try {
         const r = await fetch(opts.url + `/v1/decisions/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-starfish-wire': String(WIRE), authorization: `Bearer ${opts.tokens[by] ?? anyTok()}` }, body: JSON.stringify({ verdict }) });
