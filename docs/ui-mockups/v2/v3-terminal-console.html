@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfish v3 Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* MOCKUP ONLY. A browser imitation of a terminal UI ("starfish console"), fake data.
+   In a real terminal the colours come from the terminal's own palette (like herdr's "terminal" theme);
+   these values are Starfish's Calm-dark tokens so the two surfaces read as one product. */
+:root {
+  --term: #121315; --side: #121315; --row: #1e2024; --sel: #2a2d35; --dim: #33363c;
+  --ov0: #6b6f78; --ov1: #8b8f98; --sub: #a2a5ad; --text: #e9eaec;
+  --accent: #6f9bff; --ask: #b98bff; --ok: #4ec98a; --warn: #e0b24b; --deny: #ff6b6b; --teal: #5fd3c6; --mauve: #c49bff;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: #0b0c0e; font: 13px/20px var(--mono); color: var(--text); overflow: hidden; display: grid; place-items: center; }
+.win { width: 1400px; height: 860px; background: var(--term); border: 1px solid #2a2c31; border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: 30px 1fr; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+.chrome { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #17181b; border-bottom: 1px solid #24262b; color: var(--ov1); font-size: 12px; }
+.chrome i { width: 11px; height: 11px; border-radius: 50%; background: #3a3d44; display: inline-block; }
+.chrome .t { margin-left: 10px; }
+.screen { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: 1fr 22px; min-height: 0; position: relative; }
+
+/* sidebar: herdr anatomy, Starfish content */
+.side { border-right: 1px solid var(--dim); padding: 6px 0; display: flex; flex-direction: column; min-height: 0; }
+.h { padding: 0 10px; color: var(--ov0); font-weight: 700; display: flex; justify-content: space-between; }
+.h .r { font-weight: 400; color: var(--ov0); }
+.h .r b { color: var(--accent); font-weight: 400; }
+.sp { padding: 0 10px; white-space: pre; }
+.sp.cur { background: var(--row); }
+.sp .n { color: var(--ov0); }
+.sp .br { color: var(--ov0); }
+.sp.cur .br { color: var(--mauve); }
+.foot { padding: 0 10px; color: var(--ov0); display: flex; justify-content: space-between; margin-top: 4px; }
+.div { border-top: 1px solid var(--dim); margin: 6px 0; }
+.ag { padding: 0 10px; white-space: pre; }
+.ag.cur { background: var(--row); }
+.ag .m { color: var(--ov0); }
+.ag .s { float: right; }
+.collapse { margin-top: auto; padding: 0 10px; color: var(--ov0); text-align: right; }
+.mach { padding: 0 10px; white-space: pre; font-weight: 700; display: flex; justify-content: space-between; }
+.mach span:last-child { font-weight: 400; }
+.dimmed { opacity: .45; }
+.b { color: var(--ask); } .w { color: var(--warn); } .d { color: var(--teal); } .i { color: var(--ok); } .u { color: var(--ov0); } .x { color: var(--deny); }
+.ok { color: var(--ok); } .warnc { color: var(--warn); } .acc { color: var(--accent); }
+
+/* main */
+.main { display: grid; grid-template-rows: 22px auto auto 1fr; min-height: 0; }
+.box.fill { margin-bottom: 10px; margin-top: 16px; min-height: 0; display: flex; flex-direction: column; }
+.live { overflow: hidden; min-height: 0; }
+.live div { display: grid; grid-template-columns: 74px 52px 170px 64px 104px 300px 1fr; white-space: nowrap; color: var(--sub); }
+.live div span { overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+.live .t { color: var(--ov0); }
+.live .r { color: var(--ov0); }
+.chrome .mock { margin-left: auto; color: #5a5d64; }
+.tabs { display: flex; background: var(--row); }
+.tabs span { padding: 0 16px; color: var(--ov0); }
+.tabs span.on { background: var(--accent); color: #0b1220; font-weight: 700; }
+.tabs .rt { margin-left: auto; color: var(--ov0); padding-right: 12px; }
+
+.box { border: 1px solid var(--dim); margin: 10px 12px 0; position: relative; padding: 8px 12px 6px; }
+.box.focus { border-color: var(--accent); }
+.box > .title { position: absolute; top: -11px; left: 10px; background: var(--term); padding: 0 6px; color: var(--ov1); }
+.box.focus > .title { color: var(--accent); font-weight: 700; }
+.box > .rtitle { position: absolute; top: -11px; right: 10px; background: var(--term); padding: 0 6px; color: var(--ov0); }
+
+table { border-collapse: collapse; width: 100%; }
+td, th { padding: 0 10px 0 0; text-align: left; white-space: nowrap; font-weight: 400; }
+th { color: var(--ov0); }
+tr.sel td { background: var(--sel); }
+tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.risk60 { color: var(--warn); } .risk40 { color: #c9cf6a; } .risk90 { color: var(--deny); }
+
+.detail { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.k { color: var(--ov0); }
+.add { color: var(--ok); } .del { color: var(--deny); }
+pre { margin: 0; font: inherit; white-space: pre; }
+.diff { color: var(--sub); }
+.diff .hl { color: var(--text); }
+.actions { margin-top: 8px; display: flex; gap: 22px; color: var(--sub); }
+.key { color: var(--accent); font-weight: 700; }
+.key.deny { color: var(--deny); } .key.appr { color: var(--ok); }
+
+/* bottom bar: mode pill + key hints, status on the right (herdr's mode bar) */
+.bar { grid-column: 1 / 3; display: flex; align-items: center; background: var(--row); white-space: nowrap; }
+.pill { background: var(--mauve); color: #17111f; font-weight: 700; padding: 0 8px; margin-right: 10px; }
+.hint { margin-right: 14px; color: var(--ov0); }
+.hint b { color: var(--accent); }
+.status { margin-left: auto; padding-right: 10px; color: var(--ov0); }
+
+/* go-to picker overlay */
+.picker { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); width: 860px; background: var(--term); border: 1px solid var(--accent); padding: 8px 0 6px; display: none; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+body.goto .picker { display: block; }
+body.goto .main, body.goto .side { opacity: .35; }
+.picker .title { position: absolute; top: -11px; left: 14px; background: var(--term); padding: 0 6px; color: var(--accent); font-weight: 700; }
+.pk { padding: 0 14px; white-space: pre; display: grid; grid-template-columns: 1fr 120px 150px; }
+.pk.selrow { background: var(--accent); color: #0b1220; font-weight: 700; }
+.pk.selrow * { color: #0b1220 !important; }
+.pk .ws { font-weight: 700; }
+.pk .tr { color: var(--ov0); }
+.pk-search { padding: 0 14px 6px; display: flex; justify-content: space-between; color: var(--ov0); }
+.pk-search b { color: var(--text); font-weight: 400; }
+.pk-foot { border-top: 1px solid var(--dim); margin-top: 6px; padding: 4px 14px 0; color: var(--ov0); white-space: pre; }
+.note { position: fixed; right: 14px; bottom: 10px; font-size: 11px; color: #555; }
+body, pre, .details { font-variant-ligatures: none; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="chrome"><i></i><i></i><i></i><span class="t">starfish console — laptop — 140×42</span><span class="mock">v3 mockup · fake data · press g for go to</span></div>
+  <div class="screen">
+
+    <aside class="side">
+      <div class="h"><span>spaces</span><span class="r">governed <span class="ok">●</span></span></div>
+      <div class="sp cur"><span class="n">1</span> <span class="b">●</span> <b>starfish</b>
+    <span class="br">fix/serve-verdict… ↑0 ↓0</span></div>
+      <div class="sp"><span class="n">2</span> <span class="b">●</span> billing-api
+    <span class="br">feat/intake · build-01</span></div>
+      <div class="sp"><span class="n">3</span> <span class="d">✓</span> mobile-app
+    <span class="br">main</span></div>
+      <div class="sp"><span class="n">4</span> <span class="i">○</span> docs-site
+    <span class="br">main</span></div>
+      <div class="sp dimmed"><span class="n">5</span> <span class="u">·</span> homelab
+    <span class="br">lab-pi · reconnecting</span></div>
+      <div class="foot"><span>+ new</span><span>menu</span></div>
+      <div class="div"></div>
+      <div class="h"><span>agents</span><span class="r"><b>priority</b></span></div>
+      <div class="ag cur"><span class="b">●</span> <span class="m">local · starfish</span>
+  <b>claude</b>           <span class="b">blocked 0:42</span></div>
+      <div class="ag"><span class="b">●</span> <span class="m">build-01 · billing</span>
+  claude           <span class="b">blocked 4:10</span></div>
+      <div class="ag"><span class="b">●</span> <span class="m">local · starfish</span>
+  codex            <span class="b">blocked 0:08</span></div>
+      <div class="ag"><span class="d">✓</span> <span class="m">local · mobile-app</span>
+  claude              <span class="d">done</span></div>
+      <div class="ag"><span class="w">◐</span> <span class="m">local · starfish</span>
+  worker           <span class="w">working</span></div>
+      <div class="ag"><span class="w">◐</span> <span class="m">build-01 · billing</span>
+  worker           <span class="w">working</span></div>
+      <div class="ag"><span class="x">×</span> <span class="m">build-01 · billing</span>
+  codex             <span class="x">denied</span></div>
+      <div class="ag"><span class="i">○</span> <span class="m">local · docs-site</span>
+  claude              <span class="i">idle</span></div>
+      <div class="div"></div>
+      <div class="h"><span>budget</span><span class="r">today</span></div>
+      <div class="sp">global <span class="ok">━━━━━━━━━━</span><span class="u">━━━━━━</span> $6.40/10</div>
+      <div class="sp">worker <span class="x">━━━━━━━━━━━━━━━━</span> <span class="x">$4.10/4</span></div>
+      <div class="collapse">«</div>
+    </aside>
+
+    <section class="main">
+      <div class="tabs"><span class="on">approvals 3</span><span>activity</span><span>audit</span><span>budgets</span><span>policy</span><span class="rt">chain ✓ 1,204 · sweep 11:36:57</span></div>
+
+      <div class="box">
+        <span class="title">waiting on you · oldest first</span>
+        <span class="rtitle">tolerance low · asks above 30</span>
+        <table>
+          <tr><th>wait</th><th>risk</th><th>agent</th><th>where</th><th>tool</th><th>target</th></tr>
+          <tr><td class="b">4:10</td><td class="risk60">heightened 60</td><td>claude</td><td>build-01 · billing</td><td>net.fetch</td><td>https://api.example.com/v2/leads</td></tr>
+          <tr class="sel"><td class="b">0:42</td><td class="risk60">heightened 60</td><td><b>claude</b></td><td>local · starfish</td><td>git_commit</td><td>fix/serve-verdict-validation-governor</td></tr>
+          <tr><td class="b">0:08</td><td class="risk40">noted 40</td><td>codex</td><td>local · starfish</td><td>fs.write</td><td>../governance-core/src/floors.ts</td></tr>
+        </table>
+      </div>
+
+      <div class="box focus" style="margin-top:16px">
+        <span class="title"> claude wants git_commit </span>
+        <span class="rtitle">session 7f3a · role Execution · requested 11:36:55</span>
+        <div class="detail">
+          <div>
+<pre><span class="k">message</span>  fix(governance-core): F-12 -- an allow policy
+         silently disabled every risk floor
+<span class="k">files</span>    3 changed  <span class="add">+48</span> <span class="del">-11</span>
+
+<span class="k">why</span>      risk 60 is over your tolerance (low: asks above 30)
+         proposer ≠ approver: claude cannot approve itself
+<span class="k">rule</span>     risk-tier high → ask   <span class="acc">e explain</span>
+
+<span class="k">boundary</span> read  /proj
+         write /proj/.worktrees/worker
+<span class="k">may use</span>  fs.read  fs.write  <span class="b">[git_commit]</span>   deny-by-default
+
+<span class="k">recent</span>   11:36:41 <span class="ok">allow</span> fs.write floors.ts
+         11:36:12 <span class="ok">allow</span> shell npm test -- floors
+         11:35:02 <span class="x">deny </span> net.fetch registry.example.org</pre>
+          </div>
+          <div>
+<pre class="diff"><span class="k">packages/governance-core/src/floors.ts</span>
+<span class="hl">@@ -41,9 +41,14 @@ export function applyFloors(</span>
+   const floor = floorFor(call);
+<span class="del">-  if (policy.verdict === 'allow') return policy;</span>
+<span class="add">+  // F-12: an allow policy must never lower a floor.</span>
+<span class="add">+  if (policy.verdict === 'allow' &amp;&amp; floor) {</span>
+<span class="add">+    return { ...floor, reason: 'risk floor holds' };</span>
+<span class="add">+  }</span>
+   return policy;
+
+<span class="k">packages/governance-core/src/pdp.ts</span>        <span class="add">+6</span> <span class="del">-2</span>
+<span class="k">packages/governance-core/test/floors.test.ts</span> <span class="add">+33</span> <span class="del">-0</span>
+<span class="k">                          </span><span class="acc">tab</span> <span class="k">next file</span>  <span class="acc">f</span> <span class="k">full diff</span></pre>
+          </div>
+        </div>
+        <div class="actions">
+          <span><span class="key appr">a</span> approve</span>
+          <span><span class="key deny">d</span> deny</span>
+          <span><span class="key">r</span> approve/deny with a reason</span>
+          <span><span class="key">j k</span> next / previous ask</span>
+          <span><span class="key">o</span> oldest waiting</span>
+          <span><span class="key">enter</span> open agent's terminal</span>
+        </div>
+      </div>
+
+      <div class="box fill">
+        <span class="title">live · all agents</span>
+        <span class="rtitle">last 10 · full stream on activity</span>
+        <div class="live">
+          <div><span class="t">11:37:02</span><span class="ok">allow</span><span>build-01 · billing</span><span>worker</span><span>shell</span><span>npm test -- intake</span><span class="r">inside boundary</span></div>
+          <div><span class="t">11:36:58</span><span class="ok">allow</span><span>local · starfish</span><span>worker</span><span>fs.read</span><span>packages/desktop/app/src/**</span><span class="r">inside boundary</span></div>
+          <div><span class="t">11:36:55</span><span class="b">ask</span><span>local · starfish</span><span>claude</span><span>git_commit</span><span>fix/serve-verdict-validation-governor</span><span class="r">risk 60 · waiting on you</span></div>
+          <div><span class="t">11:36:51</span><span class="b">ask</span><span>local · starfish</span><span>codex</span><span>fs.write</span><span>../governance-core/src/floors.ts</span><span class="r">outside write boundary</span></div>
+          <div><span class="t">11:36:41</span><span class="ok">allow</span><span>local · starfish</span><span>claude</span><span>fs.write</span><span>floors.ts</span><span class="r">inside boundary</span></div>
+          <div><span class="t">11:36:30</span><span class="x">deny</span><span>build-01 · billing</span><span>codex</span><span>secrets.read</span><span>.env</span><span class="r">hard floor · not overridable</span></div>
+          <div><span class="t">11:36:12</span><span class="ok">allow</span><span>local · starfish</span><span>claude</span><span>shell</span><span>npm test -- floors</span><span class="r">inside boundary</span></div>
+          <div><span class="t">11:35:48</span><span class="d">done</span><span>local · mobile-app</span><span>claude</span><span>session</span><span>finished · 0 denied</span><span class="r">unseen</span></div>
+          <div><span class="t">11:35:02</span><span class="x">deny</span><span>local · starfish</span><span>claude</span><span>net.fetch</span><span>registry.example.org</span><span class="r">host not on allow list</span></div>
+          <div><span class="t">11:32:44</span><span class="b">ask</span><span>build-01 · billing</span><span>claude</span><span>net.fetch</span><span>api.example.com</span><span class="r">risk 60 · waiting on you</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="bar">
+      <span class="pill"> APPROVALS </span>
+      <span class="hint"><b>a</b> approve</span><span class="hint"><b>d</b> deny</span><span class="hint"><b>r</b> reason</span><span class="hint"><b>g</b> go to</span><span class="hint"><b>1-9</b> space</span><span class="hint"><b>?</b> keys</span>
+      <span class="status"><span class="b">● 3 blocked</span> · <span class="w">2 working</span> · <span class="d">1 done</span> · last hour <span class="ok">128✓</span> <span class="b">4?</span> <span class="x">3×</span> · 2 machines</span>
+    </div>
+
+    <div class="picker" role="dialog" aria-label="Go to">
+      <span class="title"> Go to </span>
+      <div class="pk-search"><span>/ <b>star</b>▏</span><span>4 of 9 agents</span></div>
+      <div class="pk tr"><span>▾ local · laptop</span><span></span><span class="ok">● online</span></div>
+      <div class="pk"><span class="ws">  starfish</span><span></span><span class="tr">fix/serve-verdict…</span></div>
+      <div class="pk selrow"><span>  ├─ ◆ claude</span><span>claude code</span><span>blocked 0:42</span></div>
+      <div class="pk"><span>  ├─ <span class="b">●</span> codex</span><span class="tr">codex</span><span class="b">blocked 0:08</span></div>
+      <div class="pk"><span>  └─ <span class="w">◐</span> worker</span><span class="tr">starfish crew</span><span class="w">working</span></div>
+      <div class="pk tr"><span>▾ ssh · build-01</span><span></span><span class="ok">● online</span></div>
+      <div class="pk"><span class="ws">  billing-api</span><span></span><span class="tr">feat/intake</span></div>
+      <div class="pk"><span>  └─ <span class="b">●</span> claude <span class="tr">· matched "starfish" in boundary</span></span><span class="tr">claude code</span><span class="b">blocked 4:10</span></div>
+      <div class="pk-foot">starfish / claude / session 7f3a   ~/Documents/Github/Starfish
+↑↓ j/k rows · / search · b blocked  w working  d done  x denied · enter open · a approve here · esc close</div>
+    </div>
+  </div>
+</div>
+<script>
+  if (location.hash === '#goto') document.body.classList.add('goto');
+  addEventListener('keydown', function (e) {
+    if (e.key === 'g') document.body.classList.add('goto');
+    if (e.key === 'Escape') document.body.classList.remove('goto');
+  });
+</script>
+</body>
+</html>

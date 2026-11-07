@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfish v2 Herd Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* MOCKUP ONLY. Static HTML, fake data. See docs/design/UI_V2_V3_HERDR_STUDY.md for what is built vs. proposed. */
+/* Colours are Starfish's own Calm tokens (packages/desktop/app/src/renderer/src/theme/themes.ts, index.css):
+   "blocked on you" reuses --ask (purple), warn stays amber for risk. Only --bg-rail, --line-strong, --text-3
+   and the *-soft tints are new, derived from the Calm values. */
+:root {
+  --bg: #161719; --bg-rail: #121315; --panel: #1e2024; --panel-2: #24262b; --line: #33363c; --line-strong: #43474f;
+  --text: #e9eaec; --text-2: #a2a5ad; --text-3: #767a83; --accent: #6f9bff; --accent-soft: rgba(111,155,255,.12);
+  --blocked: #b98bff; --blocked-soft: rgba(185,139,255,.13); --working: #6f9bff; --done: #4ec98a; --idle: #767a83;
+  --deny: #ff6b6b; --deny-soft: rgba(255,107,107,.12); --allow: #4ec98a; --ask: #b98bff; --warn: #e0b24b;
+  --risk-hi: #e0b24b;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --sans: Inter, system-ui, "Segoe UI", sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #f6f6f4; --bg-rail: #efeeea; --panel: #ffffff; --panel-2: #fafaf8; --line: #e6e5e1; --line-strong: #d4d3ce;
+  --text: #1b1b19; --text-2: #6c6c66; --text-3: #8f8f88; --accent: #3f6fd8; --accent-soft: rgba(63,111,216,.08);
+  --blocked: #6a4bb3; --blocked-soft: rgba(106,75,179,.09); --working: #3f6fd8; --done: #1a7f4b; --idle: #8f8f88;
+  --deny: #b3261e; --deny-soft: rgba(179,38,30,.08); --allow: #1a7f4b; --ask: #6a4bb3; --warn: #8a6300;
+  --risk-hi: #8a6300;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 var(--sans); overflow: hidden; }
+.mono { font-family: var(--mono); }
+.app { display: grid; grid-template-rows: 34px 1fr 26px; height: 100vh; }
+
+/* title bar */
+.titlebar { display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--bg-rail); }
+.brand { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.brand .star { color: var(--accent); }
+.gov { font: 500 11px var(--mono); color: var(--done); display: flex; align-items: center; gap: 6px; }
+.gov::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 0 3px rgba(95,211,141,.15); }
+.tabs { display: flex; gap: 2px; margin-left: 10px; }
+.tab { font: 500 12px var(--mono); color: var(--text-3); padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+.tab.on { color: var(--text); background: var(--panel-2); }
+.tab .n { color: var(--blocked); margin-left: 4px; }
+.spacer { flex: 1; }
+.kbd { font: 500 11px var(--mono); color: var(--text-3); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+.palette { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; min-width: 260px; }
+.themebtn { background: none; border: 1px solid var(--line); color: var(--text-2); border-radius: 6px; font: 12px var(--sans); padding: 3px 8px; cursor: pointer; }
+
+/* body */
+.body { display: grid; grid-template-columns: 300px 1fr 300px; min-height: 0; }
+.rail { background: var(--bg-rail); border-right: 1px solid var(--line); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.rail-head { padding: 12px 14px 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.rail-head h2 { margin: 0; font: 600 12px var(--mono); color: var(--text-3); }
+.needs { font: 600 12px var(--mono); color: var(--blocked); }
+.filter { margin: 0 12px 8px; display: flex; gap: 4px; }
+.chip { font: 500 11px var(--mono); padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--text-3); }
+.chip.on { color: var(--text); border-color: var(--line-strong); background: var(--panel-2); }
+.tree { flex: 1; overflow: auto; padding: 0 6px 10px; }
+.machine { font: 600 12px var(--mono); color: var(--text-2); padding: 12px 8px 4px; display: flex; justify-content: space-between; }
+.machine .conn { font-weight: 500; font-size: 11.5px; }
+.stale { opacity: .45; }
+.stale .agent { cursor: not-allowed; }
+.ws { padding: 6px 8px 4px; border-radius: 6px; }
+.ws-row { display: flex; align-items: center; gap: 8px; }
+.ws-num { font: 500 11px var(--mono); color: var(--text-3); width: 12px; }
+.ws-name { font: 600 13px var(--mono); }
+.ws-roll { margin-left: auto; font: 600 11px var(--mono); }
+.ws-branch { font: 12px var(--mono); color: #b58cf0; margin-left: 20px; }
+:root[data-theme="light"] .ws-branch { color: #7a4fc4; }
+.agent { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 6px; margin: 2px 0 0 14px; padding: 4px 6px; border-radius: 5px; font: 12.5px var(--mono); cursor: pointer; }
+.agent:hover { background: var(--panel-2); }
+.agent.sel { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.agent .st { text-align: right; font-size: 11.5px; }
+.agent .what { grid-column: 2 / 4; font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -2px; }
+.g-blocked { color: var(--blocked); } .g-working { color: var(--working); } .g-done { color: var(--done); } .g-idle { color: var(--idle); } .g-deny { color: var(--deny); }
+.spin { display: inline-block; animation: spin 1s steps(10) infinite; }
+@keyframes spin { 0%{content:""} }
+.rail-foot { border-top: 1px solid var(--line); padding: 10px 14px; font: 11.5px var(--mono); color: var(--text-3); display: grid; gap: 6px; }
+.meter { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: center; }
+.bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--done); }
+.bar.over i { background: var(--deny); }
+
+/* main */
+.main { display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
+.agent-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+.agent-head .who { font: 600 15px var(--mono); }
+.agent-head .where { font: 12px var(--mono); color: var(--text-3); }
+.state-pill { font: 600 11px var(--mono); padding: 3px 8px; border-radius: 4px; background: var(--blocked-soft); color: var(--blocked); white-space: nowrap; }
+.agent-head > div { min-width: 0; }
+.agent-head .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.main-scroll { overflow: hidden; padding: 16px 20px; display: grid; grid-template-rows: auto 1fr; gap: 14px; min-height: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.card.ask { border-color: color-mix(in srgb, var(--blocked) 45%, var(--line)); }
+.card-top { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.risk { font: 600 11px var(--mono); padding: 2px 8px; border-radius: 4px; background: color-mix(in srgb, var(--risk-hi) 15%, transparent); color: var(--risk-hi); }
+.card-title { font-weight: 600; font-size: 14px; }
+.waited { margin-left: auto; font: 12px var(--mono); color: var(--text-3); }
+.call { margin: 14px 16px 0; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; }
+.call .k { color: var(--text-3); }
+.call .add { color: var(--done); } .call .del { color: var(--deny); }
+.ctx { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 12px 16px 0; border: 1px solid var(--line); border-radius: 7px; }
+.ctx > div { padding: 9px 12px; }
+.ctx > div + div { border-left: 1px solid var(--line); }
+.ctx h4 { margin: 0 0 4px; font: 600 11.5px var(--mono); color: var(--text-3); }
+.ctx p { margin: 0; font-size: 12.5px; color: var(--text-2); }
+.ctx code { font: 12px var(--mono); color: var(--text); }
+.caps { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.cap { font: 11px var(--mono); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: var(--text-2); }
+.cap.hit { border-color: var(--blocked); color: var(--blocked); }
+.decide { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 12px 16px 14px; align-items: center; }
+.reason { border: 1px solid var(--line); background: var(--panel-2); color: var(--text-3); border-radius: 7px; padding: 8px 10px; font-size: 12.5px; }
+.btn { font: 600 12.5px var(--sans); padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--text); display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.btn.deny { border-color: color-mix(in srgb, var(--deny) 55%, var(--line)); color: var(--deny); }
+.btn.approve { background: var(--accent); border-color: var(--accent); color: #0b1220; }
+:root[data-theme="light"] .btn.approve { color: #fff; }
+.btn .kbd { border-color: currentColor; color: inherit; opacity: .7; }
+
+/* timeline */
+.timeline { min-height: 0; display: flex; flex-direction: column; }
+.tl-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.tl-head h3 { margin: 0; font: 600 12px var(--mono); color: var(--text-3); }
+.tl-head .more { margin-left: auto; font: 12px var(--mono); color: var(--accent); }
+.log { font: 12px/1.9 var(--mono); border-top: 1px solid var(--line); overflow: hidden; }
+.log div { display: grid; grid-template-columns: 70px 48px 150px 1fr; gap: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.log .t { color: var(--text-3); }
+.log .v-allow { color: var(--allow); } .log .v-ask { color: var(--ask); } .log .v-deny { color: var(--deny); }
+.log .tool { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.log .why { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+
+/* right column */
+.side { border-left: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.side h3 { margin: 0 0 8px; font: 600 12px var(--mono); color: var(--text-3); }
+.toast { position: fixed; right: 16px; bottom: 40px; width: 320px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px; font: 12.5px var(--mono); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+.toast .t1 { font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.toast .t2 { color: var(--text-3); margin: 2px 0 0 18px; font-size: 12px; }
+.toast .t3 { margin: 8px 0 0 18px; display: flex; gap: 12px; color: var(--text-2); font-size: 11.5px; }
+.queue-item { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; padding: 7px 8px; border-radius: 6px; font: 12px var(--mono); }
+.queue-item.sel { background: var(--accent-soft); }
+.queue-item .sub { grid-column: 2/4; font-size: 11px; color: var(--text-3); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font: 12px var(--mono); }
+.kv span:nth-child(odd) { color: var(--text-3); }
+.kv .ok { color: var(--done); }
+.keys { font: 11.5px/2 var(--mono); color: var(--text-3); }
+.keys .kbd { margin-right: 6px; }
+
+/* status bar */
+.statusbar { display: flex; align-items: center; gap: 0; border-top: 1px solid var(--line); background: var(--bg-rail); font: 11.5px var(--mono); color: var(--text-3); padding: 0 6px; }
+.statusbar > span { padding: 0 10px; border-right: 1px solid var(--line); white-space: nowrap; }
+.statusbar > span:last-child { border-right: 0; margin-left: auto; }
+.statusbar b { font-weight: 500; color: var(--text-2); }
+.smeter { display: inline-block; width: 70px; height: 4px; background: var(--line); border-radius: 2px; vertical-align: middle; margin: 0 6px; overflow: hidden; }
+.smeter i { display: block; height: 100%; background: var(--done); }
+.note { position: fixed; right: 12px; bottom: 34px; font: 11px var(--mono); color: var(--text-3); background: var(--panel); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="brand"><span class="star">★</span> Starfish</div>
+    <div class="gov">governed · fail-closed</div>
+    <nav class="tabs" aria-label="Views">
+      <span class="tab on">approvals<span class="n">3</span></span>
+      <span class="tab">activity</span>
+      <span class="tab">audit</span>
+      <span class="tab">budgets</span>
+      <span class="tab">skills</span>
+    </nav>
+    <div class="spacer"></div>
+    <div class="palette"><span>Jump to agent, workspace or command</span><span class="spacer"></span><span class="kbd">Ctrl</span><span class="kbd">K</span></div>
+    <button class="themebtn" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">Light / dark</button>
+  </header>
+
+  <div class="body">
+    <!-- LEFT: the herd. Every governed agent, grouped machine > workspace, state rolled up. -->
+    <aside class="rail" aria-label="Agents">
+      <div class="rail-head"><h2>agents · by attention</h2><span class="needs">◆ 3 need you</span></div>
+      <div class="filter"><span class="chip on">all 9</span><span class="chip">blocked 3</span><span class="chip">working 3</span><span class="chip">done 1</span></div>
+      <div class="tree">
+        <div class="machine"><span>▾ local · laptop</span><span class="conn g-done">● online</span></div>
+
+        <div class="ws">
+          <div class="ws-row"><span class="ws-num">1</span><span class="ws-name">starfish</span><span class="ws-roll g-blocked">◆ 2</span></div>
+          <div class="ws-branch">fix/serve-verdict…</div>
+          <div class="agent sel"><span class="g-blocked">◆</span><span>claude</span><span class="st g-blocked">blocked 0:42</span><span class="what">git_commit · heightened 60</span></div>
+          <div class="agent"><span class="g-blocked">◆</span><span>codex</span><span class="st g-blocked">blocked 0:08</span><span class="what">fs.write ../governance-core · noted 40</span></div>
+          <div class="agent"><span class="g-working">◐</span><span>worker</span><span class="st g-working">working</span><span class="what">fs.read packages/desktop/** · 41 allowed</span></div>
+        </div>
+
+        <div class="ws">
+          <div class="ws-row"><span class="ws-num">2</span><span class="ws-name">mobile-app</span><span class="ws-roll g-done">✓</span></div>
+          <div class="ws-branch">main</div>
+          <div class="agent"><span class="g-done">✓</span><span>claude</span><span class="st g-done">done · unseen</span><span class="what">finished 3m ago · 0 denied</span></div>
+        </div>
+
+        <div class="ws">
+          <div class="ws-row"><span class="ws-num">3</span><span class="ws-name">docs-site</span><span class="ws-roll g-idle">○</span></div>
+          <div class="ws-branch">main</div>
+          <div class="agent"><span class="g-idle">○</span><span>claude</span><span class="st g-idle">idle</span><span class="what">seen 11:02</span></div>
+        </div>
+
+        <div class="machine"><span>▾ ssh · build-01</span><span class="conn g-done">● online</span></div>
+        <div class="ws">
+          <div class="ws-row"><span class="ws-num">4</span><span class="ws-name">billing-api</span><span class="ws-roll g-blocked">◆ 1</span></div>
+          <div class="ws-branch">feat/intake</div>
+          <div class="agent"><span class="g-blocked">◆</span><span>claude</span><span class="st g-blocked">blocked 4:10</span><span class="what">net.fetch api.example.com · heightened 60</span></div>
+          <div class="agent"><span class="g-working">◐</span><span>worker</span><span class="st g-working">working</span><span class="what">test runner · 12 allowed</span></div>
+          <div class="agent"><span class="g-deny">×</span><span>codex</span><span class="st g-deny">denied</span><span class="what">secrets.read .env · hard floor</span></div>
+        </div>
+
+        <div class="machine"><span>▾ ssh · lab-pi</span><span class="conn" style="color:var(--warn)">◐ reconnecting</span></div>
+        <div class="ws stale" title="Last known state. Approve and deny are disabled until the machine is back.">
+          <div class="ws-row"><span class="ws-num">5</span><span class="ws-name">homelab</span><span class="ws-roll g-idle">○</span></div>
+          <div class="ws-branch">main · last seen 11:31</div>
+          <div class="agent"><span class="g-idle">○</span><span>claude</span><span class="st g-idle">idle</span></div>
+        </div>
+      </div>
+      <div class="rail-foot">
+        <div class="meter"><span>global</span><div class="bar"><i style="width:64%"></i></div><span>$6.40/$10</span></div>
+        <div class="meter"><span>worker</span><div class="bar over"><i style="width:100%"></i></div><span class="g-deny">$4.10/$4</span></div>
+      </div>
+    </aside>
+
+    <!-- CENTER: the selected agent. The pending call first, then what this agent has been doing. -->
+    <main class="main">
+      <div class="agent-head">
+        <span class="g-blocked" style="font-size:16px">◆</span>
+        <div>
+          <div class="who">claude <span style="color:var(--text-3);font-weight:400">in</span> starfish</div>
+          <div class="where">local · laptop &nbsp;·&nbsp; fix/serve-verdict-validation-governor &nbsp;·&nbsp; session 7f3a</div>
+        </div>
+        <span class="spacer"></span>
+        <span class="state-pill">blocked on you · 0:42</span>
+      </div>
+
+      <div class="main-scroll">
+        <section class="card ask" aria-label="Pending approval">
+          <div class="card-top">
+            <span class="risk">heightened · 60</span>
+            <span class="card-title">wants to commit to <span class="mono">fix/serve-verdict-validation-governor</span></span>
+            <span class="waited">requested 11:36:55</span>
+          </div>
+<div class="call"><span class="k">tool</span>   git_commit
+<span class="k">msg</span>    fix(governance-core): F-12 -- an allow policy silently disabled every risk floor
+<span class="k">files</span>  3 changed  <span class="add">+48</span> <span class="del">-11</span>   packages/governance-core/src/pdp.ts · floors.ts · floors.test.ts</div>
+          <div class="ctx">
+            <div>
+              <h4>why this needs you</h4>
+              <p>Risk 60 is over your tolerance (Low: anything above 30 asks). Proposer ≠ approver: the agent cannot approve its own commit.</p>
+              <p style="margin-top:6px;font:11.5px var(--mono);color:var(--text-3)">matched: risk-tier high → ask · <span style="color:var(--accent)">explain</span></p>
+            </div>
+            <div>
+              <h4>boundary</h4>
+              <p>read <code>/proj</code> · write <code>/proj/.worktrees/worker</code></p>
+              <div class="caps"><span class="cap">fs.read</span><span class="cap">fs.write</span><span class="cap hit">git_commit</span></div>
+            </div>
+          </div>
+          <div class="decide">
+            <div class="reason">Add a reason (optional, goes in the audit record)</div>
+            <button class="btn deny">Deny <span class="kbd">D</span></button>
+            <button class="btn approve">Approve <span class="kbd">A</span></button>
+          </div>
+        </section>
+
+        <section class="timeline" aria-label="This agent's decisions">
+          <div class="tl-head"><h3>claude · this session</h3><span class="mono" style="font-size:12px;color:var(--text-3)">41 allowed · 2 asked · 1 denied</span><span class="more">open in activity →</span></div>
+          <div class="log">
+            <div><span class="t">11:36:55</span><span class="v-ask">ASK</span><span class="tool">git_commit</span><span class="why">risk 60 heightened · waiting on you</span></div>
+            <div><span class="t">11:36:41</span><span class="v-allow">allow</span><span class="tool">fs.write</span><span class="why">packages/governance-core/src/floors.ts</span></div>
+            <div><span class="t">11:36:12</span><span class="v-allow">allow</span><span class="tool">shell</span><span class="why">npm test -- floors · inside boundary</span></div>
+            <div><span class="t">11:35:02</span><span class="v-deny">DENY</span><span class="tool">net.fetch</span><span class="why">registry.example.org · host not on allow list</span></div>
+            <div><span class="t">11:34:40</span><span class="v-allow">allow</span><span class="tool">fs.read</span><span class="why">docs/design/UI_ONE_SCREEN.md</span></div>
+            <div><span class="t">11:33:58</span><span class="v-ask">ask</span><span class="tool">fs.write</span><span class="why">approved by you · "test fixture"</span></div>
+            <div><span class="t">11:33:20</span><span class="v-allow">allow</span><span class="tool">fs.read</span><span class="why">packages/governance-core/src/pdp.ts</span></div>
+            <div><span class="t">11:32:47</span><span class="v-allow">allow</span><span class="tool">shell</span><span class="why">git status · read-only</span></div>
+            <div><span class="t">11:32:30</span><span class="v-allow">allow</span><span class="tool">fs.read</span><span class="why">packages/governance-core/src/floors.ts</span></div>
+            <div><span class="t">11:32:02</span><span class="v-allow">allow</span><span class="tool">fs.read</span><span class="why">CHANGELOG.md</span></div>
+            <div><span class="t">11:31:44</span><span class="v-allow">allow</span><span class="tool">shell</span><span class="why">git log --oneline -20 · read-only</span></div>
+            <div><span class="t">11:31:40</span><span class="v-allow">allow</span><span class="tool">session.start</span><span class="why">claude · starfish · boundary /proj</span></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- RIGHT: the queue across every agent, plus the facts that make an approval trustworthy. -->
+    <aside class="side" aria-label="Queue and integrity">
+      <div>
+        <h3>queue · oldest first</h3>
+        <div class="queue-item"><span class="g-blocked">◆</span><span>billing · claude</span><span class="g-blocked">4:10</span><span class="sub">net.fetch api.example.com · heightened 60</span></div>
+        <div class="queue-item sel"><span class="g-blocked">◆</span><span>starfish · claude</span><span class="g-blocked">0:42</span><span class="sub">git_commit · heightened 60</span></div>
+        <div class="queue-item"><span class="g-blocked">◆</span><span>starfish · codex</span><span class="g-blocked">0:08</span><span class="sub">fs.write ../governance-core · noted 40</span></div>
+      </div>
+      <div>
+        <h3>integrity</h3>
+        <div class="kv">
+          <span>audit chain</span><span class="ok">verified · 1,204 records</span>
+          <span>last sweep</span><span>11:36:57 · 0 alerts</span>
+          <span>tolerance</span><span>Low (asks above 30)</span>
+          <span>monitor</span><span class="ok">watching 9 agents</span>
+        </div>
+      </div>
+      <div>
+        <h3>keys</h3>
+        <div class="keys">
+          <div><span class="kbd">O</span>oldest waiting, any machine</div>
+          <div><span class="kbd">N</span>next blocked agent</div>
+          <div><span class="kbd">J</span><span class="kbd">K</span>move in the list</div>
+          <div><span class="kbd">A</span>approve &nbsp; <span class="kbd">D</span>deny</div>
+          <div><span class="kbd">R</span>add a reason</div>
+          <div><span class="kbd">1</span>…<span class="kbd">9</span>jump to workspace</div>
+          <div><span class="kbd">Ctrl</span><span class="kbd">K</span>everything else</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="statusbar">
+    <span><span class="g-done">●</span> <b>governed</b></span>
+    <span><span class="g-blocked">◆ 3 blocked</span> · <span class="g-working">3 working</span> · <span class="g-done">1 done</span> · 2 idle</span>
+    <span>last hour <span class="g-done">128 allow</span> · <span class="g-blocked">4 ask</span> · <span class="g-deny">3 deny</span></span>
+    <span>global <span class="smeter"><i style="width:64%"></i></span><b>$6.40</b>/$10</span>
+    <span>2 machines online · 1 reconnecting</span>
+    <span>v2 mockup · fake data</span>
+  </footer>
+</div>
+
+<!-- Notification, herdr-style: fires ~1 s after an ask appears and only if it is still pending; one per agent; suppressed for the agent on screen. -->
+<div class="toast" role="status">
+  <div class="t1"><span class="g-blocked">◆</span> codex needs you</div>
+  <div class="t2">starfish · fs.write ../governance-core · noted 40</div>
+  <div class="t3"><span><span class="kbd">O</span> open</span><span><span class="kbd">Esc</span> later</span></div>
+</div>
+</body>
+</html>

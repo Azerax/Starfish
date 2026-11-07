@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfish v3 Calm Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* MOCKUP ONLY, fake data. The calm cut of v3 ("starfish console"): one ask on screen, details behind space.
+   #details shows the expanded state. In a real terminal the colours come from the terminal palette. */
+:root {
+  --term: #121315; --row: #1e2024; --dim: #2c2f35; --ov0: #6b6f78; --sub: #a2a5ad; --text: #e9eaec;
+  --accent: #6f9bff; --ask: #b98bff; --ok: #4ec98a; --warn: #e0b24b; --deny: #ff6b6b; --mauve: #c49bff;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: #0b0c0e; font: 14px/22px var(--mono); color: var(--text); overflow: hidden; display: grid; place-items: center; }
+.win { width: 1400px; height: 860px; background: var(--term); border: 1px solid #2a2c31; border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: 30px 1fr; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+.chrome { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #17181b; border-bottom: 1px solid #24262b; color: var(--ov0); font-size: 12px; }
+.chrome i { width: 11px; height: 11px; border-radius: 50%; background: #3a3d44; display: inline-block; }
+.chrome .t { margin-left: 10px; } .chrome .m { margin-left: auto; color: #4d5057; }
+.screen { display: grid; grid-template-columns: 320px 1fr; grid-template-rows: 1fr 24px; min-height: 0; }
+.side { border-right: 1px solid var(--dim); padding: 14px 0; display: flex; flex-direction: column; }
+.h { padding: 0 16px 4px; color: var(--ov0); }
+.r { padding: 0 16px; display: grid; grid-template-columns: 18px 72px 1fr auto; white-space: nowrap; }
+.r .p { color: var(--ov0); }
+.r .w { color: var(--ask); }
+.r.cur { background: var(--row); box-shadow: inset 2px 0 0 var(--accent); }
+.r.q { color: var(--sub); }
+.sp { height: 22px; }
+.b { color: var(--ask); } .wk { color: var(--accent); } .d { color: var(--ok); } .i { color: var(--ov0); }
+.foot { margin-top: auto; padding: 0 16px; color: var(--ov0); }
+
+.main { padding: 70px 0 0 90px; }
+.who { color: var(--ov0); }
+.who b { color: var(--sub); font-weight: 500; }
+.risk { color: var(--warn); margin-left: 24px; }
+.q1 { font-size: 20px; line-height: 30px; font-weight: 700; margin: 18px 0 14px; }
+.msg { color: var(--sub); margin-left: 2ch; }
+.why { margin: 18px 0 30px; color: var(--sub); }
+.keys span { margin-right: 4ch; color: var(--sub); }
+.keys b { color: var(--accent); }
+.keys b.a { color: var(--ok); } .keys b.dn { color: var(--deny); }
+.details { display: none; margin: 26px 0 0; width: 860px; border: 1px solid var(--dim); position: relative; padding: 14px 16px 10px; color: var(--sub); white-space: pre; font-size: 13px; line-height: 21px; }
+body.open .details { display: block; }
+body.open .keys .sp1 { display: none; } body.open .keys .sp2 { display: inline; }
+.keys .sp2 { display: none; }
+.details .title { position: absolute; top: -11px; left: 12px; background: var(--term); padding: 0 6px; color: var(--ov0); }
+.details .k { color: var(--ov0); }
+.add { color: var(--ok); } .del { color: var(--deny); }
+.next { margin-top: 46px; color: var(--ov0); }
+.next b { color: var(--sub); font-weight: 500; }
+.bar { grid-column: 1 / 3; display: flex; align-items: center; background: var(--row); white-space: nowrap; font-size: 13px; }
+.pill { background: var(--mauve); color: #17111f; font-weight: 700; padding: 0 8px; margin-right: 12px; }
+.hint { margin-right: 16px; color: var(--ov0); } .hint b { color: var(--accent); font-weight: 500; }
+.status { margin-left: auto; padding-right: 12px; color: var(--ov0); }
+.status .ok { color: var(--ok); }
+body, pre, .details { font-variant-ligatures: none; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="chrome"><i></i><i></i><i></i><span class="t">starfish console</span><span class="m">v3 calm · mockup · fake data</span></div>
+  <div class="screen">
+    <aside class="side">
+      <div class="h">needs you</div>
+      <div class="r cur"><span class="b">◆</span><span>claude</span><span class="p">starfish</span><span class="w">4:10</span></div>
+      <div class="r"><span class="b">◆</span><span>claude</span><span class="p">billing</span><span class="w">1:15</span></div>
+      <div class="r"><span class="b">◆</span><span>codex</span><span class="p">starfish</span><span class="w">0:08</span></div>
+      <div class="sp"></div>
+      <div class="h">others</div>
+      <div class="r q"><span class="wk">◐</span><span>worker</span><span class="p">starfish</span><span></span></div>
+      <div class="r q"><span class="wk">◐</span><span>worker</span><span class="p">billing</span><span></span></div>
+      <div class="r q"><span class="d">✓</span><span>claude</span><span class="p">mobile-app</span><span class="d">new</span></div>
+      <div class="r q"><span class="i">○</span><span>claude</span><span class="p">docs-site</span><span></span></div>
+      <div class="foot">$6.40 of $10 today</div>
+    </aside>
+
+    <section class="main">
+      <div class="who"><b>claude</b> · starfish · waiting 4:10<span class="risk">heightened</span></div>
+      <div class="q1">Commit 3 files to fix/serve-verdict-validation-governor?</div>
+      <div class="msg">fix(governance-core): F-12 -- an allow policy silently disabled every risk floor</div>
+      <div class="why">Commits need a person's OK, and claude can't approve its own work.</div>
+      <div class="keys"><span><b class="a">a</b> approve</span><span><b class="dn">d</b> deny</span><span class="sp1"><b>space</b> details</span><span class="sp2"><b>space</b> hide details</span></div>
+
+<div class="details"><span class="title">details</span><span class="k">files</span>       floors.ts <span class="add">+38</span> <span class="del">-9</span>   pdp.ts <span class="add">+6</span> <span class="del">-2</span>   floors.test.ts <span class="add">+4</span>
+<span class="k">change</span>      <span class="del">-  if (policy.verdict === 'allow') return policy;</span>
+            <span class="add">+  if (policy.verdict === 'allow' &amp;&amp; floor) {</span>
+            <span class="add">+    return { ...floor, reason: 'risk floor holds' };</span>
+            <span class="add">+  }</span>                                   <span class="k">f full diff</span>
+<span class="k">allowed to</span>  read /proj · write /proj/.worktrees/worker
+<span class="k">rule</span>        high-risk calls ask a person          <span class="k">e explain</span>
+<span class="k">just before</span> edited floors.ts · ran the floors tests (passed)</div>
+
+      <div class="next"><b style="color:var(--accent)">n</b> next: <b>claude in billing</b> wants to fetch api.example.com</div>
+    </section>
+
+    <div class="bar">
+      <span class="pill"> STARFISH </span>
+      <span class="hint"><b>a</b> approve</span><span class="hint"><b>d</b> deny</span><span class="hint"><b>n</b> next</span><span class="hint"><b>?</b> more keys</span>
+      <span class="status"><span class="ok">✓ governed</span> · 2 working</span>
+    </div>
+  </div>
+</div>
+<script>
+  if (location.hash === '#details') document.body.classList.add('open');
+  addEventListener('keydown', function (e) { if (e.key === ' ') { e.preventDefault(); document.body.classList.toggle('open'); } });
+</script>
+</body>
+</html>
