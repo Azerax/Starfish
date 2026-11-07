@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every yes was a security finding · Project Starfish</title>
+<meta name="description" content="We set out to answer one question: which agent session is waiting on me? Wiring the answer turned up a defect. Every time a person approved a tool call in Claude Code, our audit logged it as a no-silent-execution violation.">
+<link rel="canonical" href="https://projectstarfish.ca/blog/every-yes-was-a-finding.html">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#04060f">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+</head><body>
+<div class="top"><div class="row">
+  <a class="brand" href="/"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.3L20 8l-4 4 1 6-5-2.7L7 18l1-6-4-4 5.6-.7L12 2z" stroke="#39e09b" stroke-width="1.4" stroke-linejoin="round"/></svg>Project&nbsp;Starfish</a>
+  <span class="sp"></span><a href="/blog/">Devlog</a><a href="https://github.com/Azerax/Starfish" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div></div>
+<div class="wrap">
+<article><div class="d">2026-11-07</div><h1>Every yes was a security finding</h1><div class="dek">We set out to answer one question: <em>which of my agent sessions is waiting on me?</em> Wiring the answer turned up a defect. Every time a person approved a tool call in Claude Code, our audit logged it as a no-silent-execution violation.</div>
+
+<p>Starfish decides every tool call a governed Claude Code session makes. Until this week, it could not tell you which sessions were running, or whether one of them was stuck waiting for you. The hooks daemon kept a per-session map for its own bookkeeping and exposed none of it. When the governor answered <em>ask</em>, the question went to Claude Code's own prompt and nowhere else. With four sessions in four windows, the only way to find the stuck one was to look at each window.</p>
+
+<p>We spent some time with <a href="https://github.com/herdrdev/herdr" target="_blank" rel="noopener noreferrer">herdr</a>, an Apache-2.0 terminal workspace for coding agents. Its whole promise is that you never hunt for the stuck agent. We took two ideas from it and no code: sort sessions by what needs a person, and show state with a shape as well as a colour. Our first mockups showed everything Starfish knows about every session. They were accurate, and they were too much. The screens we kept each answer one question, and the first is <em>does anything need me?</em></p>
+
+<p>Those screens need data that did not exist. This change is that data.</p>
+
+<h2>Five states, none of them stored</h2>
+
+<p>The overlay daemon now records every hook event in a <strong>session registry</strong> and writes a snapshot that the CLI, the sidecar and the desktop app can read. The registry never stores a session's state. It works it out from what it has seen:</p>
+
+<pre><code>◆ blocked   an ask is open
+✓ done      the last turn ended, and nobody has looked since
+◐ working   a turn is in flight, and something happened in the last 10 minutes
+○ idle      nothing in flight, or nothing heard for 10 minutes
+· ended     the session ended</code></pre>
+
+<p>Working it out each time is a choice about missed events. If a <code>Stop</code> never arrives, a stored state would say "working" forever. A derived one says "idle" after ten minutes, which is less specific and still true. Some things cannot be derived. A Claude Code window closed in the middle of a prompt sends nothing at all, so a session that has been quiet for 24 hours is dropped, even with an ask still open.</p>
+
+<p>The order is herdr's: blocked first, oldest ask at the top, then finished, working and idle. In a terminal:</p>
+
+<pre><code>$ starfish sessions
+  needs you
+  ◆ worker  billing-api (fix/retry)    4:10  Edit: src/retry.ts  [medium]
+    Answer in that Claude Code window; Starfish records what happens.
+
+  everyone else
+  ◐ worker  starfish (main)            working · Bash
+  ✓ worker  docs-site (main)           finished 3m ago</code></pre>
+
+<p>The sidecar serves the same list at <code>GET /v1/sessions</code> and pushes a <code>sessions</code> event on its live stream when the list changes. An operator token sees every session. Any other token sees only its own, the same rule we already apply to pending decisions.</p>
+
+<h2>Starfish does not answer these asks</h2>
+
+<p>When the governor answers <em>ask</em>, Claude Code shows its own prompt and the person answers there. We now copy that ask into Starfish's approval queue, so one queue shows everything that is waiting. The copy goes on its own channel, and that channel is observe-only.</p>
+
+<p>Two guards keep it honest. The broker's <code>resolve()</code> refuses an ask on that channel, because an "approve" in Starfish would be audited as an operator decision that changed nothing. A new <code>settle()</code> closes the ask with what actually happened, and it refuses every other channel, so watching can never stand in for an operator.</p>
+
+<div class="pull">An approve button that changes nothing is worse than no button. The audit would record a decision nobody made.</div>
+
+<p>What happened is read from the events that follow the ask:</p>
+
+<pre><code>PostToolUse, same tool_use_id   → ran          the person approved
+Stop, a new prompt, SessionEnd  → not-run      refused, or the turn ended
+another PreToolUse first        → superseded   refused, or the tool failed</code></pre>
+
+<h2>Every yes was a finding</h2>
+
+<p>To close an ask as <em>ran</em>, the daemon matches the <code>PostToolUse</code> to the ask by its <code>tool_use_id</code>. Wiring that up meant following an approved ask all the way through the hook session. The same result that settles the ask was also writing a second audit line: an <code>orphan-post</code> failure.</p>
+
+<p>The hook session enforces <em>no silent execution</em>: every <code>PostToolUse</code> has to follow a <code>PreToolUse</code> the governor allowed. A result with no allowed call before it means a tool ran without the governor's say. That is logged as a violation, and the monitor counts it.</p>
+
+<p>From the hook's side, an approved ask never looked allowed. The governor's answer was <em>ask</em>. The person said yes in Claude Code, the tool ran, and its result arrived with no allowed call to match. So the hook session logged it as an orphan.</p>
+
+<p><strong>Every approved ask produced a false security finding.</strong> No decision changed, because the hook shim ignores the daemon's reply to a <code>PostToolUse</code>. The monitor did not ignore it. Each sweep that saw an orphan raised a high-severity "possible silent execution" finding and flagged it for a person. The orphan line is also recorded as a denial against the agent, so three approvals in one sweep window tripped the "repeated denials, possible probing" rule as well.</p>
+
+<p>Nothing connected a finding to the approval that caused it. Audit lines carried no session, and the monitor shows a number. A number that goes up every time someone does the right thing is easy to read as background. That is the real cost. A violation alarm that fires on every approval teaches people to ignore the violation alarm.</p>
+
+<div class="pull">The check was right. It just had no way to know that a person had said yes.</div>
+
+<p>The fix is narrow on purpose. The hook session remembers the exact <code>tool_use_id</code>s it asked about, up to 256 of them, and accepts one <code>PostToolUse</code> for each. A result with an unknown id is still an orphan. So is a second result reusing an id, and so is a result with no id at all. Treating every asked call as allowed would have been simpler, and it would have made a replayed id invisible. Tests pin both directions: the approved case is clean, and the unknown and reused cases are still flagged.</p>
+
+<h2>Every line knows its session</h2>
+
+<p>Tool calls and audit events now carry an optional <code>sessionId</code>. The governor's decision line, the hook session's own lines, and the broker's filed and settled lines all record it. A line with no session is byte-for-byte what it was before, so existing hash chains verify unchanged.</p>
+
+<p>This is what would have caught the bug earlier. A finding now points to a session, and the session shows the ask that came just before it.</p>
+
+<h2>What it does not record</h2>
+
+<p><code>starfish install --claude-code</code> now also registers <code>SessionStart</code>, <code>UserPromptSubmit</code>, <code>Stop</code> and <code>SessionEnd</code>. These hooks only observe and never block. The hook shim forwards a few descriptive fields: the tool use id, the working folder, the permission mode, the model and the session source. It never forwards the prompt text or the transcript path. Targets are scrubbed for secrets and clipped to 300 characters. Our end-to-end check sends a prompt through the real hook command and confirms that the text appears nowhere in the snapshot or the audit.</p>
+
+<p>The daemon records an event only after it has sent the decision back. Recording cannot change a decision, and if it fails, the failure is swallowed. A test runs the same calls with tracking on and off and requires identical decisions.</p>
+
+<h2>Not done yet</h2>
+
+<ul>
+<li><strong>Approving from Starfish.</strong> The calm screens put Approve and Deny on the ask, but today you still answer in Claude Code. If Starfish answered, the hook would have to wait for a verdict, and the hook timeout is 10 seconds today. It would also move the place where a person says yes. That is a product decision, not a refactor, so it waits.</li>
+<li><strong>Seen markers.</strong> A finished session stays "done" until its next prompt. Marking it seen from a UI needs a small authenticated request to the daemon, which does not exist yet.</li>
+<li><strong>Desktop push.</strong> The sidecar stream now carries sessions. The desktop app does not listen to it yet.</li>
+<li><strong>Scope.</strong> One daemon serves one project on one machine, and only Claude Code hooks are wired. There are no per-session budgets.</li>
+</ul>
+
+<p>The registry, the observe-only channel, session ids on the audit, and the orphan fix are on <code>master</code> with 1,026 tests passing. They are not in an npm release yet: the current release is 0.27.0. The design note is <a href="https://github.com/Azerax/Starfish/blob/master/docs/design/SESSION_REGISTRY.md" target="_blank" rel="noopener noreferrer">docs/design/SESSION_REGISTRY.md</a>.</p>
+
+<div class="backrow"><a href="/blog/">&larr; All posts</a></div></article></div>
+<div class="foot"><div class="wrap">Project Starfish &middot; a governance-first, deny-by-default AI ecosystem &middot; Apache-2.0. This devlog is a backdated build journal reconstructed from the project history.</div></div>
+</body></html>
