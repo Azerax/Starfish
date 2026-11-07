@@ -89,6 +89,14 @@ describe('F-5 — a Glob/Grep pattern is governed, not silently replaced with ".
     expect(ccToGoverned('Glob', { pattern: 'src/**/*.ts' }).input.path).toBe('.');
     expect(ccToGoverned('Grep', { pattern: 'TODO' }).input.path).toBe('.');
   });
+  it('a very long pattern is cut in linear time (CodeQL js/polynomial-redos)', () => {
+    // A long run of non-separators followed by a separator was the quadratic case for /[^/\\]*$/.
+    const posix = '/' + '.'.repeat(200_000) + '/';
+    expect(ccToGoverned('Glob', { pattern: posix + '*.ts' }).input.path).toBe(posix);
+    const win = 'C:\\' + 'a'.repeat(200_000) + '\\';
+    expect(ccToGoverned('Glob', { pattern: win + 'x*' }).input.path).toBe(win);
+    expect(ccToGoverned('Glob', { pattern: '.'.repeat(200_000) + '/' }).input.path).toBe('.');
+  });
   it('END TO END: Glob outside the boundary is DENIED (was: allowed)', () => {
     const { gov, proj } = env();
     const s = new HookSession(gov, { expectedAgentId: 'worker', boundary: BS(proj) });

@@ -430,6 +430,14 @@ export interface InquiryHttpRequest {
   timeoutMs: number;
 }
 
+/** Drops trailing '/' characters. A loop, not /\/+$/: that regex is quadratic on a long run of '/'
+ *  followed by another character, and `baseUrl` is caller input (CodeQL js/polynomial-redos). */
+function trimTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 0x2f) end--;
+  return s.slice(0, end);
+}
+
 /** Builds a System One-compatible request. `baseUrl` is the caller's; no default endpoint is baked
  *  in, because a default endpoint is a silent cloud fallback and those are forbidden. */
 export function buildInquiryHttpRequest(req: InquiryRequest, baseUrl: string, model: string): InquiryHttpRequest {
@@ -437,7 +445,7 @@ export function buildInquiryHttpRequest(req: InquiryRequest, baseUrl: string, mo
   const q = req.question;
   return {
     method: 'POST',
-    url: `${baseUrl.replace(/\/+$/, '')}/v1/systemone`,
+    url: `${trimTrailingSlashes(baseUrl)}/v1/systemone`,
     headers: { 'content-type': 'application/json' },
     timeoutMs: req.deadlineMs,
     body: {

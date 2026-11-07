@@ -49,7 +49,10 @@ function globRoot(pattern: unknown): string | undefined {
   if (typeof pattern !== 'string' || !pattern) return undefined;
   const firstMeta = pattern.search(/[*?[{]/);
   const literal = firstMeta === -1 ? pattern : pattern.slice(0, firstMeta);
-  const dir = literal.replace(/[^/\\]*$/, '');          // drop a trailing partial segment
+  // Drop a trailing partial segment. lastIndexOf, not /[^/\\]*$/: that regex is quadratic on a long run
+  // of non-separators followed by a separator, and the pattern is agent input (CodeQL js/polynomial-redos).
+  const cut = Math.max(literal.lastIndexOf('/'), literal.lastIndexOf('\\'));
+  const dir = literal.slice(0, cut + 1);
   if (!dir) return undefined;
   const isAbsolute = /^([/\\]|[A-Za-z]:[/\\])/.test(dir);
   const escapes = dir.split(/[/\\]/).includes('..');
