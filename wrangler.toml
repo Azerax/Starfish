@@ -1,7 +1,7 @@
 # projectstarfish.ca -- Cloudflare Worker with static assets.
 #
 # This is NOT a Pages project. `wrangler pages deploy` and `wrangler pages project list` will not
-# find it (the only Pages project on this account is funeralopsai). The site is served by the Worker
+# find it (the only Pages project on this account is an unrelated site). The site is served by the Worker
 # `misty-bread-80fa`, which has projectstarfish.ca bound as a custom domain. Workers Static Assets
 # honours _headers and _redirects, which is why the live response carries the CSP from site/_headers
 # and looks like Pages from the outside.
