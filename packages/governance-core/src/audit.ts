@@ -27,7 +27,7 @@ function redactDeep(v: unknown, depth = 0): unknown {
 type NewEvent = {
   actor: string; domain: AuditDomain; action: string;
   target?: string; decision?: 'allow' | 'deny'; reason?: string;
-  riskTier?: RiskTier; detail?: Record<string, unknown>;
+  riskTier?: RiskTier; sessionId?: string; detail?: Record<string, unknown>;
 };
 
 export interface AuditAnchor { seq: number; headHash: string; }
@@ -132,6 +132,10 @@ export class AuditLog {
     const safe: NewEvent = { ...e };   // risk 37: never write secret material into the audit
     if (typeof safe.reason === 'string') safe.reason = redactSecrets(safe.reason).redacted;
     if (typeof safe.target === 'string') safe.target = redactSecrets(safe.target).redacted;
+    // sessionId is attribution supplied by a hook payload: keep it a short plain string or drop it.
+    // An absent sessionId leaves the line byte-identical to before (JSON.stringify drops undefined).
+    if (typeof safe.sessionId === 'string' && safe.sessionId) safe.sessionId = safe.sessionId.slice(0, 128);
+    else delete safe.sessionId;
     // F26: `detail` is a free-form Record that many callers populate; it was written verbatim, so a
     // secret placed there bypassed redaction. Redact every string value (recursively) too.
     if (safe.detail && typeof safe.detail === 'object') safe.detail = redactDeep(safe.detail) as Record<string, unknown>;

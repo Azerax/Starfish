@@ -1,6 +1,6 @@
 // @starfish/governance-hooks — the PreToolUse/PostToolUse/Stop seam (ring 2).
 // Forwards Claude Code hook payloads to the PDP and returns a permission decision.
-import type { Governor, ToolCall, BoundarySet } from '@starfish/governance-core';
+import type { Governor, ToolCall, BoundarySet, RiskTier } from '@starfish/governance-core';
 import { isBlockedHost, isCatastrophicShell } from '@starfish/governance-core';
 import { existsSync, copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
@@ -12,9 +12,17 @@ export interface HookPayload {
   tool_input?: Record<string, unknown>;
   capability_id?: string;
   session_id?: string;
+  // Descriptive fields Claude Code sends with every hook event. Used only to describe the session
+  // (session registry); none of them feeds a permission decision.
+  tool_use_id?: string;
+  cwd?: string;
+  permission_mode?: string;
+  model?: unknown;
+  source?: string;
 }
-export interface HookResponse { permissionDecision?: 'allow' | 'deny' | 'ask'; reason?: string; }
-export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; writeProfile?: 'ask' | 'auto'; projectRoot?: string; backupDir?: string; backups?: number; }
+// riskTier is informational (the CLI shim ignores it); the session registry uses it to describe asks.
+export interface HookResponse { permissionDecision?: 'allow' | 'deny' | 'ask'; reason?: string; riskTier?: RiskTier; }
+export interface HookContext { expectedAgentId: string; boundary: BoundarySet; capabilityId?: string; writeProfile?: 'ask' | 'auto'; projectRoot?: string; backupDir?: string; backups?: number; sessionId?: string; }
 
 // ---- Claude Code tool taxonomy -> governed tool vocabulary (ring-2 seam) ----
 // CC fires native tools (Read/Edit/Bash/...). The PDP reasons over governed tools (fs.read/fs.write/
@@ -116,7 +124,19 @@ export function handleHook(payload: HookPayload, gov: Governor, ctx: HookContext
  *  no preceding allowed PreToolUse is flagged as a no-silent-execution violation (T-10/TC-1.7). */
 export class HookSession {
   private pending: string[] = [];
+  // tool_use_ids Starfish answered `ask` for. If the person approves in Claude Code the tool runs, and its
+  // PostToolUse arrives with no ALLOWED PreToolUse before it. Without this, every human-approved ask was
+  // audited as an `orphan-post` no-silent-execution violation and counted by the monitor. Matched by
+  // exact id, once, so it cannot cover any other call; a payload with no id is judged as before.
+  private asked = new Set<string>();
   constructor(private gov: Governor, private ctx: HookContext) {}
+
+  private noteAsk(payload: HookPayload): void {
+    const id = typeof payload.tool_use_id === 'string' ? payload.tool_use_id : '';
+    if (!id) return;
+    this.asked.add(id);
+    if (this.asked.size > 256) { const oldest = this.asked.values().next().value; if (oldest) this.asked.delete(oldest); }
+  }
 
   handle(payload: HookPayload): HookResponse {
     if (payload.agent_id && payload.agent_id !== this.ctx.expectedAgentId) {
@@ -128,14 +148,14 @@ export class HookSession {
     if (payload.hook_event_name === 'PreToolUse') {
       const g = ccToGoverned(payload.tool_name ?? '', payload.tool_input ?? {});
       if (g.tool === 'shell' && isCatastrophicShell(String(g.input.command ?? ''))) {
-        try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:shell', decision: 'deny', reason: 'catastrophic shell command blocked' }); } catch { /* noop */ }
-        return { permissionDecision: 'deny', reason: 'catastrophic shell command blocked' };
+        try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:shell', decision: 'deny', reason: 'catastrophic shell command blocked', sessionId: this.ctx.sessionId }); } catch { /* noop */ }
+        return { permissionDecision: 'deny', reason: 'catastrophic shell command blocked', riskTier: 'critical' };
       }
       if (g.tool === 'net' && isBlockedHost(String(g.input.url ?? ''))) {
-        try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:net', decision: 'deny', reason: 'blocked internal/loopback destination' }); } catch { /* noop */ }
-        return { permissionDecision: 'deny', reason: 'blocked internal/loopback destination' };
+        try { this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:net', decision: 'deny', reason: 'blocked internal/loopback destination', sessionId: this.ctx.sessionId }); } catch { /* noop */ }
+        return { permissionDecision: 'deny', reason: 'blocked internal/loopback destination', riskTier: 'critical' };
       }
-      const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: g.tool, input: g.input, capabilityId: this.ctx.capabilityId };
+      const call: ToolCall = { agentId: this.ctx.expectedAgentId, tool: g.tool, input: g.input, capabilityId: this.ctx.capabilityId, sessionId: this.ctx.sessionId };
       const d = this.gov.pdp.decide('ingress', call, this.ctx.boundary);   // audit-before-act happens inside decide()
       // Friction profile: the user owns risk for THEIR OWN files. An in-boundary file write that the PDP
       // would merely ASK about is auto-allowed under writes=auto, with a pre-image backup. The PDP has
@@ -153,24 +173,28 @@ export class HookSession {
         const outcome = snapshotBackup(resolve(String(g.input.path ?? '')), this.ctx.backupDir, this.ctx.projectRoot, this.ctx.backups ?? 3);
         if (outcome === 'failed') {
           this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'governance', action: 'ingress:fs.write', decision: 'deny', riskTier: 'high',
-            reason: '[Starfish] auto-allow withheld — pre-image backup FAILED, overwrite would be unrecoverable; escalated to operator' });
-          return { permissionDecision: 'ask', reason: '[Starfish] backup failed — overwrite would be unrecoverable; approve explicitly to proceed' };
+            reason: '[Starfish] auto-allow withheld — pre-image backup FAILED, overwrite would be unrecoverable; escalated to operator', sessionId: this.ctx.sessionId });
+          this.noteAsk(payload);
+          return { permissionDecision: 'ask', reason: '[Starfish] backup failed — overwrite would be unrecoverable; approve explicitly to proceed', riskTier: 'high' };
         }
         const note = outcome === 'backed-up' ? 'backed up' : 'new file (nothing to back up)';
-        this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'tool', action: 'ingress:fs.write', decision: 'allow', reason: `[Starfish] in-boundary write auto-allowed (writes=auto; ${note})` });
+        this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'tool', action: 'ingress:fs.write', decision: 'allow', reason: `[Starfish] in-boundary write auto-allowed (writes=auto; ${note})`, sessionId: this.ctx.sessionId });
         this.pending.push('fs.write');
         return { permissionDecision: 'allow', reason: `[Starfish] in-boundary write auto-allowed (${note})` };
       }
       if (d.allow) this.pending.push(g.tool);
-      return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason };
+      else if (d.ask) this.noteAsk(payload);
+      return { permissionDecision: d.allow ? 'allow' : d.ask ? 'ask' : 'deny', reason: d.reason, riskTier: d.riskTier };
     }
     if (payload.hook_event_name === 'PostToolUse') {
       const tool = ccToGoverned(payload.tool_name ?? '', payload.tool_input ?? {}).tool;
+      const id = typeof payload.tool_use_id === 'string' ? payload.tool_use_id : '';
+      if (id && this.asked.delete(id)) return {};   // ran after an ask: the person approved it in Claude Code
       const i = this.pending.indexOf(tool);
       if (i === -1) {
         try {
           this.gov.audit.append({ actor: this.ctx.expectedAgentId, domain: 'failure', action: `orphan-post:${tool}`,
-            decision: 'deny', reason: 'PostToolUse without a matching allowed PreToolUse (no-silent-execution violation)' });
+            decision: 'deny', reason: 'PostToolUse without a matching allowed PreToolUse (no-silent-execution violation)', sessionId: this.ctx.sessionId });
         } catch { /* fail closed below */ }
         return { permissionDecision: 'deny', reason: 'orphan PostToolUse flagged' };
       }

@@ -47,6 +47,12 @@ function readJson(req: IncomingMessage): Promise<{ body: Record<string, unknown>
     req.on('error', () => resolve({ body: {}, tooLarge: over }));
   });
 }
+// Sessions visible to a token: an operator sees every session in its root; any other identity sees
+// only sessions run as its own actor (same scoping rule as pending decisions on the stream).
+function sessionsFor(ctx: Ctx): ReturnType<Governance['sessions']> {
+  const isOp = ctx.actor === 'operator' || (ctx.operators?.includes(ctx.actor) ?? false);
+  try { return ctx.gov.sessions().filter((s) => isOp || s.agentId === ctx.actor); } catch { return []; }
+}
 const tokenEq = (a: string, b: string): boolean => { const ab = Buffer.from(a), bb = Buffer.from(b); return ab.length === bb.length && timingSafeEqual(ab, bb); };
 const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const hostOk = (req: IncomingMessage): boolean => {
@@ -86,10 +92,13 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
           res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
           const isOp = ctx.actor === 'operator' || (ctx.operators?.includes(ctx.actor) ?? false);
           const scoped = (e: { actor?: string; domain?: string }): boolean => isOp || e.actor === ctx.actor || e.domain === 'system';
-          const slim = (e: Record<string, unknown>) => ({ seq: e.seq, ts: e.ts, actor: e.actor, domain: e.domain, action: e.action, target: e.target, decision: e.decision, reason: e.reason, riskTier: e.riskTier });
+          const slim = (e: Record<string, unknown>) => ({ seq: e.seq, ts: e.ts, actor: e.actor, domain: e.domain, action: e.action, target: e.target, decision: e.decision, reason: e.reason, riskTier: e.riskTier, sessionId: e.sessionId });
           const emit = (event: string, data: unknown): void => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* peer gone */ } };
           const pendingSnapshot = () => gov.broker.list().filter((p) => isOp || p.actor === ctx.actor).map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier }));
           let cursor = gov.governor.audit.head().seq + 1;
+          // Sessions are pushed only when the list changes (including a working -> idle transition
+          // that comes from the clock alone), so a quiet system sends nothing new.
+          let lastSessions = '';
           emit('hello', { wire: WIRE_VERSION, since: cursor, root: ctx.rootId });
           const tick = (): void => {
             try {
@@ -98,6 +107,8 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
               const head = gov.governor.audit.head().seq + 1; if (head > cursor) cursor = head;
               emit('pending', pendingSnapshot());
               emit('budgets', gov.governor.tokens.snapshot());
+              const ss = JSON.stringify(sessionsFor(ctx));
+              if (ss !== lastSessions) { lastSessions = ss; emit('sessions', JSON.parse(ss)); }
               // F-7/F-8: the live tick is the natural production driver for both dormant checks —
               // a real monitor sweep (which files findings) and a registry re-attestation, so an
               // out-of-band edit to tools.json trips safe mode within a second instead of never.
@@ -138,6 +149,7 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
         if (method === 'GET' && url === '/v1/pending') {
           return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier })));
         }
+        if (method === 'GET' && url === '/v1/sessions') return send(200, sessionsFor(ctx));
         if (method === 'GET' && url === '/v1/audit') return send(200, gov.governor.audit.recent(50));
         if (method === 'GET' && url === '/v1/audit/verify') return send(200, { ok: gov.verifyAudit() });
         if (method === 'GET' && url === '/v1/budgets') return send(200, gov.governor.tokens.snapshot());

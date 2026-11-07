@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import {
   loadGovernor, restoreGovernor, DecisionBroker, AgentLoop, Dispatcher, ModelRouter,
-  HostRunner, ProviderRegistry, AVAILABLE_PROVIDERS, STARFISH_TOOL_SCHEMAS,
-  type Governor, type BoundarySet, type ToolCall, type KeyResolver, type Fetcher,
+  HostRunner, ProviderRegistry, AVAILABLE_PROVIDERS, STARFISH_TOOL_SCHEMAS, sessionViewsFromSnapshot,
+  type Governor, type SessionView, type BoundarySet, type ToolCall, type KeyResolver, type Fetcher,
   type ToolExecResult, type AgentRunResult,
 } from '@starfish/governance-core';
 import { makeFsExecutor } from './executor';
@@ -36,6 +36,9 @@ export interface Governance {
   safeMode(): boolean;          // deny-all integrity mode
   governCall(call: ToolCall, boundary: BoundarySet): GovernDecision;
   runGovernedSkill(input: RunSkillInput): Promise<AgentRunResult>;
+  /** Agent sessions for this root, most urgent first, read from the snapshot the overlay daemon
+   *  writes (`state/sessions.json`). Read-only; empty when no daemon has recorded any. */
+  sessions(): SessionView[];
 }
 
 const callHash = (c: ToolCall): string =>
@@ -99,7 +102,9 @@ export function createGovernance(opts: GovernanceOptions): Governance {
     return loop.run({ agentId: input.agentId, task: { id: task.id, riskTier: 'medium' }, system, messages: [{ role: 'user', content: input.brief }], tools: STARFISH_TOOL_SCHEMAS });
   }
 
-  return { governor, broker, governCall, runGovernedSkill, verifyAudit: () => governor.audit.verify(), safeMode: () => governor.pdp.isSafeMode() };
+  const sessions = (): SessionView[] => sessionViewsFromSnapshot(join(stateDir, 'sessions.json'));
+
+  return { governor, broker, governCall, runGovernedSkill, sessions, verifyAudit: () => governor.audit.verify(), safeMode: () => governor.pdp.isSafeMode() };
 }
 
 export { ROOT_SCHEMA_VERSION, readRootSchema, ensureRootSchema } from './schema';
