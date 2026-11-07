@@ -324,6 +324,15 @@ describe('local and HTTP providers satisfy the same contract', () => {
     expect(built.timeoutMs).toBe(5000);
   });
 
+  it('trims trailing slashes in linear time (CodeQL js/polynomial-redos)', () => {
+    const many = '/'.repeat(200_000);
+    expect(buildInquiryHttpRequest(req(CHOICE_Q), `http://127.0.0.1:8080${many}`, 'm').url)
+      .toBe('http://127.0.0.1:8080/v1/systemone');
+    // A long run of '/' followed by another character was the quadratic case for /\/+$/.
+    const odd = `http://127.0.0.1:8080${many}x`;
+    expect(buildInquiryHttpRequest(req(CHOICE_Q), odd, 'm').url).toBe(`${odd}/v1/systemone`);
+  });
+
   it('a hostile HTTP body cannot forge the question it answered', () => {
     const r = req(CHOICE_Q);
     const sig = parseInquirySignal(r, 'http', 'sysone', '1', { questionId: 'other.question', selected: 'read', confidence: 1 });
