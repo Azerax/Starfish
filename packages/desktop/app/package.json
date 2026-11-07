@@ -23,12 +23,12 @@
     "@starfish/governance-core": "file:../../governance-core",
     "@starfish/governance-hooks": "file:../../governance-hooks",
     "@starfish/desktop": "file:..",
-    "react": "^18.3.1",
+    "react": "^19.3.1",
     "react-dom": "^18.3.1",
     "@starfish/governance-overlay": "file:../../governance-overlay"
   },
   "devDependencies": {
-    "@types/react": "^18.3.11",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
     "electron": "^32.2.0",
