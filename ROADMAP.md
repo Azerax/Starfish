@@ -91,10 +91,10 @@ deliberately, because a governance product that hides its own residuals is not c
 |---|---|---|
 | **H1** | **OS-level isolation.** Untrusted tasks run to the enforcement seam, not an OS boundary. This is the honest ceiling on what Starfish guarantees against a compromised or shared host. | Post-1.0, top residual |
 | **H2** | Signed update + blocklist enforcement — a known-bad skill/version should refuse to run. | 1.0 / release mechanics |
-| **H3** | Eval mode + production-target guard — nothing currently distinguishes a throwaway evaluation from a live production wiring. | Phase 2 |
-| **H4** | Elevated-launch handling — running as admin/root widens blast radius with no user signal. | Phase 2 |
+| **H3** | Eval mode + production-target guard. **Production-target guard built (v0.28):** a shell command that names a deployment target with no environment marker, or a production one, is a floor and needs a person. Eval mode is still open. | Phase 2 |
+| **H4** | Elevated-launch handling. **Detection fixed and recorded (v0.28):** an elevated launch, or one that cannot be checked, is audited at boot and warned. It used to report "not elevated" whenever the check failed. | Phase 2 |
 | ~~**H5**~~ | ~~Input re-provenance — a shared/cloud file changed between "picked" and "used".~~ **Closed in v0.28.0:** an allowed read stamps the file's content hash, an exec re-verifies it, and a mid-task swap is denied. The module existed and was correct since Phase 1; what shipped in v0.28.0 is the wiring, plus reachability coverage so it cannot fall inert again. | **Shipped** |
-| **H6** | Distinct critical confirmation — approval fatigue lets a reflexive click approve an irreversible action. | Phase 2 / UI |
+| **H6** | Distinct critical confirmation. **Enforced in the broker (v0.28):** a floor or critical ask cannot be approved without an explicit confirmation; the desktop app asks through a dialog the renderer cannot fake. Cockpit visual separation is still open. | Phase 2 / UI |
 
 Full detail and acceptance criteria: [`docs/HARDENING_BACKLOG.md`](docs/HARDENING_BACKLOG.md).
 Known residuals are also stated in [`SECURITY.md`](SECURITY.md) rather than overclaimed.

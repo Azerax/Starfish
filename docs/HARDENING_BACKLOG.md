@@ -42,6 +42,18 @@ ends in `catch { elevated = false }`. A missing `net.exe`, a PATH change or the 
 inside the Electron main file, so it is untestable where it is — `privilegedipc.ts`/`ipcauthority.ts`
 are the precedent for moving the logic down a ring.
 
+## 2026-11-07 — the enforceable halves of H3, H4 and H6 are built
+
+Each item below is **partly closed**: the core half from the table above is enforced and tested. The
+UI half is either done in a basic form or still open, as stated per item. None of the three is marked
+closed in the table at the top, because each acceptance criterion there mixes the two halves.
+
+| | Built (enforced, tested) | Still open |
+|---|---|---|
+| **H3** | `target.ts` `classifyTarget()` is category #26's first producer. It reads exec calls that name a deployment target (deploy/cloud CLI, database URI, ssh host, database client `-h`) and fails closed to `prod` when no environment marker is present. A production marker wins, and a non-production word inside a file name does not count. #26 is now a **floor** (Ask, not Deny), so a consequential production call cannot be auto-run by an allow policy or medium tolerance. Reads, dry runs, staging and dev stay in-band. Pinned by `target.conformance.test.ts` and a new #26 row in `pdp.floors.conformance.test.ts`, which is now the second floor carried by the category mechanism. | Eval mode as a confined Scope Contract, and the onboarding screen that offers it. Network URLs, file writes and package scripts (`npm run deploy`) are not classified. No resolution of kube contexts or cloud profiles: a target named only through the current context is invisible. |
+| **H4** | `classifyLaunchPrivilege()` (core, pure): Windows token integrity level from `whoami /groups`, POSIX effective uid. Anything unreadable is `unknown` and `treatAsElevated`. The `detectPrivilege()` fail-open defect is fixed: the desktop app and the CLI daemon both use `detectLaunchPrivilege()` (governance-overlay) and pass the reading to `loadGovernor`. `EnforcementPosture.launchPrivilege` records it, and an elevated or unknown launch writes a high-risk `elevated-launch` audit line. A regression test shows boundary and catastrophic-shell denials hold for every reading. | An optional elevated-exec floor. Privilege drop stays out of scope as written: there is no in-process drop on Windows, so the deliverable is detect, warn, and tell the person to relaunch. |
+| **H6** | `confirmation.ts` `confirmationClass()` is monotone: a floor ask, critical, injection or unknown tier is `deliberate`. `PendingDecision` now carries `askOrigin` (it used to die at the PDP boundary) and a derived `confirmation` that callers cannot supply or demote, re-derived on restore. `broker.resolve()` refuses to approve a deliberate decision without `confirm` = the tool label; deny is never gated. The sidecar, SDK runners, `@starfish/ui` bridge and desktop privileged IPC all carry it. The desktop asks for the main-process trusted confirmation first. | The 2-second deliberate-action variant (core is time-free by design). Visual separation in the D5 cockpit beyond the existing dialog. The desktop renderer's own Bridge screen does not yet mark deliberate items before the dialog appears. |
+
 ## Notes
 - H1 is the single biggest residual and matches the long-standing "OS sandbox (T-25) = top post-v1 hardening" call — it's the honest ceiling on what Starfish guarantees against a compromised or shared host, and `SECURITY.md` states this rather than overclaiming.
 - H3/H4/H6 are cheap and land in the Phase-2 product-surface work already planned; H5 rides the RM-attestation work in Phase 1.
