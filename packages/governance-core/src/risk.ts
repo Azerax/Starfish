@@ -4,6 +4,7 @@
 import type { RiskTier, ToolCall, ToolDef } from './types';
 import { assessRisk, type RiskAssessment, type CategoryScores } from './score';
 import { FLOOR_TRIGGER } from './riskmatrix';
+import { classifyTarget } from './target';
 
 const RANK: Record<RiskTier, number> = { low: 0, medium: 1, high: 2, critical: 3, injection: 4 };
 const max = (a: RiskTier, b: RiskTier): RiskTier => (RANK[a] >= RANK[b] ? a : b);
@@ -65,6 +66,20 @@ export class RiskEngine {
     if (IRREVERSIBLE_STRONG.test(text)) cats[6] = Math.max(FLOOR_TRIGGER, Math.min(cap, 7));
     else if (IRREVERSIBLE_WEAK.test(text)) cats[6] = Math.min(cap, 7);
     if (/upload|exfil|POST\s|multipart|attachment/i.test(text)) cats[12] = Math.min(cap, 7);          // exfiltration
+    // H3: #26 production vs non-production target. Only exec calls are classified, and only when the
+    // command names a deployment target (target.ts). A consequential call against production reaches
+    // FLOOR_TRIGGER, and #26 is a floor, so no allow policy or tolerance can auto-run it. A read-only
+    // or dry-run call against production, and anything on staging, stays in-band as a signal.
+    if (tool.category === 'exec') {
+      // `command` when present; otherwise every string field, one per line (a line is a separate
+      // command to the classifier), so an exec tool whose input is `cmd` or `script` is still read.
+      const command = typeof call.input?.command === 'string'
+        ? call.input.command
+        : Object.values(call.input ?? {}).filter((v): v is string => typeof v === 'string').join('\n');
+      const target = classifyTarget(command);
+      if (target?.env === 'prod') cats[26] = target.consequential ? FLOOR_TRIGGER : Math.min(cap, 6);
+      else if (target?.env === 'staging') cats[26] = Math.min(cap, 4);
+    }
     return assessRisk(cats);
   }
 }

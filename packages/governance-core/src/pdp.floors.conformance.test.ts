@@ -179,6 +179,15 @@ describe('floors — reachable from a real tool call, not just from the scorer',
       enforcedBy: 'pdp-hard-floor',
     },
     {
+      id: 26, what: 'a deploy command against an unlabelled (so: production) target',
+      tool: { id: 'sh2', category: 'exec', pathParams: [], allowedAgents: '*' },
+      input: { cmd: 'kubectl apply -f deploy.yaml' },
+      // H3 (v0.28): target.ts is #26's producer. A consequential command naming a deployment target
+      // with no environment marker scores FLOOR_TRIGGER, and #26 is a floor, so it carries the
+      // decision through the category mechanism itself — the second row that does.
+      enforcedBy: 'category-floor',
+    },
+    {
       id: 29, what: 'self-modification of governance config',
       tool: { id: 'w2', category: 'write', pathParams: ['path'], allowedAgents: '*' },
       input: { path: '/w/policies.json' },
@@ -188,12 +197,12 @@ describe('floors — reachable from a real tool call, not just from the scorer',
     },
   ];
 
-  it('only ONE floor is actually carried by the category mechanism — the rest are bespoke or absent', () => {
+  it('only TWO floors are actually carried by the category mechanism (#6, and #26 since H3) — the rest are bespoke or absent', () => {
     // Not a behavioural assertion; a disclosure that cannot drift. If someone wires a real producer
     // for #10 or #12, or makes #1 floor properly, this count changes and the comment above must be
-    // rewritten rather than left to rot.
+    // rewritten rather than left to rot. It changed once already: H3 added #26 with its producer.
     const byCategory = PROBES.filter((p) => p.enforcedBy === 'category-floor').map((p) => p.id);
-    expect(byCategory).toEqual([6]);
+    expect(byCategory).toEqual([6, 26]);
     expect(PROBES.length + UNDEMONSTRATED.length).toBe(FLOOR_IDS.length);
   });
 

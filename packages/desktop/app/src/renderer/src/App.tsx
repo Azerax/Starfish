@@ -145,10 +145,19 @@ function Shell() {
 
 // On a governed system, workers must never run as OS admin/root — and Windows hands new accounts admin
 // by default. If elevated, warn loudly with a flashing red banner on every screen.
+// H4: 'unknown' (the check could not run) is warned too — a failed check is not evidence of safety.
 function AdminBanner() {
-  const [priv, setPriv] = useState<{ elevated: boolean; user?: string } | null>(null);
+  const [priv, setPriv] = useState<{ elevated: boolean; state?: 'elevated' | 'standard' | 'unknown'; user?: string } | null>(null);
   useEffect(() => { void getBridge().getPrivilege?.().then(setPriv).catch(() => {}); }, []);
   if (!priv?.elevated) return null;
+  if (priv.state === 'unknown') {
+    return (
+      <div className="admin-banner" role="alert">
+        <span className="ab-dot" />
+        <span><b>Could not confirm Starfish is running as a standard user.</b> It is treated as administrator until it can. Close Starfish and relaunch from a standard (non-admin) account.</span>
+      </div>
+    );
+  }
   return (
     <div className="admin-banner" role="alert">
       <span className="ab-dot" />

@@ -25,6 +25,7 @@ import { Anchorer, NoopAnchor, makeAnchorAdapter, type AnchorReceipt } from './a
 import { readFileSync, existsSync } from 'node:fs';
 import type { AuditEvent } from './types';
 import type { ToolDef, AgentDef } from './types';
+import type { LaunchPrivilege, PrivilegeReading } from './privilege';
 
 // F0 (phase 1): the actual enforcement posture, recorded so it is never SILENT. An optional gate can
 // legitimately be off, but "off" must be a visible, audited fact an operator can read — not an
@@ -42,6 +43,9 @@ export interface EnforcementPosture {
   strictAgentAllowlist: boolean; // Q4: an agent with no declared allowedTools is denied, not granted all
   selfIntegrity: boolean;        // operator-signed self-integrity manifest verified at boot
   secretGatekeeper: string;      // the identity that may write secret files
+  // H4: how the host process was launched, from the caller's probe (core never probes the OS).
+  // 'not-checked' means no probe was supplied — stated, not assumed safe.
+  launchPrivilege: LaunchPrivilege | 'not-checked';
 }
 
 export interface Governor {
@@ -52,7 +56,7 @@ export interface Governor {
   posture: EnforcementPosture; safeMode: boolean;
 }
 
-export function loadGovernor(governanceDir: string, auditPath: string, opts?: { taskBindingMode?: TaskBindingMode; /** @deprecated v0.28 — use `taskBindingMode: 'required'`. */ enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; scopeMode?: ScopeMode; scopeCallBudget?: number; strictAgentAllowlist?: boolean; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number } }): Governor {
+export function loadGovernor(governanceDir: string, auditPath: string, opts?: { taskBindingMode?: TaskBindingMode; /** @deprecated v0.28 — use `taskBindingMode: 'required'`. */ enforceTaskBinding?: boolean; stateDir?: string; skillsRoot?: string; secretGatekeeper?: string; scopeMode?: ScopeMode; scopeCallBudget?: number; strictAgentAllowlist?: boolean; selfIntegrity?: { manifestPath: string; expectedPublicKeyPem: string; minEpoch?: number }; anchor?: { enabled: boolean; backend?: 'noop' | 'file'; filePath?: string; everyNEvents?: number }; /** H4: classifyLaunchPrivilege() of the host process. */ launchPrivilege?: PrivilegeReading }): Governor {
   const tools = new Registry<ToolDef>(join(governanceDir, 'tools.json'), (t) => t.id);
   const agents = new Registry<AgentDef>(join(governanceDir, 'agents.json'), (a) => a.id);
   const policy = new PolicyEngine(loadPolicies(join(governanceDir, 'policies.json')));
@@ -105,8 +109,21 @@ export function loadGovernor(governanceDir: string, auditPath: string, opts?: { 
     strictAgentAllowlist: pdp.isStrictAgentAllowlist(),   // Q4: undeclared allowlist = deny, not grant
     selfIntegrity: !!opts?.selfIntegrity,
     secretGatekeeper: opts?.secretGatekeeper ?? 'toby',
+    launchPrivilege: opts?.launchPrivilege?.state ?? 'not-checked',
   };
   audit.append({ actor: 'system', domain: 'governance', action: 'enforcement-posture', reason: 'active enforcement gates at boot', detail: { ...posture } });
+  // H4: an elevated launch — or one that could not be checked — is a recorded finding, not just a
+  // banner. Elevation does not relax anything: boundary and system-tree denials are path rules and hold
+  // regardless (pinned by privilege.conformance.test.ts).
+  if (opts?.launchPrivilege?.treatAsElevated) {
+    audit.append({
+      actor: 'system', domain: 'governance', action: 'elevated-launch', riskTier: 'high',
+      reason: opts.launchPrivilege.state === 'elevated'
+        ? `host runs with admin/root rights — every governed action inherits them (${opts.launchPrivilege.reason})`
+        : `could not confirm the host runs as a standard user, so it is treated as elevated (${opts.launchPrivilege.reason})`,
+      detail: { state: opts.launchPrivilege.state },
+    });
+  }
   const g: Governor = { pdp, tools, agents, audit, tasks, tokens, memory, wiki, router, capabilities, monitor, services, anchorer, scope, posture, safeMode: false };
   // A16/A17: a torn/corrupt/truncated audit is a deliberate safe-mode, not a crash.
   if (!audit.integrity.ok) {

@@ -4,7 +4,8 @@
 // Bridge. proposer != approver is enforced: the resolver may not be the proposing actor. Pending
 // decisions persist fail-closed — a restart re-offers them; nothing is ever auto-approved.
 import type { AuditLog } from './audit';
-import type { RiskTier } from './types';
+import type { AskOrigin, RiskTier } from './types';
+import { confirmationClass, confirmationPhrase, type ConfirmationClass } from './confirmation';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -24,9 +25,20 @@ export interface PendingDecision {
   target?: string;
   refId?: string;           // capabilityId / taskId for the side-effect on approval
   riskTier?: RiskTier;
+  /** WHY the PDP asked. Before H6 this died at the PDP boundary, so a floor ask reached the queue
+   *  looking exactly like a routine one. */
+  askOrigin?: AskOrigin;
+  /** H6: DERIVED by the broker from riskTier + askOrigin (confirmationClass). Any value a caller
+   *  supplies is overwritten, so it cannot be used to demote a floor ask. */
+  confirmation?: ConfirmationClass;
   reason: string;
   channel?: DecisionChannel;   // absent = 'starfish'
   sessionId?: string;          // the agent session that raised it, when known
+}
+
+export interface ResolveOptions {
+  /** H6: required to APPROVE a deliberate decision; must equal confirmationPhrase(decision). */
+  confirm?: string;
 }
 
 interface Persisted { pending: PendingDecision[] }
@@ -38,11 +50,11 @@ export class DecisionBroker {
   constructor(private audit: AuditLog, private persistPath?: string) { this.restore(); }
 
   /** Register a pending decision (no awaiter). Returns the created record. Idempotent on refId+kind. */
-  file(d: Omit<PendingDecision, 'id' | 'ts'>): PendingDecision {
+  file(d: Omit<PendingDecision, 'id' | 'ts' | 'confirmation'>): PendingDecision {
     const dup = [...this.pending.values()].find((p) => p.kind === d.kind && p.refId === d.refId && d.refId !== undefined);
     if (dup) return dup;
     const id = `dec_${Date.now().toString(36)}_${this.n++}`;
-    const rec: PendingDecision = { ...d, id, ts: new Date().toISOString() };
+    const rec: PendingDecision = { ...d, id, ts: new Date().toISOString(), confirmation: confirmationClass(d) };
     this.pending.set(id, rec);
     const where = d.channel === 'claude-code' ? "awaiting an answer in Claude Code's prompt (mirrored, observe-only)" : 'awaiting operator go/no-go';
     this.audit.append({ actor: d.actor, domain: 'governance', action: 'decision:filed', target: d.target ?? d.refId, decision: 'deny', riskTier: d.riskTier, reason: `${where} — ${d.reason}`, sessionId: d.sessionId });
@@ -52,7 +64,7 @@ export class DecisionBroker {
 
   /** File AND wait. The promise resolves when an operator resolves this decision. Only a Starfish-
    *  channel decision can be awaited: nobody here can answer a Claude Code prompt. */
-  await(d: Omit<PendingDecision, 'id' | 'ts'>): Promise<DecisionVerdict> {
+  await(d: Omit<PendingDecision, 'id' | 'ts' | 'confirmation'>): Promise<DecisionVerdict> {
     if (d.channel === 'claude-code') return Promise.reject(new Error('a claude-code channel decision is answered in Claude Code and cannot be awaited here'));
     const rec = this.file(d);
     return new Promise<DecisionVerdict>((resolve) => { this.waiters.set(rec.id, resolve); });
@@ -65,7 +77,7 @@ export class DecisionBroker {
   /** Operator resolution. Enforces proposer != approver, and — when an operator principal set is supplied
    *  (audit A20) — that the approver is a designated operator (not merely some other agent). Audits,
    *  resolves any awaiter, persists. */
-  resolve(id: string, verdict: DecisionVerdict, by: string, operators?: ReadonlySet<string> | readonly string[]): { ok: boolean; reason: string; decision?: PendingDecision } {
+  resolve(id: string, verdict: DecisionVerdict, by: string, operators?: ReadonlySet<string> | readonly string[], opts?: ResolveOptions): { ok: boolean; reason: string; decision?: PendingDecision } {
     const d = this.pending.get(id);
     if (!d) return { ok: false, reason: 'no such pending decision (already resolved?)' };
     // A mirrored ask is answered in Claude Code's own prompt. An "approve" here would be audited as an
@@ -76,9 +88,17 @@ export class DecisionBroker {
       const ok = Array.isArray(operators) ? operators.includes(by) : (operators as ReadonlySet<string>).has(by);
       if (!ok) return { ok: false, reason: 'approver is not a designated operator (agent-vs-agent approval blocked)' };
     }
+    // H6: a deliberate decision cannot be approved by the same request a routine one takes. The class
+    // is recomputed from the record, not read from it, so neither a caller nor an edited persist file
+    // can demote it. Deny is never gated: refusing is always one step. The expected phrase is not put
+    // in the reason, so a client cannot just echo the error back without a person in the loop.
+    if (verdict === 'approve' && confirmationClass(d) === 'deliberate' && opts?.confirm !== confirmationPhrase(d)) {
+      return { ok: false, reason: `deliberate confirmation required — this ${d.askOrigin === 'floor' ? 'floor' : d.riskTier ?? 'unclassified'} ask needs confirm set to the decision's tool label` };
+    }
     this.pending.delete(id);
     const w = this.waiters.get(id); if (w) { this.waiters.delete(id); w(verdict); }
-    this.audit.append({ actor: by, domain: 'governance', action: verdict === 'approve' ? 'decision:approved' : 'decision:denied', target: d.target ?? d.refId, decision: verdict === 'approve' ? 'allow' : 'deny', riskTier: d.riskTier, reason: `operator ${verdict} — ${d.reason}`, sessionId: d.sessionId });
+    const deliberate = verdict === 'approve' && confirmationClass(d) === 'deliberate';
+    this.audit.append({ actor: by, domain: 'governance', action: verdict === 'approve' ? 'decision:approved' : 'decision:denied', target: d.target ?? d.refId, decision: verdict === 'approve' ? 'allow' : 'deny', riskTier: d.riskTier, reason: `operator ${verdict}${deliberate ? ' (deliberate confirmation)' : ''} — ${d.reason}`, sessionId: d.sessionId });
     this.save();
     return { ok: true, reason: `operator ${verdict}`, decision: d };
   }
@@ -122,7 +142,9 @@ export class DecisionBroker {
     if (!this.persistPath || !existsSync(this.persistPath)) return;
     try {
       const p = JSON.parse(readFileSync(this.persistPath, 'utf8')) as Persisted;
-      for (const d of p.pending ?? []) this.pending.set(d.id, d);   // re-offered, still pending (fail-closed)
+      // re-offered, still pending (fail-closed). The confirmation class is re-derived, never trusted
+      // from disk.
+      for (const d of p.pending ?? []) this.pending.set(d.id, { ...d, confirmation: confirmationClass(d) });
     } catch { /* corrupt persist => start empty; nothing auto-approved */ }
   }
 }

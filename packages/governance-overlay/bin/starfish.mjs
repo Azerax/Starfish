@@ -5,7 +5,7 @@
 // `init` walks first-run setup (customizable install dir), seeds fail-closed governance, then launches
 // the UI. `govern` brings a skill/agent build under governance. Apache-2.0. Local-only.
 import { AuditLog, CapabilityLedger, loadGovernor, loadPolicies, savePolicies, explainPolicy, simulatePolicyChange, SessionRegistry, DecisionBroker, sessionViewsFromSnapshot } from '@starfish/governance-core';
-import { govern, seedInstall, seedOverlay, isInitialized, readLock } from '@starfish/governance-overlay';
+import { govern, seedInstall, seedOverlay, isInitialized, readLock, detectLaunchPrivilege } from '@starfish/governance-overlay';
 import { resolve, join, dirname, sep } from 'node:path';
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, chmodSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
@@ -166,7 +166,9 @@ async function runDaemon() {
     return;
   }
   if (!isInitialized(home)) { console.error('Not governed yet. Run:  starfish init --overlay --dir "' + projectRoot + '" --yes'); process.exit(1); }
-  const governor = loadGovernor(join(home, 'governance'), join(home, 'audit.jsonl'), { stateDir: join(home, 'state') });
+  // H4: record how this daemon was launched. Elevated (or uncheckable) is audited at boot and warned here.
+  const launchPrivilege = detectLaunchPrivilege();
+  const governor = loadGovernor(join(home, 'governance'), join(home, 'audit.jsonl'), { stateDir: join(home, 'state'), launchPrivilege });
   // Boundary: the agent may read/write the PROJECT tree, but NEVER the .starfish governance home (deny).
   const boundaryFor = () => ({ visibility: [projectRoot], write: [projectRoot], deny: [home] });
   const wp = writeProfileFor(projectRoot); const bk = backupsFor(projectRoot);
@@ -185,6 +187,14 @@ async function runDaemon() {
   console.log('  endpoint: ' + sock);
   console.log('  writes : ' + wp + (wp === 'auto' ? ' (in-boundary writes auto-allowed, ' + bk + ' backups kept)' : ' (every write asks)') + ' - system-risk stays gated either way');
   console.log('  Every governed tool call is denied unless this daemon allows it. Ctrl-C to stop.');
+  if (launchPrivilege.treatAsElevated) {
+    console.log('');
+    console.log(launchPrivilege.state === 'elevated'
+      ? '  WARNING: running as administrator/root. Every governed action inherits these rights.'
+      : '  WARNING: could not confirm this runs as a standard user, so it is treated as elevated.');
+    console.log('           ' + launchPrivilege.reason);
+    console.log('           Stop the daemon and start it again from a standard (non-admin) shell.');
+  }
   // #7 Config-drift tripwire: baseline the governance-critical Claude Code settings (managed + user +
   // project). If any change after launch, the daemon enters SAFE MODE — the PDP then denies EVERY tool
   // call — until the operator runs `starfish attest`. Catches a settings edit that weakens governance

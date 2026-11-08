@@ -58,6 +58,39 @@ describe('sidecar decision status (host skill can learn the outcome)', () => {
   });
 });
 
+describe('H6 — a deliberate decision needs `confirm` over HTTP too', () => {
+  it('approve without confirm is 409 and stays pending; with the tool label it is approved', async () => {
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'w', actor: 'worker' }, { token: 'o', actor: 'operator' }] });
+    try {
+      const h = (t: string): Record<string, string> => ({ 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer ' + t, 'content-type': 'application/json' });
+      const filed = await (await fetch(sc.url + '/v1/decisions', { method: 'POST', headers: h('w'), body: JSON.stringify({ decision: { tool: 'shell', target: 'drop table users', riskTier: 'high', askOrigin: 'floor', reason: 'floor 6', refId: 'h6' } }) })).json() as { id: string };
+      const pending = await (await fetch(sc.url + '/v1/pending', { headers: h('o') })).json() as Array<{ id: string; confirmation?: string; askOrigin?: string }>;
+      expect(pending.find((p) => p.id === filed.id)).toMatchObject({ confirmation: 'deliberate', askOrigin: 'floor' });
+
+      const plain = await fetch(sc.url + '/v1/decisions/' + filed.id, { method: 'POST', headers: h('o'), body: JSON.stringify({ verdict: 'approve' }) });
+      expect(plain.status).toBe(409);
+      expect(((await plain.json()) as { reason: string }).reason).toMatch(/deliberate confirmation required/);
+
+      const ok = await fetch(sc.url + '/v1/decisions/' + filed.id, { method: 'POST', headers: h('o'), body: JSON.stringify({ verdict: 'approve', confirm: 'shell' }) });
+      expect(ok.status).toBe(200);
+    } finally { await sc.close(); }
+  });
+
+  it('an unknown askOrigin is dropped, not guessed', async () => {
+    const root = makeGovernedRoot([P_READ]);
+    const gov = createGovernance({ root, keyResolver: () => 'sk-test' });
+    const sc = await startSidecar({ governance: gov, identities: [{ token: 'w', actor: 'worker' }] });
+    try {
+      const h = { 'x-starfish-wire': String(WIRE_VERSION), authorization: 'Bearer w', 'content-type': 'application/json' };
+      const filed = await (await fetch(sc.url + '/v1/decisions', { method: 'POST', headers: h, body: JSON.stringify({ decision: { tool: 'fs.write', riskTier: 'high', askOrigin: 'trust-me', reason: 'r' } }) })).json() as { id: string };
+      expect(gov.broker.get(filed.id)?.askOrigin).toBeUndefined();
+      expect(gov.broker.get(filed.id)?.confirmation).toBe('routine');
+    } finally { await sc.close(); }
+  });
+});
+
 describe('sidecar read endpoints (dashboard surface)', () => {
   it('serves audit, budgets, monitor, and audit/verify', async () => {
     const root = makeGovernedRoot([P_READ]);

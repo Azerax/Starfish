@@ -12,6 +12,7 @@
 //     main-process confirmation the renderer cannot synthesize even with code execution (the closure for
 //     the Chromium-RCE residual). In production this is dialog.showMessageBox; in tests it is a stub.
 import type { IpcAuthority, PrivilegedOp } from './ipcauthority';
+import { confirmationClass, confirmationPhrase, type AskOrigin, type RiskTier, type ResolveOptions } from '@starfish/governance-core';
 
 export interface PrivilegedResult { ok: boolean; reason: string; value?: unknown }
 
@@ -21,8 +22,8 @@ export interface PrivilegedDeps {
   trustedConfirm: (op: PrivilegedOp, detail: string) => boolean;
   audit: (e: { action: string; decision: 'allow' | 'deny'; reason: string; target?: string; riskTier?: string }) => void;
   broker: {
-    get(id: string): { kind?: string; refId?: string } | undefined;
-    resolve(id: string, verdict: 'approve' | 'deny', by: string, operators?: readonly string[]): { ok: boolean; reason: string };
+    get(id: string): { kind?: string; refId?: string; tool?: string; target?: string; riskTier?: RiskTier; askOrigin?: AskOrigin } | undefined;
+    resolve(id: string, verdict: 'approve' | 'deny', by: string, operators?: readonly string[], opts?: ResolveOptions): { ok: boolean; reason: string };
   };
   enableCapability: (refId: string, by: string) => void;   // capabilities.approve
   resumeAgent: (agentId: string, by: string) => void;      // tokens.resume
@@ -48,9 +49,23 @@ export function privilegedApproveOrDeny(deps: PrivilegedDeps, req: { decisionId?
   if ('refused' in auth) return { ok: false, reason: `refused: ${auth.refused}` };
   if (!req.decisionId) return { ok: false, reason: 'no decisionId' };
   const pend = deps.broker.get(req.decisionId);
+  // H6: approving a deliberate decision (a floor ask, or critical) takes a second, distinct act: the
+  // main-process confirmation the renderer cannot synthesize, the same trusted path purge uses. Only
+  // after a person confirms there does main supply the confirmation phrase the broker requires. A
+  // renderer that sends a forged phrase gains nothing, because the phrase is never read from it.
+  let confirm: string | undefined;
+  if (req.kind === 'approve' && pend && confirmationClass(pend) === 'deliberate') {
+    const label = pend.tool ?? 'this action';
+    const why = pend.askOrigin === 'floor' ? 'a floor category requires a person' : `risk tier ${pend.riskTier ?? 'unclassified'}`;
+    if (!deps.trustedConfirm('approve', `Approve ${label}${pend.target ? ` on ${pend.target}` : ''}? This was escalated because ${why}.`)) {
+      deps.audit({ action: 'ipc-refused:approve', decision: 'deny', reason: 'deliberate confirmation declined', target: pend.target ?? req.decisionId, riskTier: pend.riskTier });
+      return { ok: false, reason: 'deliberate confirmation declined' };
+    }
+    confirm = confirmationPhrase({ tool: pend.tool ?? '' });
+  }
   // The broker enforces proposer≠approver AND, with the operator-set [operator], that only the
   // main-owned operator can approve — so an agent can never self-approve through this path.
-  const r = deps.broker.resolve(req.decisionId, req.kind, auth.operator, [auth.operator]);
+  const r = deps.broker.resolve(req.decisionId, req.kind, auth.operator, [auth.operator], { confirm });
   if (r.ok && req.kind === 'approve' && pend?.kind === 'capability' && pend.refId) deps.enableCapability(pend.refId, auth.operator);
   return { ok: r.ok, reason: r.reason, value: r.ok && req.kind === 'approve' };
 }

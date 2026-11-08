@@ -1,17 +1,17 @@
 // The minimal host shell — embeds the composed Governor and exposes the live PDP daemon.
 // Fail-closed: loadGovernor throws on missing/corrupt config, so the host cannot start ungoverned.
 // (The Electron window is ring-3 presentation, added later; this is the governed runtime it wraps.)
-import { loadGovernor, boundaryForAgent, persistGovernor, type Governor, type BoundarySet } from '@starfish/governance-core';
+import { loadGovernor, boundaryForAgent, persistGovernor, type Governor, type BoundarySet, type PrivilegeReading } from '@starfish/governance-core';
 import { PdpDaemon } from '@starfish/governance-hooks';
 import { join } from 'node:path';
 
 export interface Host { governor: Governor; daemon: PdpDaemon; persist(): void; stop(): void; }
-export interface HostOptions { governanceDir: string; auditPath: string; stateDir: string; projectRoot: string; listenPath: string; }
+export interface HostOptions { governanceDir: string; auditPath: string; stateDir: string; projectRoot: string; listenPath: string; /** H4: how the host was launched (core records it; it never probes). */ launchPrivilege?: PrivilegeReading; }
 
 export async function createHost(opts: HostOptions): Promise<Host> {
   // F0 phase 2: verify-before-invoke ON by default (skillsRoot). Fires only on calls carrying a
   // capabilityId, so ordinary agent tool calls are unaffected.
-  const governor = loadGovernor(opts.governanceDir, opts.auditPath, { stateDir: opts.stateDir, skillsRoot: join(opts.projectRoot, 'skills') }); // throws on bad config (fail-closed boot)
+  const governor = loadGovernor(opts.governanceDir, opts.auditPath, { stateDir: opts.stateDir, skillsRoot: join(opts.projectRoot, 'skills'), launchPrivilege: opts.launchPrivilege }); // throws on bad config (fail-closed boot)
   const boundaryFor = (agentId: string): BoundarySet => boundaryForAgent({
     projectRoot: opts.projectRoot,
     workspace: join(opts.projectRoot, 'agents', agentId, 'workspace'),

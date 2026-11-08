@@ -25,6 +25,7 @@ const RISK_TIERS = ['low', 'medium', 'high', 'critical'] as const;
 // shape of bug (checking for the safe literal, defaulting everything else to the dangerous one) turned up
 // independently in packages/desktop/src/projections.ts, which is what prompted centralizing this.
 const VERDICTS = ['approve', 'deny'] as const;
+const ASK_ORIGINS = ['risk', 'policy', 'floor'] as const;
 export interface SidecarIdentity { token: string; actor: string }
 /** `operators` restricts who may approve a pending decision (A20). F-9: defaults to ['operator']
  *  rather than "anyone who isn't the proposer" — approval authority is always an explicit set. */
@@ -94,7 +95,7 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
           const scoped = (e: { actor?: string; domain?: string }): boolean => isOp || e.actor === ctx.actor || e.domain === 'system';
           const slim = (e: Record<string, unknown>) => ({ seq: e.seq, ts: e.ts, actor: e.actor, domain: e.domain, action: e.action, target: e.target, decision: e.decision, reason: e.reason, riskTier: e.riskTier, sessionId: e.sessionId });
           const emit = (event: string, data: unknown): void => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* peer gone */ } };
-          const pendingSnapshot = () => gov.broker.list().filter((p) => isOp || p.actor === ctx.actor).map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier }));
+          const pendingSnapshot = () => gov.broker.list().filter((p) => isOp || p.actor === ctx.actor).map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier, askOrigin: p.askOrigin, confirmation: p.confirmation }));
           let cursor = gov.governor.audit.head().seq + 1;
           // Sessions are pushed only when the list changes (including a working -> idle transition
           // that comes from the clock alone), so a quiet system sends nothing new.
@@ -141,13 +142,16 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
             target: str(raw.target, 1024),
             reason: str(raw.reason, 2000) ?? '',
             riskTier: clampEnum(raw.riskTier, RISK_TIERS, 'high'),
+            // H6: pass the PDP's askOrigin through so a floor ask is classed deliberate. Unknown
+            // values are dropped, never guessed.
+            askOrigin: (ASK_ORIGINS as readonly unknown[]).includes(raw.askOrigin) ? raw.askOrigin as typeof ASK_ORIGINS[number] : undefined,
             refId: ctx.actor + ':' + (str(raw.refId, 120) ?? randomUUID()),
           };
           const rec = gov.broker.file(dec as Parameters<typeof gov.broker.file>[0]);
           return send(200, { id: rec.id });
         }
         if (method === 'GET' && url === '/v1/pending') {
-          return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier })));
+          return send(200, gov.broker.list().map((p) => ({ id: p.id, tool: p.tool, actor: p.actor, target: p.target, reason: p.reason, riskTier: p.riskTier, askOrigin: p.askOrigin, confirmation: p.confirmation })));
         }
         if (method === 'GET' && url === '/v1/sessions') return send(200, sessionsFor(ctx));
         if (method === 'GET' && url === '/v1/audit') return send(200, gov.governor.audit.recent(50));
@@ -183,7 +187,8 @@ function buildSidecar(resolveCtx: (req: IncomingMessage) => Ctx | null, host: st
           let verdict: 'approve' | 'deny';
           try { verdict = assertEnum(body.verdict, VERDICTS, 'verdict'); }
           catch (e) { return send(400, { error: (e as InvalidEnumValueError).message }); }
-          const r = gov.broker.resolve(decId, verdict, ctx.actor, ctx.operators);
+          // H6: `confirm` is only consulted when approving a deliberate decision.
+          const r = gov.broker.resolve(decId, verdict, ctx.actor, ctx.operators, { confirm: str(body.confirm, 200) });
           if (r.ok) ctx.resolved.set(decId, verdict);
           return send(r.ok ? 200 : 409, { ok: r.ok, reason: r.reason });
         }

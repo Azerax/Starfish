@@ -5,7 +5,6 @@ import { app, BrowserWindow, ipcMain, safeStorage, dialog } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete,
   crewView, agentDetail, decisionLog, pendingAsView, budgetView, monitorView, bufferView, serviceView, makeExecutor,
   IpcAuthority, buildRendererManifest, verifyRenderer, guardRenderer, type RendererManifest, type PrivilegedOp,
@@ -13,8 +12,8 @@ import { createHost, type Host, realFsProbe, TrashStore, governedCustodianDelete
 import { watch } from 'node:fs';
 import { homedir } from 'node:os';
 import type { ActionRequest, ActionResult } from '@starfish/desktop';
-import { governDefaults, seedInstall } from '@starfish/governance-overlay';
-import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, AgentLoop, RiskToleranceStore, STARFISH_TOOL_SCHEMAS, type KeyResolver, type DeletionConfig, type BoundarySet, type ToolCall } from '@starfish/governance-core';
+import { governDefaults, seedInstall, detectLaunchPrivilege } from '@starfish/governance-overlay';
+import { ProviderRegistry, AVAILABLE_PROVIDERS, ModelRouter, Dispatcher, HostRunner, assessDeletion, DecisionBroker, AgentLoop, RiskToleranceStore, STARFISH_TOOL_SCHEMAS, type KeyResolver, type DeletionConfig, type BoundarySet, type ToolCall, type Decision } from '@starfish/governance-core';
 import defaultSkillsJson from '../../../../governance-overlay/defaults/default-skills.json';
 import registrySeed from '../../../../governance-overlay/defaults/registry-seed.json';
 
@@ -60,6 +59,10 @@ function persistTolerance(): void {
   try { mkdirSync(dirname(tolFile()), { recursive: true }); writeFileSync(tolFile(), JSON.stringify(tolStore?.serialize() ?? { riskTolerance: 'low' }, null, 2)); } catch { /* best-effort */ }
 }
 
+// H4: probed once per process. The same reading feeds the governor's boot audit and the UI banner.
+let launchPrivilege: ReturnType<typeof detectLaunchPrivilege> | undefined;
+const privilege = (): ReturnType<typeof detectLaunchPrivilege> => (launchPrivilege ??= detectLaunchPrivilege());
+
 async function bootGovernance(): Promise<void> {
   try {
     host = await createHost({
@@ -68,6 +71,7 @@ async function bootGovernance(): Promise<void> {
       stateDir: join(root, 'state'),
       projectRoot: root,
       listenPath: process.platform === 'win32' ? '\\\\.\\pipe\\starfish-pdp' : join(root, 'pdp.sock'),
+      launchPrivilege: privilege(),
     });
     console.log('[governance] booted - fail-closed checks passed');
     // Human-in-the-loop seam: a quarantined capability is a real 'needs operator' item — surface each.
@@ -169,7 +173,7 @@ function setupIpcAuthority(): void {
 function trustedConfirm(op: PrivilegedOp, detail: string): boolean {
   try {
     const idx = dialog.showMessageBoxSync(win ?? undefined as never, {
-      type: 'warning', buttons: ['Cancel', op === 'purge' ? 'Delete permanently' : 'Authorize'], defaultId: 0, cancelId: 0,
+      type: 'warning', buttons: ['Cancel', op === 'purge' ? 'Delete permanently' : op === 'approve' ? 'Approve' : 'Authorize'], defaultId: 0, cancelId: 0,
       title: 'Starfish — confirm privileged action', message: 'This action needs your explicit confirmation.', detail,
     });
     return idx === 1;
@@ -227,7 +231,7 @@ function registerIpc(): void {
     authority: ipcAuthority!,
     trustedConfirm,
     audit: (e) => { try { host?.governor.audit.append({ actor: 'operator', domain: 'governance', ...e, riskTier: e.riskTier as never }); } catch { /* noop */ } },
-    broker: { get: (id) => broker?.get(id), resolve: (id, v, by, ops) => broker!.resolve(id, v, by, ops) },
+    broker: { get: (id) => broker?.get(id), resolve: (id, v, by, ops, o) => broker!.resolve(id, v, by, ops, o) },
     enableCapability: (refId, by) => host?.governor.capabilities.approve(refId, by),
     resumeAgent: (agentId, by) => host?.governor.tokens.resume(agentId, by),
     setTolerance: (next, by, confirmed) => tolStore!.set(next, by, { confirmed }),
@@ -363,20 +367,13 @@ function registerIpc(): void {
 
   // ---- privilege check: on a governed system, workers must NOT run as OS admin/root. Windows hands new
   // accounts admin by default, so we detect elevation; the UI shows a flashing red banner when elevated. ----
-  function detectPrivilege(): { elevated: boolean; user: string; platform: string } {
-    const platform = process.platform;
-    const user = process.env.USERNAME || process.env.USER || 'unknown';
-    let elevated = false;
-    try {
-      if (platform === 'win32') {
-        // is-admin heuristic: `net session` (execFile, fixed argv, no shell) succeeds only when elevated
-        execFileSync('net', ['session'], { stdio: 'ignore', windowsHide: true, timeout: 4000 });
-        elevated = true;
-      } else if (typeof process.getuid === 'function') {
-        elevated = process.getuid() === 0;   // root on POSIX
-      }
-    } catch { elevated = false; }
-    return { elevated, user, platform };
+  // H4: the old check ran `net session` and ended in `catch { elevated = false }`, so a missing
+  // net.exe, a PATH change or a timeout all reported "not elevated". The classification now lives in
+  // core (classifyLaunchPrivilege) and fails toward elevated: `elevated` is true unless the process
+  // token proves a standard account. `state` lets the banner say which case it is.
+  function detectPrivilege(): { elevated: boolean; state: 'elevated' | 'standard' | 'unknown'; reason: string; user: string; platform: string } {
+    const p = privilege();
+    return { elevated: p.treatAsElevated, state: p.state, reason: p.reason, user: p.user, platform: p.platform };
   }
   ipcMain.handle('sys:getPrivilege', () => detectPrivilege());
 
@@ -441,9 +438,10 @@ function registerIpc(): void {
       dispatcher, runner, pdp: g.pdp, audit: g.audit, maxSteps: 8, enforceClaims: true,
       boundaryFor: () => agentBoundary,
       execute,
-      resolveAsk: async (call: ToolCall, reason: string) => {
+      resolveAsk: async (call: ToolCall, reason: string, decision?: Decision) => {
         if (!broker) return false;
-        const v = await broker.await({ actor: call.agentId, kind: 'tool', tool: call.tool, target: String(call.input.path ?? call.input.command ?? ''), riskTier: 'high', reason, refId: call.taskId });
+        // H6: the PDP's real tier and ask origin, so a floor or critical ask is parked as deliberate.
+        const v = await broker.await({ actor: call.agentId, kind: 'tool', tool: call.tool, target: String(call.input.path ?? call.input.command ?? ''), riskTier: decision?.riskTier ?? 'high', askOrigin: decision?.askOrigin, reason, refId: call.taskId });
         return v === 'approve';
       },
     });

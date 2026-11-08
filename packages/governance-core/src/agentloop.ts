@@ -5,7 +5,7 @@
 //   budget (the next plan() fails closed), or when every requested tool was withheld.
 // Governance is never bypassed: the model only *proposes* tool calls; the PDP authorizes, the
 // executor (PEP) acts, and proposer != approver holds (an 'ask' tier is withheld, not auto-run).
-import type { ToolCall, BoundarySet } from './types';
+import type { ToolCall, BoundarySet, Decision } from './types';
 import type { AuditLog } from './audit';
 import type { ProviderKind, ChatTurn, ToolSchema } from './provider';
 import type { PDP } from './pdp';
@@ -33,7 +33,9 @@ export interface AgentLoopDeps {
   enforceClaims?: boolean;
   citations?: string[];                                           // known citation keys (e.g. CITATIONS.md)
   observe?: (call: ToolCall, result: ToolExecResult, ev: TurnEvidence) => void;  // teach evidence from tool OUTPUT (tests/commits)
-  resolveAsk?: (call: ToolCall, reason: string) => Promise<boolean>;   // on a PDP 'ask', park for operator approval (broker); true=approved
+  // On a PDP 'ask', park for operator approval (broker); true=approved. `decision` carries the tier and
+  // ask origin so the parked decision can be classed routine or deliberate (H6).
+  resolveAsk?: (call: ToolCall, reason: string, decision?: Decision) => Promise<boolean>;
 }
 export interface AgentRunInput { agentId: string; task: DispatchTask; system?: string; messages: ChatTurn[]; tools?: ToolSchema[]; }
 export interface ToolRun { tool: string; allowed: boolean; contained?: boolean; }
@@ -131,7 +133,7 @@ export class AgentLoop {
         const d = pdp.decide('ingress', call, bs);
         let allowed = d.allow;
         if (!d.allow && d.ask && this.deps.resolveAsk) {
-          allowed = await this.deps.resolveAsk(call, d.reason);   // park on the broker; operator Approve/Deny on the Bridge
+          allowed = await this.deps.resolveAsk(call, d.reason, d);   // park on the broker; operator Approve/Deny on the Bridge
         }
         if (!allowed) {
           const why = d.ask ? `awaiting/denied by operator — ${d.reason}` : `denied — ${d.reason}`;

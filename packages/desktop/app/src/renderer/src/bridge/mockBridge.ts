@@ -40,7 +40,7 @@ const DETAIL: Record<string, Omit<AgentDetailView, 'id' | 'status' | 'currentTas
 
 export const mockBridge: GovernanceBridge = {
   governed: true,
-  getPrivilege: async () => ({ elevated: false, user: 'you', platform: 'web' }),
+  getPrivilege: async () => ({ elevated: false, state: 'standard' as const, user: 'you', platform: 'web' }),
   getRiskTolerance: async () => ({ value: 'low' as const }),
   setRiskTolerance: async (next, confirmed) => (next === 'medium' && !confirmed)
     ? { ok: false, value: 'low' as const, reason: 'medium requires double-confirmation' }
