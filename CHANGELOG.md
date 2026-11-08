@@ -6,6 +6,50 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security — the enforceable halves of hardening items H3, H4 and H6
+
+- **H3 — production-target guard.** Risk category #26 ("production vs non-production target") had no
+  producer, so `kubectl apply` against production scored like any shell command. `target.ts`
+  (`classifyTarget`) now reads exec calls that name a deployment target: a deploy or cloud CLI, a
+  database URI, ssh to a host, or a database client with an explicit host.
+  - A target with a production marker, or with no environment marker at all, is classified `prod`.
+    That is the fail-closed direction. A production marker wins over any other, and a
+    non-production word inside a file name (`staging.yaml`) does not count.
+  - A consequential call against production scores #26 at the floor trigger. **#26 is now a floor**
+    (not a hard deny), so neither an allow policy nor medium tolerance can auto-run it. It is an Ask.
+  - Reads (`get`, `describe`, `list`, `plan`), dry runs, staging and dev targets stay in-band.
+    Commands that name no target are not affected.
+  - Not covered: network-tool URLs, file writes, deploys hidden inside package scripts
+    (`npm run deploy`), and anything that needs resolving a kube context or cloud profile.
+- **H4 — elevated launch is recorded, and an unchecked launch counts as elevated.** The desktop app's
+  `detectPrivilege()` ended in `catch { elevated = false }`, so a missing `net.exe`, a PATH change or
+  a timeout all reported "not elevated".
+  - `classifyLaunchPrivilege()` (core, pure) reads the Windows token's integrity level from
+    `whoami /groups`, or the POSIX effective uid. Anything it cannot read is `unknown`, and
+    `treatAsElevated` is true for `elevated` and `unknown`.
+  - The probe runs outside core (`detectLaunchPrivilege()` in governance-overlay). The CLI daemon
+    and the desktop app pass the reading to `loadGovernor`.
+  - `EnforcementPosture.launchPrivilege` records it (`not-checked` when no probe was given). An
+    elevated or unknown launch writes a high-risk `elevated-launch` audit line. The daemon prints a
+    warning, and the desktop banner now also shows the "could not confirm" case.
+  - Tests pin that boundary and catastrophic-shell denials hold whatever the reading is. There is no
+    in-process privilege drop: the honest instruction is to relaunch as a standard user.
+- **H6 — a critical approval is a separate act from a routine click.**
+  - `PendingDecision` now carries `askOrigin`. It used to die at the PDP boundary, so a floor ask
+    reached the queue looking routine. The SDK and desktop agent loops pass the PDP's real tier
+    and origin instead of a hard-coded `high`.
+  - The broker derives `confirmation` (`routine` or `deliberate`) with `confirmationClass()`. It is
+    deliberate for a floor ask, a critical or injection tier, or an unknown tier. A caller-supplied
+    value is overwritten, and the class is re-derived on restore, so nothing can demote it.
+  - `broker.resolve()` refuses to approve a deliberate decision unless `confirm` equals the
+    decision's tool label. Deny is never gated. The sidecar accepts `confirm` on
+    `POST /v1/decisions/{id}` and reports `askOrigin` and `confirmation` on `/v1/pending` and the
+    stream.
+  - The desktop app asks for a main-process confirmation that the renderer cannot fake before it
+    supplies the phrase. `@starfish/ui`'s `GovernancePanel` asks the person to type the tool label.
+  - **Behaviour change for API clients:** approving a critical or floor ask over the sidecar without
+    `confirm` now returns 409.
+
 ### Added
 
 - **Session registry: which Claude Code sessions need you.** The overlay daemon now records every hook
@@ -32,6 +76,12 @@ All notable changes to Project Starfish are recorded here. The format follows
 
 ### Fixed
 
+- **Two slow regexes on untrusted input** (CodeQL `js/polynomial-redos`, high). `globRoot()` in the hook
+  handler and `buildInquiryHttpRequest()` each used a regex that is quadratic on a long run of one
+  character. Both are now plain string operations with the same results.
+- **`.tsx` tests were never collected.** `vitest.config.ts` only included `*.test.ts`, so the
+  `@starfish/ui` panel and theme tests had never run. One of them was wrong: it did not accept the
+  terminal theme's `[a]pprove` label.
 - **An approved ask was audited as a no-silent-execution violation.** When Starfish answered `ask` and the
   person approved in Claude Code, the tool's `PostToolUse` had no allowed `PreToolUse` before it.
   `HookSession` logged it as an `orphan-post` failure, and the monitor counted it. The hook session now

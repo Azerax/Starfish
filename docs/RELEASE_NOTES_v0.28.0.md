@@ -109,6 +109,28 @@ a reachability test is only evidence for the controls it was told about.
 
 ---
 
+## Security — the enforceable halves of H3, H4 and H6 (added 2026-11-07)
+
+Three hardening items, each split the way the 2026-10-11 survey in `HARDENING_BACKLOG.md` said it had
+to be: the half a core test can prove is built, and the UI half is either basic or still open.
+
+- **H3, production-target guard.** Category #26 finally has a producer (`target.ts`), and #26 is now a
+  floor. A shell command that names a deployment target with no environment marker, or a production
+  one, needs a person, even under an allow policy and medium tolerance. Reads, dry runs, staging and
+  dev are unaffected, and so is every command that names no target. Eval mode is not built.
+- **H4, elevated launch.** The desktop check that reported "not elevated" whenever it failed is
+  replaced. An elevated or uncheckable launch is now in the boot posture and the audit, and warned in
+  the CLI daemon and the app. Elevation relaxes nothing, and a test shows it for every reading.
+- **H6, distinct critical confirmation.** A floor or critical ask is `deliberate`, and the broker will
+  not approve it without `confirm` set to the tool label. The desktop app asks through a main-process
+  dialog first; `@starfish/ui` asks the person to type the label. Deny is always one step.
+
+**Two behaviour changes:** a consequential production-target command that an allow policy used to
+auto-run is now an Ask (H3), and an API client that approved critical or floor asks with a bare
+`{ verdict: 'approve' }` now gets 409 until it sends `confirm` (H6). Details are in `CHANGELOG.md`.
+
+---
+
 ## Added — bounded semantic inquiry
 
 `packages/governance-core/src/inquiry.ts`. Typed questions in, advisory signals out.
@@ -228,8 +250,9 @@ Stated plainly, because the v0.27.0 lesson was that a green module is not an enf
 
 - **Nothing calls `foldInquiry()` yet.** The module is exported, tested and reachable, but no
   production path folds a signal into a real decision. Deliberate: the next slice should wire exactly
-  one call site in shadow mode and compare against the production path first. Until then, Starfish's
-  decisions are exactly what they were in 0.27.0.
+  one call site in shadow mode and compare against the production path first. Until then, no inquiry
+  signal changes any decision. (Other parts of this release do change decisions: H5, F-12, and the
+  H3/H6 behaviour changes above.)
 - **The calibration statistics do not exist.** The record schema and the expiry check are real. Nothing
   computes accuracy, calibration error, coverage or drift. `treatCalibrationAsValid()` checks only that
   a human approved a threshold set and that the approval has not expired. **No statistical guarantee
