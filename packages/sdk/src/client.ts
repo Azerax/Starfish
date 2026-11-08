@@ -38,9 +38,9 @@ export function makeSidecarRunner(opts: SidecarClientOptions): ModeRunner {
         return Array.isArray(r.json) ? (r.json as unknown as Array<{ id: string; tool: string; actor: string }>) : [];
       } catch { return []; }
     },
-    async resolve(id, verdict, by) {
+    async resolve(id, verdict, by, confirm) {
       try {
-        const r = await call('POST', `/v1/decisions/${encodeURIComponent(id)}`, opts.tokens[by] ?? anyToken(), { verdict });
+        const r = await call('POST', `/v1/decisions/${encodeURIComponent(id)}`, opts.tokens[by] ?? anyToken(), confirm === undefined ? { verdict } : { verdict, confirm });
         return { ok: !!r.json.ok, reason: String(r.json.reason ?? '') };
       } catch { return { ok: false, reason: 'fail-closed: sidecar unreachable' }; }
     },

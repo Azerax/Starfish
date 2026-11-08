@@ -1,7 +1,8 @@
 // Browser/host client for the Starfish sidecar. Self-contained (no @starfish/governance-core import) so
 // the engine never enters the dashboard bundle. Fail-soft reads; approvals use the per-actor token.
 export const WIRE = 1;
-export interface PendingItem { id: string; tool: string; actor: string; target?: string; reason?: string; riskTier?: string }
+/** `confirmation` (H6): 'deliberate' means approving needs `confirm` = the item's `tool` label. */
+export interface PendingItem { id: string; tool: string; actor: string; target?: string; reason?: string; riskTier?: string; askOrigin?: string; confirmation?: 'routine' | 'deliberate' }
 export interface BudgetItem { scope: string; status: string; usd: number; usdLimit: number }
 export interface MonitorView { counters: { denials: number; boundaryEscapes: number; hashMismatches: number; budgetHard: number; orphanPosts: number; casualties: number }; safeMode: boolean }
 /** One agent session as the sidecar reports it (GET /v1/sessions, and the 'sessions' stream event).
@@ -23,7 +24,8 @@ export interface UiBridge {
   /** Agent sessions, most urgent first. Asks shown here are answered in the agent's own window.
    *  Optional so a bridge written before sessions existed still satisfies this interface. */
   sessions?(): Promise<SessionItem[]>;
-  resolve(id: string, verdict: 'approve' | 'deny', by: string): Promise<{ ok: boolean; reason: string }>;
+  /** `confirm` (H6) is required only to approve a deliberate item. */
+  resolve(id: string, verdict: 'approve' | 'deny', by: string, confirm?: string): Promise<{ ok: boolean; reason: string }>;
   /** Live push subscription (SSE over fetch — the token stays in the Authorization header, never a query
    *  string). Auto-reconnects with exponential backoff. Returns an unsubscribe function. */
   subscribe(handler: (ev: StreamEvent) => void, by?: string): () => void;
@@ -42,9 +44,9 @@ export function httpBridge(opts: { url: string; tokens: Record<string, string> }
     async budgets() { try { return (await get('/v1/budgets')) as BudgetItem[]; } catch { return []; } },
     async monitor() { try { return (await get('/v1/monitor')) as MonitorView; } catch { return { counters: { denials: 0, boundaryEscapes: 0, hashMismatches: 0, budgetHard: 0, orphanPosts: 0, casualties: 0 }, safeMode: false }; } },
     async sessions() { try { return (await get('/v1/sessions')) as SessionItem[]; } catch { return []; } },
-    async resolve(id, verdict, by) {
+    async resolve(id, verdict, by, confirm) {
       try {
-        const r = await fetch(opts.url + `/v1/decisions/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-starfish-wire': String(WIRE), authorization: `Bearer ${opts.tokens[by] ?? anyTok()}` }, body: JSON.stringify({ verdict }) });
+        const r = await fetch(opts.url + `/v1/decisions/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-starfish-wire': String(WIRE), authorization: `Bearer ${opts.tokens[by] ?? anyTok()}` }, body: JSON.stringify(confirm === undefined ? { verdict } : { verdict, confirm }) });
         const j = (await r.json()) as { ok?: boolean; reason?: string };
         return { ok: !!j.ok, reason: String(j.reason ?? '') };
       } catch { return { ok: false, reason: 'fail-closed: sidecar unreachable' }; }

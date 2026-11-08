@@ -15,7 +15,8 @@ describe('risk matrix — structure', () => {
     for (const c of CATEGORIES) expect(c.name.length).toBeGreaterThan(0);
   });
   it('pins the exact floor set and hard-deny subset', () => {
-    expect([...FLOOR_IDS].sort((a, b) => a - b)).toEqual([1, 6, 8, 10, 11, 12, 29]);
+    // #26 joined the floor set with H3 (production-target guard): a floor, not a hard deny.
+    expect([...FLOOR_IDS].sort((a, b) => a - b)).toEqual([1, 6, 8, 10, 11, 12, 26, 29]);
     expect([...HARD_DENY_IDS].sort((a, b) => a - b)).toEqual([1, 8, 11, 12, 29]);
   });
 });

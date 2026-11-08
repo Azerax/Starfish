@@ -17,7 +17,8 @@ describe('DecisionBroker — the human-in-the-loop seam', () => {
   it('await() resolves when the operator approves', async () => {
     const dir = tmp(); const audit = new AuditLog(join(dir, 'a.jsonl'));
     const b = new DecisionBroker(audit, join(dir, 'decisions.json'));
-    const p = b.await({ actor: 'worker', kind: 'tool', tool: 'git_commit', reason: 'risk high' });
+    // riskTier is stated: since H6 an UNclassified decision is deliberate and needs a confirmation.
+    const p = b.await({ actor: 'worker', kind: 'tool', tool: 'git_commit', riskTier: 'high', reason: 'risk high' });
     const id = b.list()[0].id;
     const r = b.resolve(id, 'approve', 'operator');
     expect(r.ok).toBe(true);

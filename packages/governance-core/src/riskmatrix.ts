@@ -11,7 +11,9 @@ export type CategoryId = number; // 1..50
 export interface RiskCategory { id: CategoryId; name: string; floor?: boolean; hardDeny?: boolean; }
 
 // floor set (docs §floors): #1 system storage, #6 irreversibility, #8 arbitrary exec, #10 loss of audit,
-// #11 secrets, #12 exfiltration, #29 self/governance. hardDeny (force Deny): #1, #8, #11, #12, #29.
+// #11 secrets, #12 exfiltration, #26 production target (H3), #29 self/governance.
+// hardDeny (force Deny): #1, #8, #11, #12, #29. #26 forces an Ask, never a Deny: changing production
+// is often the job; doing it without a person looking is the risk.
 export const CATEGORIES: RiskCategory[] = [
   { id: 1, name: 'File and storage access', floor: true, hardDeny: true },
   { id: 2, name: 'Network and internet access' },
@@ -38,7 +40,7 @@ export const CATEGORIES: RiskCategory[] = [
   { id: 23, name: 'Access-control and sharing changes' },
   { id: 24, name: 'Identity and authentication' },
   { id: 25, name: 'Third-party integration' },
-  { id: 26, name: 'Production vs non-production target' },
+  { id: 26, name: 'Production vs non-production target', floor: true },
   { id: 27, name: 'Backup and continuity impact' },
   { id: 28, name: 'Logging and telemetry integrity' },
   { id: 29, name: 'Self-modification and governance', floor: true, hardDeny: true },

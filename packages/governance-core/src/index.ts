@@ -54,7 +54,8 @@ export { isCatastrophicShell, commandStrings } from './shellguard';   // F-11: f
 export { ExecProvenance, isRunnerExecutable, isRunnerTool } from './execprovenance';   // Q12
 export { sha256 } from './hash';
 export { ServiceRegistry, type ServiceInfo } from './services';
-export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind, type DecisionChannel } from './broker';
+export { DecisionBroker, type PendingDecision, type DecisionVerdict, type PendingKind, type DecisionChannel, type ResolveOptions } from './broker';
+export { confirmationClass, confirmationPhrase, type ConfirmationClass, type ConfirmationInput } from './confirmation';
 export { SessionRegistry, deriveSessionState, sortByAttention, readSessionSnapshot, sessionViewsFromSnapshot, SESSION_ATTENTION_ORDER, type SessionState, type SessionRecord, type SessionView, type SessionAsk, type AskOutcome, type SessionObservation, type SessionEventKind, type SessionChange, type SessionRegistryOptions, type SessionSnapshot } from './sessions';
 export { saveJson, loadJson } from './persistence';
 export { classifyNode, promoteCluster, type CanvasNode, type NodeRoute, type PromoteResult } from './planner';
@@ -70,6 +71,8 @@ export { screenIngress, egressTaintGate, taintPropagate, taintedSignal, type Sig
 export { SourceRegistry, normalizeSource, defaultVerifier, blocklistPayloadHash, type SignedBlocklist, type SourceRef, type SourceKind, type SourceStatus, type SourceRecord, type SourceVerification, type SourceVerifier } from './sources';
 export { merkleRoot, auditRoot, Anchorer, NoopAnchor, fileAnchor, customAnchor, makeAnchorAdapter, type AnchorAdapter, type AnchorRecord, type AnchorReceipt, type AnchorConfig } from './anchor';
 export { loadGovernor, persistGovernor, restoreGovernor, anchorAudit } from './boot';
+export { classifyLaunchPrivilege, type LaunchPrivilege, type PrivilegeProbe, type PrivilegeReading } from './privilege';
+export { classifyTarget, type TargetReading } from './target';
 export type { Governor, EnforcementPosture } from './boot';
 
 // ---- Threat Immunity Fabric (docs/design/THREAT_IMMUNITY_FABRIC_PLAN.md) — TIF-0/TIF-1/TIF-3/TIF-4 ----

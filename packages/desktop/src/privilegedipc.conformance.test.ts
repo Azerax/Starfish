@@ -51,7 +51,7 @@ describe('F28 wiring — approve/deny/resume/tolerance authorize BEFORE acting',
     const { d, auth, spies } = deps();
     const r = privilegedApproveOrDeny(d, { decisionId: 'x', kind: 'approve', token: auth.sessionToken() });
     expect(r.ok).toBe(true);
-    expect(spies.resolve).toHaveBeenCalledWith('x', 'approve', 'scott', ['scott']);  // operator not renderer-supplied
+    expect(spies.resolve).toHaveBeenCalledWith('x', 'approve', 'scott', ['scott'], { confirm: undefined });  // operator not renderer-supplied
   });
 
   it('a tampered renderer refuses every privileged op even with a valid token', () => {
@@ -62,6 +62,33 @@ describe('F28 wiring — approve/deny/resume/tolerance authorize BEFORE acting',
     expect(spies.resolve).not.toHaveBeenCalled();
     expect(spies.resumeAgent).not.toHaveBeenCalled();
     expect(spies.applyTolerance).not.toHaveBeenCalled();
+  });
+
+  it('H6: approving a deliberate decision takes the trusted confirmation, and main supplies the phrase', () => {
+    const { d, auth, spies } = deps({ broker: { get: () => ({ kind: 'tool', tool: 'shell', target: 'drop table users', riskTier: 'critical', askOrigin: 'floor' }), resolve: undefined as never } });
+    d.broker.resolve = spies.resolve as never;
+    const r = privilegedApproveOrDeny(d, { decisionId: 'x', kind: 'approve', token: auth.sessionToken() });
+    expect(r.ok).toBe(true);
+    expect(spies.confirm).toHaveBeenCalledTimes(1);
+    expect(spies.resolve).toHaveBeenCalledWith('x', 'approve', 'scott', ['scott'], { confirm: 'shell' });
+  });
+
+  it('H6: a declined trusted confirmation blocks the approval before the broker is called', () => {
+    const { d, auth, spies } = deps({ trustedConfirm: () => false });
+    d.broker = { get: () => ({ kind: 'tool', tool: 'shell', riskTier: 'critical' }), resolve: spies.resolve as never };
+    const r = privilegedApproveOrDeny(d, { decisionId: 'x', kind: 'approve', token: auth.sessionToken() });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/deliberate confirmation declined/);
+    expect(spies.resolve).not.toHaveBeenCalled();
+  });
+
+  it('H6: a routine approval and any deny skip the dialog', () => {
+    const { d, auth, spies } = deps();
+    d.broker = { get: () => ({ kind: 'tool', tool: 'fs.write', riskTier: 'high', askOrigin: 'risk' }), resolve: spies.resolve as never };
+    expect(privilegedApproveOrDeny(d, { decisionId: 'x', kind: 'approve', token: auth.sessionToken() }).ok).toBe(true);
+    d.broker = { get: () => ({ kind: 'tool', tool: 'shell', riskTier: 'critical', askOrigin: 'floor' }), resolve: spies.resolve as never };
+    expect(privilegedApproveOrDeny(d, { decisionId: 'y', kind: 'deny', token: auth.sessionToken() }).ok).toBe(true);
+    expect(spies.confirm).not.toHaveBeenCalled();
   });
 
   it('raising tolerance requires the token; the renderer confirmed-flag alone is not authority', () => {

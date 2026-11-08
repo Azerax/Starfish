@@ -7,6 +7,7 @@ export interface ModeRunner {
   decide(call: unknown, boundary: unknown): Promise<RunnerDecision>;
   file(dec: unknown): Promise<{ id: string }>;
   pending(): Promise<RunnerPending[]>;
-  resolve(id: string, verdict: 'approve' | 'deny', by: string): Promise<{ ok: boolean; reason: string }>;
+  /** `confirm` (H6) is needed only to approve a deliberate decision: the decision's tool label. */
+  resolve(id: string, verdict: 'approve' | 'deny', by: string, confirm?: string): Promise<{ ok: boolean; reason: string }>;
   down(): Promise<void>;   // force the mode unavailable, for the fail-closed scenario
 }

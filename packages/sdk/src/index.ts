@@ -7,7 +7,7 @@ import {
   loadGovernor, restoreGovernor, DecisionBroker, AgentLoop, Dispatcher, ModelRouter,
   HostRunner, ProviderRegistry, AVAILABLE_PROVIDERS, STARFISH_TOOL_SCHEMAS, sessionViewsFromSnapshot,
   type Governor, type SessionView, type BoundarySet, type ToolCall, type KeyResolver, type Fetcher,
-  type ToolExecResult, type AgentRunResult,
+  type ToolExecResult, type AgentRunResult, type Decision,
 } from '@starfish/governance-core';
 import { makeFsExecutor } from './executor';
 import { ensureRootSchema } from './schema';
@@ -93,8 +93,10 @@ export function createGovernance(opts: GovernanceOptions): Governance {
       enforceClaims: opts.enforceClaims ?? true,
       boundaryFor: () => input.boundary,
       execute,
-      resolveAsk: async (call: ToolCall, reason: string) => {
-        const v = await broker.await({ actor: call.agentId, kind: 'tool', tool: call.tool, target: String((call.input as { path?: string }).path ?? ''), riskTier: 'high', reason, refId: `${task.id}:${callHash(call)}` });   // per-call refId: risks 9, 44
+      resolveAsk: async (call: ToolCall, reason: string, decision?: Decision) => {
+        // H6: the PDP's real tier and ask origin, so a floor or critical ask is parked as deliberate.
+        // 'high' stays the fallback for a caller that does not pass the decision.
+        const v = await broker.await({ actor: call.agentId, kind: 'tool', tool: call.tool, target: String((call.input as { path?: string }).path ?? ''), riskTier: decision?.riskTier ?? 'high', askOrigin: decision?.askOrigin, reason, refId: `${task.id}:${callHash(call)}` });   // per-call refId: risks 9, 44
         return v === 'approve';
       },
     });

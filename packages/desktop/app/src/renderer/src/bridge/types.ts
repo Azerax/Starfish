@@ -26,7 +26,8 @@ export interface ReadinessBlocker { id: string; severity: 'stop' | 'warn'; title
 export interface ReadinessView { ok: boolean; blockers: ReadinessBlocker[]; }
 export interface CostView { mode: 'platform' | 'starfish'; budgetUsd: number; }
 
-export interface PrivilegeView { elevated: boolean; user?: string; platform?: string }
+/** H4: `elevated` is true for an elevated launch AND for one that could not be checked ('unknown'). */
+export interface PrivilegeView { elevated: boolean; state?: 'elevated' | 'standard' | 'unknown'; reason?: string; user?: string; platform?: string }
 
 export interface GovernanceBridge {
   governed: true;

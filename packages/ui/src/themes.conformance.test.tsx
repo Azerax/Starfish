@@ -15,7 +15,9 @@ describe('launch themes (5 choices)', () => {
       const html = renderToStaticMarkup(<t.Component items={items} monitor={mon} onResolve={() => { /* noop */ }} />);
       expect(html).toContain('worker');
       expect(html).toContain('fs.write');
-      expect(html.toLowerCase()).toMatch(/approve|cleared|turn key/);
+      // The terminal theme labels it "[a]pprove". This never failed before only because .tsx tests
+      // were not collected at all (vitest.config.ts).
+      expect(html.toLowerCase()).toMatch(/approve|\[a\]pprove|cleared|turn key/);
     });
     it(`${t.id} renders an empty state without throwing`, () => {
       expect(() => renderToStaticMarkup(<t.Component items={[]} monitor={mon} onResolve={() => { /* noop */ }} />)).not.toThrow();
